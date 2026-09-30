@@ -1,6 +1,6 @@
 'use client';
 
-import { Gamepad2, Home, Library, LogOut, LogIn, ChevronDown } from 'lucide-react';
+import { Gamepad2, Home, Library, LogOut, LogIn, ChevronDown, Menu, X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
@@ -17,6 +17,7 @@ export default function Header({ profile, levelInfo }: HeaderProps) {
   const [user, setUser] = useState<any>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [showMenu, setShowMenu] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -53,6 +54,7 @@ export default function Header({ profile, levelInfo }: HeaderProps) {
   return (
     <header className="sticky top-0 z-50 glass border-b border-neutral-800">
       <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+        {/* Логотип */}
         <Link href="/" className="flex items-center gap-2.5 group">
           <div className="w-8 h-8 bg-indigo-500 rounded-lg flex items-center justify-center group-hover:bg-indigo-600 transition">
             <Gamepad2 className="w-4 h-4 text-white" />
@@ -60,6 +62,7 @@ export default function Header({ profile, levelInfo }: HeaderProps) {
           <span className="font-semibold text-lg tracking-tight text-white">PlayLog</span>
         </Link>
 
+        {/* Десктопная навигация */}
         <nav className="hidden md:flex items-center gap-1">
           <Link
             href="/"
@@ -89,51 +92,134 @@ export default function Header({ profile, levelInfo }: HeaderProps) {
           </Link>
         </nav>
 
-        <div className="relative">
-          {user ? (
-            <button
-              onClick={() => setShowMenu(!showMenu)}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-neutral-900 transition"
-            >
-              <div className="w-7 h-7 bg-gradient-to-br from-indigo-500 to-purple-500 rounded-full flex items-center justify-center text-white text-xs font-medium">
-                {displayName.substring(0, 2).toUpperCase()}
-              </div>
-              <div className="hidden sm:block text-left">
-                <div className="text-sm font-medium leading-tight text-white">{displayName}</div>
-                <div className="text-xs text-neutral-500 leading-tight">Уровень {level}</div>
-              </div>
-              <ChevronDown className="w-4 h-4 text-neutral-400" />
-            </button>
-          ) : (
-            <Link
-              href="/auth"
-              className="flex items-center gap-2 px-4 py-2 bg-white text-black rounded-lg text-sm font-medium hover:bg-neutral-200 transition"
-            >
-              <LogIn className="w-4 h-4" />
-              Войти
-            </Link>
-          )}
-
-          {showMenu && user && (
-            <>
-              <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
-              <div className="absolute right-0 top-full mt-2 w-56 bg-neutral-900 rounded-xl border border-neutral-800 shadow-lg py-2 z-50">
-                <div className="px-4 py-2 border-b border-neutral-800">
-                  <div className="text-sm font-medium text-white">{displayName}</div>
-                  <div className="text-xs text-neutral-500">{user.email}</div>
+        {/* Правая часть */}
+        <div className="flex items-center gap-2">
+          {/* Профиль / Вход (десктоп) */}
+          <div className="relative hidden md:block">
+            {user ? (
+              <button
+                onClick={() => setShowMenu(!showMenu)}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-neutral-900 transition"
+              >
+                <div className="w-7 h-7 bg-gradient-to-br from-indigo-500 to-purple-500 rounded-full flex items-center justify-center text-white text-xs font-medium">
+                  {displayName.substring(0, 2).toUpperCase()}
                 </div>
-                <button
-                  onClick={handleLogout}
-                  className="w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-neutral-800 flex items-center gap-2"
-                >
-                  <LogOut className="w-4 h-4" />
-                  Выйти
-                </button>
-              </div>
-            </>
-          )}
+                <div className="text-left">
+                  <div className="text-sm font-medium leading-tight text-white">{displayName}</div>
+                  <div className="text-xs text-neutral-500 leading-tight">Уровень {level}</div>
+                </div>
+                <ChevronDown className="w-4 h-4 text-neutral-400" />
+              </button>
+            ) : (
+              <Link
+                href="/auth"
+                className="flex items-center gap-2 px-4 py-2 bg-white text-black rounded-lg text-sm font-medium hover:bg-neutral-200 transition"
+              >
+                <LogIn className="w-4 h-4" />
+                Войти
+              </Link>
+            )}
+
+            {showMenu && user && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
+                <div className="absolute right-0 top-full mt-2 w-56 bg-neutral-900 rounded-xl border border-neutral-800 shadow-lg py-2 z-50">
+                  <div className="px-4 py-2 border-b border-neutral-800">
+                    <div className="text-sm font-medium text-white">{displayName}</div>
+                    <div className="text-xs text-neutral-500">{user.email}</div>
+                  </div>
+                  <button
+                    onClick={handleLogout}
+                    className="w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-neutral-800 flex items-center gap-2"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    Выйти
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Кнопка мобильного меню */}
+          <button
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className="md:hidden w-10 h-10 flex items-center justify-center rounded-lg hover:bg-neutral-900 transition"
+          >
+            {mobileMenuOpen ? (
+              <X className="w-5 h-5 text-white" />
+            ) : (
+              <Menu className="w-5 h-5 text-white" />
+            )}
+          </button>
         </div>
       </div>
+
+      {/* Мобильное меню */}
+      {mobileMenuOpen && (
+        <div className="md:hidden border-t border-neutral-800 bg-[#0a0a0a]">
+          <div className="px-6 py-4 space-y-2">
+            <Link
+              href="/"
+              onClick={() => setMobileMenuOpen(false)}
+              className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition ${
+                pathname === '/'
+                  ? 'bg-neutral-800 text-white'
+                  : 'text-neutral-400 hover:text-white hover:bg-neutral-900'
+              }`}
+            >
+              <Home className="w-4 h-4" />
+              Главная
+            </Link>
+            <Link
+              href="/my-games"
+              onClick={() => setMobileMenuOpen(false)}
+              className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition ${
+                pathname === '/my-games'
+                  ? 'bg-neutral-800 text-white'
+                  : 'text-neutral-400 hover:text-white hover:bg-neutral-900'
+              }`}
+            >
+              <Library className="w-4 h-4" />
+              Мои игры
+            </Link>
+
+            <div className="pt-2 border-t border-neutral-800">
+              {user ? (
+                <>
+                  <div className="flex items-center gap-3 px-4 py-3">
+                    <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-500 rounded-full flex items-center justify-center text-white text-sm font-medium">
+                      {displayName.substring(0, 2).toUpperCase()}
+                    </div>
+                    <div>
+                      <div className="text-sm font-medium text-white">{displayName}</div>
+                      <div className="text-xs text-neutral-500">Уровень {level} • {user.email}</div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      handleLogout();
+                      setMobileMenuOpen(false);
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-red-400 hover:bg-neutral-900 transition"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    Выйти
+                  </button>
+                </>
+              ) : (
+                <Link
+                  href="/auth"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="flex items-center justify-center gap-2 px-4 py-3 bg-white text-black rounded-lg text-sm font-medium hover:bg-neutral-200 transition"
+                >
+                  <LogIn className="w-4 h-4" />
+                  Войти
+                </Link>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </header>
   );
 }
