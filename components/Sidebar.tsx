@@ -1,62 +1,85 @@
 'use client';
 
-import { TrendingUp, Zap, Trophy } from 'lucide-react';
-import { LevelInfo, UserProfile } from '@/types/game';
+import { Trophy, Zap, Target, Clock, TrendingUp } from 'lucide-react';
+import { UserProfile, LevelInfo } from '@/types/game';
 
 interface SidebarProps {
-  profile?: UserProfile;
-  levelInfo?: LevelInfo;
+  profile: UserProfile;
+  levelInfo: LevelInfo;
 }
 
 export default function Sidebar({ profile, levelInfo }: SidebarProps) {
-  const xpPercent = levelInfo ? Math.min((levelInfo.xpInLevel / levelInfo.xpToNext) * 100, 100) : 0;
-  const level = levelInfo?.level || 1;
+  const xpPercent = Math.min((levelInfo.xpInLevel / levelInfo.xpToNext) * 100, 100);
 
   return (
-    <aside className="w-full lg:w-72 space-y-6">
-      <div className="bg-[#1a1a2e] border-2 border-[#ffec27] p-4">
-        <h3 className="font-pixel text-xs mb-3 text-[#ffec27] flex items-center gap-2">
-          <Zap className="w-4 h-4" /> УРОВЕНЬ {level}
-        </h3>
-        <div className="w-full h-3 bg-[#0f0f1e] border-2 border-[#747474] mb-2 relative overflow-hidden">
-          <div 
-            className="absolute inset-y-0 left-0 bg-gradient-to-r from-[#b142f5] to-[#ffec27] transition-all duration-500" 
-            style={{ width: `${xpPercent}%` }}
-          ></div>
+    <aside className="w-full lg:w-72 space-y-4">
+      {/* Профиль */}
+      <div className="bg-white rounded-xl border border-neutral-200 p-5">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-12 h-12 bg-gradient-to-br from-indigo-500 to-purple-500 rounded-full flex items-center justify-center text-white font-semibold">
+            {profile.nickname.substring(0, 2).toUpperCase()}
+          </div>
+          <div>
+            <h3 className="font-semibold text-neutral-900">{profile.nickname}</h3>
+            <p className="text-sm text-neutral-500">Уровень {levelInfo.level}</p>
+          </div>
         </div>
-        <div className="font-pixel text-[8px] text-[#747474] text-center">
-          {levelInfo?.xpInLevel || 0} / {levelInfo?.xpToNext || 100} XP
-        </div>
-      </div>
 
-      <div className="bg-[#1a1a2e] border-2 border-[#00e436] p-4">
-        <h3 className="font-pixel text-xs mb-4 text-[#00e436] flex items-center gap-2">
-          <TrendingUp className="w-4 h-4" />ТОП
-        </h3>
+        {/* Прогресс уровня */}
         <div className="space-y-2">
-          <div className="flex items-center justify-between text-lg border-b border-dashed border-[#747474] pb-1">
-            <span className="font-pixel text-[10px] text-[#ffec27]">1.</span>
-            <span className="truncate">Baldur's Gate 3</span>
-            <span className="font-pixel text-[10px] text-[#747474]">12.4k</span>
+          <div className="flex justify-between text-xs">
+            <span className="text-neutral-600">Прогресс</span>
+            <span className="font-medium text-neutral-900">
+              {levelInfo.xpInLevel} / {levelInfo.xpToNext} XP
+            </span>
           </div>
-          <div className="flex items-center justify-between text-lg border-b border-dashed border-[#747474] pb-1">
-            <span className="font-pixel text-[10px] text-[#29adff]">2.</span>
-            <span className="truncate">Elden Ring</span>
-            <span className="font-pixel text-[10px] text-[#747474]">9.8k</span>
+          <div className="h-2 bg-neutral-100 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full transition-all duration-500"
+              style={{ width: `${xpPercent}%` }}
+            />
           </div>
         </div>
       </div>
 
-      <div className="bg-[#1a1a2e] border-2 border-[#b142f5] p-4">
-        <h3 className="font-pixel text-[10px] mb-3 text-[#b142f5]">СТАТИСТИКА</h3>
-        <div className="grid grid-cols-2 gap-3 text-center">
-          <div className="bg-[#0f0f1e] border-2 border-[#ff004d] p-3">
-            <div className="font-pixel text-xl text-[#ffec27]">{profile?.completedGames || 4}</div>
-            <div className="font-pixel text-[8px] text-[#747474] mt-1">DONE</div>
+      {/* Статистика */}
+      <div className="bg-white rounded-xl border border-neutral-200 p-5">
+        <h3 className="font-semibold text-neutral-900 mb-4 flex items-center gap-2">
+          <TrendingUp className="w-4 h-4 text-indigo-500" />
+          Статистика
+        </h3>
+        
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-neutral-600 flex items-center gap-2">
+              <Trophy className="w-4 h-4 text-neutral-400" />
+              Всего игр
+            </span>
+            <span className="font-semibold text-neutral-900">{profile.totalGames}</span>
           </div>
-          <div className="bg-[#0f0f1e] border-2 border-[#29adff] p-3">
-            <div className="font-pixel text-xl text-[#00e436]">{profile?.totalHours || 86}h</div>
-            <div className="font-pixel text-[8px] text-[#747474] mt-1">PLAYED</div>
+          
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-neutral-600 flex items-center gap-2">
+              <Target className="w-4 h-4 text-neutral-400" />
+              Пройдено
+            </span>
+            <span className="font-semibold text-neutral-900">{profile.completedGames}</span>
+          </div>
+          
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-neutral-600 flex items-center gap-2">
+              <Clock className="w-4 h-4 text-neutral-400" />
+              Часов наиграно
+            </span>
+            <span className="font-semibold text-neutral-900">{profile.totalHours}ч</span>
+          </div>
+          
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-neutral-600 flex items-center gap-2">
+              <Zap className="w-4 h-4 text-neutral-400" />
+              Всего XP
+            </span>
+            <span className="font-semibold text-neutral-900">{profile.xp}</span>
           </div>
         </div>
       </div>

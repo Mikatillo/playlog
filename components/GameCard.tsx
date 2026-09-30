@@ -1,8 +1,7 @@
 'use client';
 
-import { Star, Clock } from 'lucide-react';
+import { Star, Clock, Heart, Gamepad, Check } from 'lucide-react';
 import { Game, GameData } from '@/types/game';
-import { useState } from 'react';
 
 interface GameCardProps {
   game: Game;
@@ -11,65 +10,81 @@ interface GameCardProps {
 }
 
 export default function GameCard({ game, onClick, userGameData }: GameCardProps) {
-  const [showTrailer, setShowTrailer] = useState(false);
+  const statusIcon = {
+    want: <Heart className="w-3 h-3" />,
+    playing: <Gamepad className="w-3 h-3" />,
+    completed: <Check className="w-3 h-3" />,
+    none: null,
+  };
+
+  const statusColor = {
+    want: 'bg-rose-500',
+    playing: 'bg-blue-500',
+    completed: 'bg-emerald-500',
+    none: '',
+  };
 
   return (
     <div
       onClick={onClick}
-      className="group bg-[#1a1a2e] border-2 border-[#747474] hover:border-[#ffec27] cursor-pointer relative"
+      className="group cursor-pointer bg-white rounded-xl border border-neutral-200 overflow-hidden hover:shadow-lg hover:border-neutral-300 transition-all duration-200 hover:-translate-y-1"
     >
-      <div className="aspect-[2/3] bg-[#0f0f1e] relative overflow-hidden">
+      {/* Обложка */}
+      <div className="relative aspect-[2/3] overflow-hidden bg-neutral-100">
         <img
           src={game.cover}
           alt={game.title}
-          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
           onError={(e) => {
-            (e.target as HTMLImageElement).src = 'https://via.placeholder.com/300x400/1a1a2e/747474?text=NO+IMAGE';
+            (e.target as HTMLImageElement).src =
+              'https://via.placeholder.com/300x450/neutral-100/neutral-400?text=No+Image';
           }}
         />
         
-        <div className="absolute top-2 right-2 bg-[#0f0f1e] border-2 border-[#ffec27] px-2 py-0.5 font-pixel text-[8px] flex items-center gap-1">
-          <Star className="w-2 h-2 text-[#ffec27] fill-[#ffec27]" /> {game.rating}
-        </div>
-        <div className="absolute top-2 left-2 bg-[#b142f5] px-2 py-0.5 font-pixel text-[8px]">
-          {game.genre}
-        </div>
+        {/* Бейдж статуса */}
+        {userGameData && userGameData.status !== 'none' && (
+          <div className={`absolute top-2 right-2 w-7 h-7 ${statusColor[userGameData.status]} rounded-full flex items-center justify-center text-white shadow-md`}>
+            {statusIcon[userGameData.status]}
+          </div>
+        )}
 
-        {/* Превью трейлера при наведении */}
-        {game.trailerUrl && (
-          <div
-            onMouseEnter={() => setShowTrailer(true)}
-            onMouseLeave={() => setShowTrailer(false)}
-            className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-black/90 flex items-center justify-center"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {showTrailer ? (
-              <iframe
-                src={`${game.trailerUrl}?autoplay=1&mute=1`}
-                className="w-full h-full"
-                allow="autoplay"
-                title="Trailer"
-              />
-            ) : (
-              <div className="font-pixel text-[10px] text-[#ffec27]">▶ ТРЕЙЛЕР</div>
-            )}
+        {/* Рейтинг на обложке */}
+        {game.rating > 0 && (
+          <div className="absolute bottom-2 left-2 bg-black/70 backdrop-blur-sm text-white px-2 py-1 rounded-md flex items-center gap-1">
+            <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
+            <span className="text-xs font-medium">{game.rating}</span>
           </div>
         )}
       </div>
+
+      {/* Информация */}
       <div className="p-3">
-        <h3 className="font-pixel text-[9px] truncate mb-2 text-[#fcfcfc] group-hover:text-[#ffec27]">
-          {game.title.toUpperCase()}
+        <h3 className="font-medium text-sm text-neutral-900 line-clamp-1 mb-1 group-hover:text-indigo-600 transition">
+          {game.title}
         </h3>
-        <div className="flex justify-between items-center">
-          <div className="flex gap-1 flex-wrap">
-            {game.platforms.slice(0, 3).map((p) => (
-              <span key={p} className="font-pixel text-[7px] text-[#29adff]">{p}</span>
-            ))}
-          </div>
-          <span className="font-pixel text-[8px] text-[#747474] flex items-center gap-1">
-            <Clock className="w-2 h-2" /> {game.hours}h
-          </span>
+        
+        <div className="flex items-center justify-between text-xs text-neutral-500">
+          <span>{game.year}</span>
+          <span className="truncate ml-2">{game.genre}</span>
         </div>
+
+        {/* Данные пользователя */}
+        {userGameData && (userGameData.rating > 0 || userGameData.hours > 0) && (
+          <div className="mt-2 pt-2 border-t border-neutral-100 flex items-center gap-3 text-xs">
+            {userGameData.rating > 0 && (
+              <span className="flex items-center gap-1 text-neutral-600">
+                <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
+                {userGameData.rating}
+              </span>
+            )}
+            {userGameData.hours > 0 && (
+              <span className="flex items-center gap-1 text-neutral-600">
+                <Clock className="w-3 h-3" />
+                {userGameData.hours}ч
+              </span>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
