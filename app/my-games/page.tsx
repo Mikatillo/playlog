@@ -48,7 +48,6 @@ export default function MyGamesPage() {
 
       setAuthUser(user);
 
-      // Загружаем профиль из Supabase
       const { data: profileData } = await supabase
         .from('profiles')
         .select('*')
@@ -65,7 +64,6 @@ export default function MyGamesPage() {
         });
       }
 
-      // Загружаем игры из Supabase
       const { data: gamesData } = await supabase
         .from('user_games')
         .select('*');
@@ -161,36 +159,33 @@ export default function MyGamesPage() {
   }, [userGames, games]);
 
   const achievements: Achievement[] = [
-    { id: 'first_game', title: 'ПЕРВАЯ КРОВЬ', description: 'Добавь первую игру', icon: Heart, unlocked: stats.total >= 1, color: '#ff004d' },
-    { id: 'collector', title: 'КОЛЛЕКЦИОНЕР', description: 'Добавь 10 игр', icon: Crown, unlocked: stats.total >= 10, color: '#ffec27' },
-    { id: 'finisher', title: 'ФИНИШЁР', description: 'Пройди 5 игр', icon: Check, unlocked: stats.completed >= 5, color: '#00e436' },
-    { id: 'hardcore', title: 'ХАРДКОРЩИК', description: 'Наиграй 100 часов', icon: Flame, unlocked: stats.totalHours >= 100, color: '#ff004d' },
-    { id: 'critic', title: 'КРИТИК', description: 'Оцени 5 игр', icon: Star, unlocked: Array.from(userGames.values()).filter(d => d.rating > 0).length >= 5, color: '#29adff' },
-    { id: 'marathon', title: 'МАРАФОНЕЦ', description: 'Наиграй 500 часов', icon: Zap, unlocked: stats.totalHours >= 500, color: '#b142f5' },
+    { id: 'first_game', title: 'ПЕРВАЯ КРОВЬ', description: 'Добавь первую игру', icon: Heart, unlocked: stats.total >= 1, color: '#f43f5e' },
+    { id: 'collector', title: 'КОЛЛЕКЦИОНЕР', description: 'Добавь 10 игр', icon: Crown, unlocked: stats.total >= 10, color: '#eab308' },
+    { id: 'finisher', title: 'ФИНИШЁР', description: 'Пройди 5 игр', icon: Check, unlocked: stats.completed >= 5, color: '#10b981' },
+    { id: 'hardcore', title: 'ХАРДКОРЩИК', description: 'Наиграй 100 часов', icon: Flame, unlocked: stats.totalHours >= 100, color: '#f43f5e' },
+    { id: 'critic', title: 'КРИТИК', description: 'Оцени 5 игр', icon: Star, unlocked: Array.from(userGames.values()).filter(d => d.rating > 0).length >= 5, color: '#3b82f6' },
+    { id: 'marathon', title: 'МАРАФОНЕЦ', description: 'Наиграй 500 часов', icon: Zap, unlocked: stats.totalHours >= 500, color: '#a855f7' },
   ];
 
   const unlockedCount = achievements.filter(a => a.unlocked).length;
 
   const tabs: { id: TabType; label: string; icon: any; count: number }[] = [
-    { id: 'all', label: 'ВСЕ', icon: Trophy, count: stats.total },
-    { id: 'want', label: 'ХОЧУ ПРОЙТИ', icon: Heart, count: stats.want },
-    { id: 'playing', label: 'В ПРОЦЕССЕ', icon: Gamepad, count: stats.playing },
-    { id: 'completed', label: 'ПРОШЁЛ', icon: Check, count: stats.completed },
+    { id: 'all', label: 'Все', icon: Trophy, count: stats.total },
+    { id: 'want', label: 'Хочу пройти', icon: Heart, count: stats.want },
+    { id: 'playing', label: 'В процессе', icon: Gamepad, count: stats.playing },
+    { id: 'completed', label: 'Прошёл', icon: Check, count: stats.completed },
   ];
 
-  // Если не авторизован - показываем заглушку
   if (!authUser && !loading) {
     return (
-      <div className="min-h-screen bg-[#0f0f1e] text-[#fcfcfc]">
-        <div className="retro-grid"></div>
-        <Header profile={profile} levelInfo={levelInfo} />
-        <div className="header-line"></div>
-        <div className="max-w-7xl mx-auto px-4 py-20 text-center">
-          <Lock className="w-16 h-16 text-[#747474] mx-auto mb-4" />
-          <h1 className="font-pixel text-2xl text-[#ffec27] mb-4">ДОСТУП ЗАКРЫТ</h1>
-          <p className="text-lg text-[#747474] mb-6">Войди в аккаунт, чтобы видеть свои игры</p>
-          <a href="/auth" className="inline-block bg-[#00e436] text-[#0f0f1e] font-pixel text-xs px-6 py-3 hover:bg-[#00ff40]">
-            ВОЙТИ
+      <div className="min-h-screen bg-[#0a0a0a]">
+        <Header />
+        <div className="max-w-7xl mx-auto px-6 py-20 text-center">
+          <Lock className="w-16 h-16 text-neutral-600 mx-auto mb-4" />
+          <h1 className="text-2xl font-bold text-white mb-4">Доступ закрыт</h1>
+          <p className="text-lg text-neutral-400 mb-6">Войди в аккаунт, чтобы видеть свои игры</p>
+          <a href="/auth" className="inline-block bg-indigo-500 text-white font-medium px-6 py-3 rounded-lg hover:bg-indigo-600 transition">
+            Войти
           </a>
         </div>
       </div>
@@ -198,81 +193,80 @@ export default function MyGamesPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0f0f1e] text-[#fcfcfc]">
-      <div className="retro-grid"></div>
-
+    <div className="min-h-screen bg-[#0a0a0a]">
       <Header profile={profile} levelInfo={levelInfo} />
 
-      <div className="header-line"></div>
-
-      <div className="max-w-7xl mx-auto px-4 py-6 relative z-10">
+      <div className="max-w-7xl mx-auto px-6 py-8">
         <div className="mb-6">
-          <h1 className="font-pixel text-2xl text-[#ffec27] mb-2 text-glow">МОИ ИГРЫ</h1>
-          <p className="text-lg text-[#747474]">Твоя личная коллекция и достижения</p>
+          <h1 className="text-2xl font-bold text-white mb-2">Мои игры</h1>
+          <p className="text-neutral-400">Твоя личная коллекция и достижения</p>
         </div>
 
-        <div className="bg-[#1a1a2e] border-2 border-[#29adff] p-3 mb-6">
+        {/* Поиск */}
+        <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-3 mb-6">
           <input
             type="text"
-            placeholder="ПОИСК В МОИХ ИГРАХ..."
+            placeholder="Поиск в моих играх..."
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
-            className="w-full bg-[#0f0f1e] border-2 border-[#747474] px-4 py-2 font-pixel text-xs text-[#fcfcfc] focus:outline-none focus:border-[#29adff]"
+            className="w-full bg-transparent px-4 py-2 text-white placeholder:text-neutral-500 focus:outline-none"
           />
         </div>
 
+        {/* Статистика */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
-          <div className="bg-[#1a1a2e] border-2 border-[#ffec27] p-3 text-center">
-            <Trophy className="w-5 h-5 text-[#ffec27] mx-auto mb-1" />
-            <div className="font-pixel text-xl text-[#ffec27]">{stats.total}</div>
-            <div className="font-pixel text-[7px] text-[#747474]">ВСЕГО</div>
+          <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-4 text-center">
+            <Trophy className="w-5 h-5 text-indigo-500 mx-auto mb-1" />
+            <div className="text-xl font-bold text-white">{stats.total}</div>
+            <div className="text-xs text-neutral-400">Всего</div>
           </div>
-          <div className="bg-[#1a1a2e] border-2 border-[#00e436] p-3 text-center">
-            <Check className="w-5 h-5 text-[#00e436] mx-auto mb-1" />
-            <div className="font-pixel text-xl text-[#00e436]">{stats.completed}</div>
-            <div className="font-pixel text-[7px] text-[#747474]">ПРОЙДЕНО</div>
+          <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-4 text-center">
+            <Check className="w-5 h-5 text-emerald-500 mx-auto mb-1" />
+            <div className="text-xl font-bold text-white">{stats.completed}</div>
+            <div className="text-xs text-neutral-400">Пройдено</div>
           </div>
-          <div className="bg-[#1a1a2e] border-2 border-[#29adff] p-3 text-center">
-            <Gamepad className="w-5 h-5 text-[#29adff] mx-auto mb-1" />
-            <div className="font-pixel text-xl text-[#29adff]">{stats.playing}</div>
-            <div className="font-pixel text-[7px] text-[#747474]">В ПРОЦЕССЕ</div>
+          <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-4 text-center">
+            <Gamepad className="w-5 h-5 text-blue-500 mx-auto mb-1" />
+            <div className="text-xl font-bold text-white">{stats.playing}</div>
+            <div className="text-xs text-neutral-400">В процессе</div>
           </div>
-          <div className="bg-[#1a1a2e] border-2 border-[#ff004d] p-3 text-center">
-            <Heart className="w-5 h-5 text-[#ff004d] mx-auto mb-1" />
-            <div className="font-pixel text-xl text-[#ff004d]">{stats.want}</div>
-            <div className="font-pixel text-[7px] text-[#747474]">ХОЧУ</div>
+          <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-4 text-center">
+            <Heart className="w-5 h-5 text-rose-500 mx-auto mb-1" />
+            <div className="text-xl font-bold text-white">{stats.want}</div>
+            <div className="text-xs text-neutral-400">Хочу</div>
           </div>
-          <div className="bg-[#1a1a2e] border-2 border-[#b142f5] p-3 text-center">
-            <Clock className="w-5 h-5 text-[#b142f5] mx-auto mb-1" />
-            <div className="font-pixel text-xl text-[#b142f5]">{stats.totalHours}h</div>
-            <div className="font-pixel text-[7px] text-[#747474]">ВСЕГО ЧАСОВ</div>
+          <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-4 text-center">
+            <Clock className="w-5 h-5 text-purple-500 mx-auto mb-1" />
+            <div className="text-xl font-bold text-white">{stats.totalHours}h</div>
+            <div className="text-xs text-neutral-400">Всего часов</div>
           </div>
-          <div className="bg-[#1a1a2e] border-2 border-[#ffec27] p-3 text-center">
-            <Star className="w-5 h-5 text-[#ffec27] mx-auto mb-1" />
-            <div className="font-pixel text-xl text-[#ffec27]">{stats.avgRating}</div>
-            <div className="font-pixel text-[7px] text-[#747474]">СР. ОЦЕНКА</div>
+          <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-4 text-center">
+            <Star className="w-5 h-5 text-yellow-500 mx-auto mb-1" />
+            <div className="text-xl font-bold text-white">{stats.avgRating}</div>
+            <div className="text-xs text-neutral-400">Ср. оценка</div>
           </div>
         </div>
 
-        <div className="bg-[#1a1a2e] border-2 border-[#b142f5] p-4 mb-6">
-          <h2 className="font-pixel text-xs text-[#b142f5] mb-3 flex items-center gap-2">
-            <Award className="w-4 h-4" /> ДОСТИЖЕНИЯ ({unlockedCount}/{achievements.length})
+        {/* Достижения */}
+        <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-5 mb-6">
+          <h2 className="font-semibold text-white mb-4 flex items-center gap-2">
+            <Award className="w-4 h-4 text-indigo-500" /> Достижения ({unlockedCount}/{achievements.length})
           </h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
             {achievements.map((achievement) => {
               const Icon = achievement.icon;
               return (
                 <div
                   key={achievement.id}
-                  className={`bg-[#0f0f1e] border-2 p-2 text-center transition ${
-                    achievement.unlocked ? 'border-[#ffec27] opacity-100' : 'border-[#747474] opacity-40'
+                  className={`bg-neutral-800 border rounded-lg p-3 text-center transition ${
+                    achievement.unlocked ? 'border-neutral-600 opacity-100' : 'border-neutral-800 opacity-40'
                   }`}
                 >
-                  <Icon className="w-5 h-5 mx-auto mb-1" style={{ color: achievement.unlocked ? achievement.color : '#747474' }} />
-                  <div className="font-pixel text-[8px] mb-1" style={{ color: achievement.unlocked ? achievement.color : '#747474' }}>
+                  <Icon className="w-5 h-5 mx-auto mb-1" style={{ color: achievement.unlocked ? achievement.color : '#737373' }} />
+                  <div className="text-xs font-medium mb-1" style={{ color: achievement.unlocked ? achievement.color : '#737373' }}>
                     {achievement.title}
                   </div>
-                  <div className="font-pixel text-[7px] text-[#747474] leading-tight">
+                  <div className="text-[10px] text-neutral-500 leading-tight">
                     {achievement.description}
                   </div>
                 </div>
@@ -281,6 +275,7 @@ export default function MyGamesPage() {
           </div>
         </div>
 
+        {/* Вкладки */}
         <div className="flex flex-wrap gap-2 mb-4">
           {tabs.map((tab) => {
             const Icon = tab.icon;
@@ -288,30 +283,31 @@ export default function MyGamesPage() {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`font-pixel text-[10px] px-3 py-2 border-2 flex items-center gap-2 transition ${
+                className={`px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition ${
                   activeTab === tab.id
-                    ? 'bg-[#ffec27] text-[#0f0f1e] border-[#ffec27]'
-                    : 'bg-[#1a1a2e] text-[#fcfcfc] border-[#747474] hover:border-[#ffec27]'
+                    ? 'bg-indigo-500 text-white'
+                    : 'bg-neutral-900 border border-neutral-800 text-neutral-300 hover:bg-neutral-800'
                 }`}
               >
-                <Icon className="w-3 h-3" />
+                <Icon className="w-4 h-4" />
                 {tab.label} ({tab.count})
               </button>
             );
           })}
         </div>
 
+        {/* Список игр */}
         {loading ? (
           <div className="flex items-center justify-center py-20">
-            <Loader2 className="w-8 h-8 text-[#b142f5] animate-spin" />
-            <span className="font-pixel text-xs ml-3 text-[#747474]">ЗАГРУЗКА...</span>
+            <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
+            <span className="ml-3 text-neutral-400">Загрузка...</span>
           </div>
         ) : filteredGames.length === 0 ? (
-          <div className="text-center py-20 bg-[#1a1a2e] border-2 border-[#747474]">
-            <p className="font-pixel text-sm text-[#747474] mb-2">
-              {activeTab === 'all' ? 'ТЫ ЕЩЁ НЕ ДОБАВИЛ НИ ОДНОЙ ИГРЫ' : 'СПИСОК ПУСТ'}
+          <div className="text-center py-20 bg-neutral-900 border border-neutral-800 rounded-xl">
+            <p className="text-neutral-400 mb-2">
+              {activeTab === 'all' ? 'Ты ещё не добавил ни одной игры' : 'Список пуст'}
             </p>
-            <p className="font-pixel text-[10px] text-[#747474]">
+            <p className="text-sm text-neutral-500">
               Вернись на главную и добавь игры в список
             </p>
           </div>
@@ -326,16 +322,16 @@ export default function MyGamesPage() {
                     onClick={() => router.push(`/?game=${game.id}`)}
                   />
                   {data && (
-                    <div className="absolute bottom-0 left-0 right-0 bg-[#0f0f1e]/90 border-t-2 border-[#747474] p-1">
+                    <div className="absolute bottom-0 left-0 right-0 bg-black/90 border-t border-neutral-800 p-2 rounded-b-xl">
                       <div className="flex justify-between items-center">
                         {data.rating > 0 && (
-                          <span className="font-pixel text-[8px] text-[#ffec27] flex items-center gap-1">
-                            <Star className="w-2 h-2 fill-[#ffec27]" /> {data.rating}
+                          <span className="text-xs text-yellow-400 flex items-center gap-1">
+                            <Star className="w-3 h-3 fill-yellow-400" /> {data.rating}
                           </span>
                         )}
                         {data.hours > 0 && (
-                          <span className="font-pixel text-[8px] text-[#00e436] flex items-center gap-1 ml-auto">
-                            <Clock className="w-2 h-2" /> {data.hours}h
+                          <span className="text-xs text-neutral-400 flex items-center gap-1 ml-auto">
+                            <Clock className="w-3 h-3" /> {data.hours}ч
                           </span>
                         )}
                       </div>
