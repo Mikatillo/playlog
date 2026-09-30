@@ -5,9 +5,9 @@ const BASE_URL = 'https://api.rawg.io/api';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = params;
+  const { id } = await params;
 
   try {
     const url = `${BASE_URL}/games/${id}?key=${API_KEY}`;
