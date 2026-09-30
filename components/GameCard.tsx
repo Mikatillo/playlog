@@ -27,28 +27,25 @@ export default function GameCard({ game, onClick, userGameData }: GameCardProps)
   return (
     <div
       onClick={onClick}
-      className="group cursor-pointer bg-white rounded-xl border border-neutral-200 overflow-hidden hover:shadow-lg hover:border-neutral-300 transition-all duration-200 hover:-translate-y-1"
+      className="group cursor-pointer bg-neutral-900 rounded-xl border border-neutral-800 overflow-hidden hover:shadow-lg hover:border-neutral-700 transition-all duration-200 hover:-translate-y-1"
     >
-      {/* Обложка */}
-      <div className="relative aspect-[2/3] overflow-hidden bg-neutral-100">
+      <div className="relative aspect-[2/3] overflow-hidden bg-neutral-800">
         <img
           src={game.cover}
           alt={game.title}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
           onError={(e) => {
             (e.target as HTMLImageElement).src =
-              'https://via.placeholder.com/300x450/neutral-100/neutral-400?text=No+Image';
+              'https://via.placeholder.com/300x450/171717/525252?text=No+Image';
           }}
         />
         
-        {/* Бейдж статуса */}
         {userGameData && userGameData.status !== 'none' && (
           <div className={`absolute top-2 right-2 w-7 h-7 ${statusColor[userGameData.status]} rounded-full flex items-center justify-center text-white shadow-md`}>
             {statusIcon[userGameData.status]}
           </div>
         )}
 
-        {/* Рейтинг на обложке */}
         {game.rating > 0 && (
           <div className="absolute bottom-2 left-2 bg-black/70 backdrop-blur-sm text-white px-2 py-1 rounded-md flex items-center gap-1">
             <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
@@ -57,9 +54,8 @@ export default function GameCard({ game, onClick, userGameData }: GameCardProps)
         )}
       </div>
 
-      {/* Информация */}
       <div className="p-3">
-        <h3 className="font-medium text-sm text-neutral-900 line-clamp-1 mb-1 group-hover:text-indigo-600 transition">
+        <h3 className="font-medium text-sm text-white line-clamp-1 mb-1 group-hover:text-indigo-400 transition">
           {game.title}
         </h3>
         
@@ -68,17 +64,16 @@ export default function GameCard({ game, onClick, userGameData }: GameCardProps)
           <span className="truncate ml-2">{game.genre}</span>
         </div>
 
-        {/* Данные пользователя */}
         {userGameData && (userGameData.rating > 0 || userGameData.hours > 0) && (
-          <div className="mt-2 pt-2 border-t border-neutral-100 flex items-center gap-3 text-xs">
+          <div className="mt-2 pt-2 border-t border-neutral-800 flex items-center gap-3 text-xs">
             {userGameData.rating > 0 && (
-              <span className="flex items-center gap-1 text-neutral-600">
+              <span className="flex items-center gap-1 text-neutral-400">
                 <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
                 {userGameData.rating}
               </span>
             )}
             {userGameData.hours > 0 && (
-              <span className="flex items-center gap-1 text-neutral-600">
+              <span className="flex items-center gap-1 text-neutral-400">
                 <Clock className="w-3 h-3" />
                 {userGameData.hours}ч
               </span>

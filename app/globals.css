@@ -4,21 +4,16 @@
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --color-primary: #6366f1;
   --color-primary-hover: #4f46e5;
-  --color-background: #ffffff;
-  --color-foreground: #171717;
-  --color-muted: #737373;
-  --color-border: #e5e5e5;
-  --color-surface: #fafafa;
 }
 
 @layer base {
   * {
-    border-color: var(--color-border);
+    border-color: #262626;
   }
   
   body {
-    background-color: var(--color-background);
-    color: var(--color-foreground);
+    background-color: #0a0a0a;
+    color: #fafafa;
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -31,20 +26,18 @@
   }
   
   .glass {
-    background: rgba(255, 255, 255, 0.8);
+    background: rgba(10, 10, 10, 0.8);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
   }
 }
 
-/* Плавные переходы */
 * {
   transition-property: color, background-color, border-color, text-decoration-color, fill, stroke, opacity, box-shadow, transform, filter, backdrop-filter;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   transition-duration: 150ms;
 }
 
-/* Скроллбар */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -55,10 +48,10 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #d4d4d4;
+  background: #404040;
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #a3a3a3;
+  background: #525252;
 }

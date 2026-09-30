@@ -2,8 +2,8 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Gamepad2, Mail, Lock, User, ArrowRight, AlertCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { Gamepad2, Mail, Lock, User, ArrowRight } from 'lucide-react';
 
 export default function AuthPage() {
   const router = useRouter();
@@ -11,40 +11,33 @@ export default function AuthPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [nickname, setNickname] = useState('');
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
     setError('');
+    setLoading(true);
 
     try {
       if (isLogin) {
-        // Вход
         const { error } = await supabase.auth.signInWithPassword({
           email,
           password,
         });
-
         if (error) throw error;
+        router.push('/');
       } else {
-        // Регистрация
         const { error } = await supabase.auth.signUp({
           email,
           password,
           options: {
-            data: {
-              nickname: nickname,
-            },
+            data: { nickname },
           },
         });
-
         if (error) throw error;
+        router.push('/');
       }
-
-      router.push('/');
-      router.refresh();
     } catch (err: any) {
       setError(err.message || 'Произошла ошибка');
     } finally {
@@ -53,71 +46,73 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0f0f1e] flex items-center justify-center p-4">
-      <div className="retro-grid absolute inset-0"></div>
-      
-      <div className="relative z-10 w-full max-w-md">
-        <div className="bg-[#1a1a2e] border-4 border-[#b142f5] p-8">
-          {/* Логотип */}
-          <div className="flex items-center justify-center gap-3 mb-8">
-            <div className="w-12 h-12 bg-[#b142f5] flex items-center justify-center">
-              <Gamepad2 className="w-7 h-7 text-[#ffec27]" />
+    <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center p-4">
+      <div className="w-full max-w-md">
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center gap-2.5 mb-4">
+            <div className="w-10 h-10 bg-indigo-500 rounded-lg flex items-center justify-center">
+              <Gamepad2 className="w-5 h-5 text-white" />
             </div>
-            <div className="font-pixel text-lg">
-              <span className="text-[#ff004d]">PLAY</span>
-              <span className="text-[#00e436]">LOG</span>
-            </div>
+            <span className="font-semibold text-xl text-white">PlayLog</span>
           </div>
-
-          {/* Заголовок */}
-          <h1 className="font-pixel text-xl text-[#ffec27] text-center mb-6">
-            {isLogin ? 'ВХОД' : 'РЕГИСТРАЦИЯ'}
+          <h1 className="text-2xl font-bold text-white mb-2">
+            {isLogin ? 'Вход в аккаунт' : 'Регистрация'}
           </h1>
+          <p className="text-sm text-neutral-400">
+            {isLogin ? 'С возвращением! Войди в свой аккаунт' : 'Создай аккаунт и начни отслеживать игры'}
+          </p>
+        </div>
 
-          {/* Форма */}
+        <div className="bg-neutral-900 rounded-2xl border border-neutral-800 p-8">
           <form onSubmit={handleSubmit} className="space-y-4">
             {!isLogin && (
               <div>
-                <label className="font-pixel text-[10px] text-[#747474] mb-2 block">НИКНЕЙМ</label>
+                <label className="text-sm font-medium text-neutral-300 mb-2 block">
+                  Никнейм
+                </label>
                 <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#747474]" />
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500" />
                   <input
                     type="text"
                     value={nickname}
                     onChange={(e) => setNickname(e.target.value)}
                     placeholder="Введи никнейм"
-                    className="w-full bg-[#0f0f1e] border-2 border-[#747474] py-3 pl-10 pr-4 font-pixel text-xs text-[#fcfcfc] focus:outline-none focus:border-[#b142f5]"
-                    required
+                    className="w-full bg-[#0a0a0a] border border-neutral-800 rounded-lg pl-10 pr-4 py-2.5 text-white placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                    required={!isLogin}
                   />
                 </div>
               </div>
             )}
 
             <div>
-              <label className="font-pixel text-[10px] text-[#747474] mb-2 block">EMAIL</label>
+              <label className="text-sm font-medium text-neutral-300 mb-2 block">
+                Email
+              </label>
               <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#747474]" />
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500" />
                 <input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Введи email"
-                  className="w-full bg-[#0f0f1e] border-2 border-[#747474] py-3 pl-10 pr-4 font-pixel text-xs text-[#fcfcfc] focus:outline-none focus:border-[#b142f5]"
+                  placeholder="name@example.com"
+                  className="w-full bg-[#0a0a0a] border border-neutral-800 rounded-lg pl-10 pr-4 py-2.5 text-white placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
                   required
                 />
               </div>
             </div>
 
             <div>
-              <label className="font-pixel text-[10px] text-[#747474] mb-2 block">ПАРОЛЬ</label>
+              <label className="text-sm font-medium text-neutral-300 mb-2 block">
+                Пароль
+              </label>
               <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#747474]" />
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500" />
                 <input
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Введи пароль (мин. 6 символов)"
-                  className="w-full bg-[#0f0f1e] border-2 border-[#747474] py-3 pl-10 pr-4 font-pixel text-xs text-[#fcfcfc] focus:outline-none focus:border-[#b142f5]"
+                  placeholder="Минимум 6 символов"
+                  className="w-full bg-[#0a0a0a] border border-neutral-800 rounded-lg pl-10 pr-4 py-2.5 text-white placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
                   required
                   minLength={6}
                 />
@@ -125,32 +120,41 @@ export default function AuthPage() {
             </div>
 
             {error && (
-              <div className="bg-[#ff004d]/20 border-2 border-[#ff004d] p-3 font-pixel text-[10px] text-[#ff004d]">
-                {error}
+              <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+                <p className="text-sm text-red-400">{error}</p>
               </div>
             )}
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-[#00e436] text-[#0f0f1e] font-pixel text-xs py-3 hover:bg-[#00ff40] disabled:opacity-50 flex items-center justify-center gap-2"
+              className="w-full bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium py-2.5 rounded-lg transition flex items-center justify-center gap-2"
             >
-              {loading ? 'ЗАГРУЗКА...' : isLogin ? 'ВОЙТИ' : 'СОЗДАТЬ АККАУНТ'}
-              <ArrowRight className="w-4 h-4" />
+              {loading ? (
+                'Загрузка...'
+              ) : (
+                <>
+                  {isLogin ? 'Войти' : 'Создать аккаунт'}
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              )}
             </button>
           </form>
 
-          {/* Переключатель */}
-          <div className="mt-6 text-center">
-            <button
-              onClick={() => {
-                setIsLogin(!isLogin);
-                setError('');
-              }}
-              className="font-pixel text-[10px] text-[#29adff] hover:text-[#ffec27]"
-            >
-              {isLogin ? 'НЕТ АККАУНТА? ЗАРЕГИСТРИРУЙСЯ' : 'УЖЕ ЕСТЬ АККАУНТ? ВОЙДИ'}
-            </button>
+          <div className="mt-6 pt-6 border-t border-neutral-800 text-center">
+            <p className="text-sm text-neutral-400">
+              {isLogin ? 'Нет аккаунта?' : 'Уже есть аккаунт?'}
+              <button
+                onClick={() => {
+                  setIsLogin(!isLogin);
+                  setError('');
+                }}
+                className="ml-2 text-indigo-400 hover:text-indigo-300 font-medium transition"
+              >
+                {isLogin ? 'Зарегистрируйся' : 'Войди'}
+              </button>
+            </p>
           </div>
         </div>
       </div>

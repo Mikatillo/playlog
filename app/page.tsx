@@ -1,6 +1,6 @@
 'use client';
 
-import { Search, Filter, X, Star, Clock, MessageSquare, Trophy, TrendingUp, Download, Upload, Zap, Loader2, Gamepad2, Lock, Check, Heart, Gamepad, Monitor } from 'lucide-react';
+import { Search, Filter, X, Star, Clock, MessageSquare, Trophy, TrendingUp, Download, Upload, Zap, Loader2, Lock, Check, Heart, Gamepad, Monitor } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { Game, GameData, XP_RULES, calculateLevel, UserProfile } from '@/types/game';
 import { mapRawgGame, RawgGame } from '@/lib/rawg';
@@ -326,7 +326,7 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-neutral-50">
+    <div className="min-h-screen bg-[#0a0a0a]">
       <Header profile={profile} levelInfo={levelInfo} />
 
       {xpGain && (
@@ -339,19 +339,18 @@ export default function Home() {
         {authUser && <Sidebar profile={profile} levelInfo={levelInfo} />}
 
         <main className="flex-1 space-y-6">
-          {/* Приветствие */}
           {authUser && (
-            <div className="bg-white rounded-xl border border-neutral-200 p-6">
+            <div className="bg-neutral-900 rounded-xl border border-neutral-800 p-6">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="flex items-center gap-4">
                   <div className="w-14 h-14 bg-gradient-to-br from-indigo-500 to-purple-500 rounded-full flex items-center justify-center text-white text-xl font-semibold">
                     {profile.nickname.substring(0, 2).toUpperCase()}
                   </div>
                   <div>
-                    <h2 className="text-xl font-semibold text-neutral-900">
+                    <h2 className="text-xl font-semibold text-white">
                       Привет, {profile.nickname}! 👋
                     </h2>
-                    <p className="text-sm text-neutral-500 mt-0.5">
+                    <p className="text-sm text-neutral-400 mt-0.5">
                       Уровень {levelInfo.level} • {profile.xp} XP • {profile.completedGames} игр пройдено
                     </p>
                   </div>
@@ -359,13 +358,13 @@ export default function Home() {
                 <div className="flex gap-2">
                   <button
                     onClick={exportData}
-                    className="px-4 py-2 bg-neutral-100 text-neutral-700 rounded-lg text-sm font-medium hover:bg-neutral-200 transition flex items-center gap-2"
+                    className="px-4 py-2 bg-neutral-800 text-neutral-300 rounded-lg text-sm font-medium hover:bg-neutral-700 transition flex items-center gap-2"
                   >
                     <Download className="w-4 h-4" /> Экспорт
                   </button>
                   <button
                     onClick={() => fileInputRef.current?.click()}
-                    className="px-4 py-2 bg-neutral-100 text-neutral-700 rounded-lg text-sm font-medium hover:bg-neutral-200 transition flex items-center gap-2"
+                    className="px-4 py-2 bg-neutral-800 text-neutral-300 rounded-lg text-sm font-medium hover:bg-neutral-700 transition flex items-center gap-2"
                   >
                     <Upload className="w-4 h-4" /> Импорт
                   </button>
@@ -381,10 +380,9 @@ export default function Home() {
             </div>
           )}
 
-          {/* Поиск */}
           <div className="relative">
-            <div className="bg-white rounded-xl border border-neutral-200 p-4 flex items-center gap-3 shadow-sm">
-              <Search className="w-5 h-5 text-neutral-400 flex-shrink-0" />
+            <div className="bg-neutral-900 rounded-xl border border-neutral-800 p-4 flex items-center gap-3 shadow-sm">
+              <Search className="w-5 h-5 text-neutral-500 flex-shrink-0" />
               <input
                 ref={searchInputRef}
                 type="text"
@@ -395,14 +393,14 @@ export default function Home() {
                 onFocus={() => {
                   if (suggestions.length > 0) setShowSuggestions(true);
                 }}
-                className="flex-1 bg-transparent text-neutral-900 placeholder:text-neutral-400 focus:outline-none text-base"
+                className="flex-1 bg-transparent text-white placeholder:text-neutral-500 focus:outline-none text-base"
               />
               {(searchInput || searchMode === 'results') && (
                 <button
                   onClick={handleReset}
-                  className="p-2 hover:bg-neutral-100 rounded-lg transition"
+                  className="p-2 hover:bg-neutral-800 rounded-lg transition"
                 >
-                  <X className="w-4 h-4 text-neutral-500" />
+                  <X className="w-4 h-4 text-neutral-400" />
                 </button>
               )}
             </div>
@@ -410,13 +408,13 @@ export default function Home() {
             {showSuggestions && suggestions.length > 0 && (
               <div
                 ref={suggestionsRef}
-                className="absolute left-0 right-0 top-full mt-2 bg-white rounded-xl border border-neutral-200 shadow-lg z-50 overflow-hidden"
+                className="absolute left-0 right-0 top-full mt-2 bg-neutral-900 rounded-xl border border-neutral-800 shadow-lg z-50 overflow-hidden"
               >
                 {suggestions.map((game) => (
                   <div
                     key={game.id}
                     onClick={() => handleSuggestionClick(game)}
-                    className="flex items-center gap-3 p-3 hover:bg-neutral-50 cursor-pointer border-b border-neutral-100 last:border-b-0"
+                    className="flex items-center gap-3 p-3 hover:bg-neutral-800 cursor-pointer border-b border-neutral-800 last:border-b-0"
                   >
                     <img
                       src={game.cover}
@@ -424,16 +422,16 @@ export default function Home() {
                       className="w-12 h-16 object-cover rounded-lg"
                       onError={(e) => {
                         (e.target as HTMLImageElement).src =
-                          'https://via.placeholder.com/48x64/neutral-100/neutral-400?text=?';
+                          'https://via.placeholder.com/48x64/171717/525252?text=?';
                       }}
                     />
                     <div className="flex-1 min-w-0">
-                      <div className="font-medium text-sm text-neutral-900 truncate">{game.title}</div>
+                      <div className="font-medium text-sm text-white truncate">{game.title}</div>
                       <div className="flex items-center gap-2 mt-1">
-                        <span className="text-xs text-neutral-500">{game.genre}</span>
-                        <span className="text-xs text-neutral-400">•</span>
-                        <span className="text-xs text-neutral-500">{game.year}</span>
-                        <span className="text-xs text-neutral-500 flex items-center gap-1 ml-auto">
+                        <span className="text-xs text-neutral-400">{game.genre}</span>
+                        <span className="text-xs text-neutral-600">•</span>
+                        <span className="text-xs text-neutral-400">{game.year}</span>
+                        <span className="text-xs text-neutral-400 flex items-center gap-1 ml-auto">
                           <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" /> {game.rating}
                         </span>
                       </div>
@@ -444,16 +442,15 @@ export default function Home() {
             )}
           </div>
 
-          {/* Фильтры */}
           {searchMode === 'browse' && (
-            <div className="bg-white rounded-xl border border-neutral-200 p-5 space-y-4">
+            <div className="bg-neutral-900 rounded-xl border border-neutral-800 p-5 space-y-4">
               <div className="flex items-center gap-2 mb-3">
-                <Filter className="w-4 h-4 text-neutral-600" />
-                <h2 className="font-semibold text-neutral-900">Фильтры</h2>
+                <Filter className="w-4 h-4 text-neutral-400" />
+                <h2 className="font-semibold text-white">Фильтры</h2>
               </div>
 
               <div>
-                <label className="text-xs font-medium text-neutral-600 mb-2 block">Жанр</label>
+                <label className="text-xs font-medium text-neutral-400 mb-2 block">Жанр</label>
                 <div className="flex flex-wrap gap-2">
                   {genres.map((genre) => (
                     <button
@@ -465,7 +462,7 @@ export default function Home() {
                       className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
                         selectedGenre === genre.id
                           ? 'bg-indigo-500 text-white'
-                          : 'bg-neutral-100 text-neutral-700 hover:bg-neutral-200'
+                          : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'
                       }`}
                     >
                       {genre.name}
@@ -474,9 +471,9 @@ export default function Home() {
                 </div>
               </div>
 
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-4 border-t border-neutral-100">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-4 border-t border-neutral-800">
                 <div>
-                  <label className="text-xs font-medium text-neutral-600 mb-2 block">Платформа</label>
+                  <label className="text-xs font-medium text-neutral-400 mb-2 block">Платформа</label>
                   <div className="flex flex-wrap gap-2">
                     {platforms.map((platform) => (
                       <button
@@ -485,7 +482,7 @@ export default function Home() {
                         className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
                           selectedPlatform === platform
                             ? 'bg-indigo-500 text-white'
-                            : 'bg-neutral-100 text-neutral-700 hover:bg-neutral-200'
+                            : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'
                         }`}
                       >
                         {platform}
@@ -495,14 +492,14 @@ export default function Home() {
                 </div>
 
                 <div>
-                  <label className="text-xs font-medium text-neutral-600 mb-2 block">Сортировка</label>
+                  <label className="text-xs font-medium text-neutral-400 mb-2 block">Сортировка</label>
                   <select
                     value={sortBy}
                     onChange={(e) => {
                       setSortBy(e.target.value);
                       setPage(1);
                     }}
-                    className="px-3 py-1.5 bg-neutral-100 border-0 rounded-lg text-sm text-neutral-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="px-3 py-1.5 bg-neutral-800 border-0 rounded-lg text-sm text-neutral-300 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   >
                     <option value="-added">Популярность</option>
                     <option value="-rating">Рейтинг</option>
@@ -514,24 +511,23 @@ export default function Home() {
             </div>
           )}
 
-          {/* Результаты */}
           <div>
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-neutral-900 flex items-center gap-2">
+              <h2 className="text-lg font-semibold text-white flex items-center gap-2">
                 <TrendingUp className="w-5 h-5 text-indigo-500" />
                 {searchMode === 'results' ? `Результаты: "${searchQuery}"` : 'Популярные игры'}
               </h2>
-              <span className="text-sm text-neutral-500">{games.length} игр</span>
+              <span className="text-sm text-neutral-400">{games.length} игр</span>
             </div>
 
             {loading && games.length === 0 ? (
               <div className="flex items-center justify-center py-20">
                 <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
-                <span className="ml-3 text-neutral-600">Загрузка...</span>
+                <span className="ml-3 text-neutral-400">Загрузка...</span>
               </div>
             ) : games.length === 0 ? (
-              <div className="text-center py-20 bg-white rounded-xl border border-neutral-200">
-                <p className="text-neutral-500">Ничего не найдено</p>
+              <div className="text-center py-20 bg-neutral-900 rounded-xl border border-neutral-800">
+                <p className="text-neutral-400">Ничего не найдено</p>
               </div>
             ) : (
               <>
@@ -555,7 +551,7 @@ export default function Home() {
                     <button
                       onClick={loadMore}
                       disabled={loading}
-                      className="px-6 py-3 bg-white border border-neutral-200 rounded-lg text-sm font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-50 transition"
+                      className="px-6 py-3 bg-neutral-900 border border-neutral-800 rounded-lg text-sm font-medium text-neutral-300 hover:bg-neutral-800 disabled:opacity-50 transition"
                     >
                       {loading ? 'Загрузка...' : 'Показать ещё'}
                     </button>
@@ -567,15 +563,14 @@ export default function Home() {
         </main>
       </div>
 
-      {/* Модальное окно игры */}
       {selectedGame && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto relative shadow-2xl">
+          <div className="bg-neutral-900 rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto relative shadow-2xl border border-neutral-800">
             <button
               onClick={closeGame}
-              className="absolute top-4 right-4 w-10 h-10 bg-neutral-100 hover:bg-neutral-200 rounded-full flex items-center justify-center transition z-10"
+              className="absolute top-4 right-4 w-10 h-10 bg-neutral-800 hover:bg-neutral-700 rounded-full flex items-center justify-center transition z-10"
             >
-              <X className="w-5 h-5 text-neutral-600" />
+              <X className="w-5 h-5 text-neutral-400" />
             </button>
 
             {saved && (
@@ -598,46 +593,46 @@ export default function Home() {
 
                 <div className="md:col-span-2 space-y-4">
                   <div>
-                    <h1 className="text-3xl font-bold text-neutral-900 mb-3">{selectedGame.title}</h1>
+                    <h1 className="text-3xl font-bold text-white mb-3">{selectedGame.title}</h1>
                     <div className="flex flex-wrap gap-2 mb-4">
-                      <span className="px-3 py-1 bg-indigo-50 text-indigo-700 rounded-lg text-sm font-medium">
+                      <span className="px-3 py-1 bg-indigo-500/10 text-indigo-400 rounded-lg text-sm font-medium">
                         {selectedGame.genre}
                       </span>
-                      <span className="px-3 py-1 bg-neutral-100 text-neutral-700 rounded-lg text-sm font-medium">
+                      <span className="px-3 py-1 bg-neutral-800 text-neutral-300 rounded-lg text-sm font-medium">
                         {selectedGame.year}
                       </span>
-                      <span className="px-3 py-1 bg-yellow-50 text-yellow-700 rounded-lg text-sm font-medium flex items-center gap-1">
+                      <span className="px-3 py-1 bg-yellow-500/10 text-yellow-400 rounded-lg text-sm font-medium flex items-center gap-1">
                         <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" /> {selectedGame.rating}
                       </span>
                     </div>
-                    <p className="text-neutral-600 leading-relaxed">{selectedGame.description}</p>
+                    <p className="text-neutral-400 leading-relaxed">{selectedGame.description}</p>
                   </div>
 
                   <div className="grid grid-cols-3 gap-3">
-                    <div className="bg-neutral-50 rounded-lg p-3 text-center">
+                    <div className="bg-neutral-800 rounded-lg p-3 text-center">
                       <Star className="w-5 h-5 text-yellow-500 mx-auto mb-1" />
-                      <div className="font-semibold text-neutral-900">{selectedGame.rating}</div>
-                      <div className="text-xs text-neutral-500">Рейтинг</div>
+                      <div className="font-semibold text-white">{selectedGame.rating}</div>
+                      <div className="text-xs text-neutral-400">Рейтинг</div>
                     </div>
-                    <div className="bg-neutral-50 rounded-lg p-3 text-center">
+                    <div className="bg-neutral-800 rounded-lg p-3 text-center">
                       <Monitor className="w-5 h-5 text-indigo-500 mx-auto mb-1" />
-                      <div className="font-semibold text-neutral-900">{selectedGame.platforms.length}</div>
-                      <div className="text-xs text-neutral-500">Платформ</div>
+                      <div className="font-semibold text-white">{selectedGame.platforms.length}</div>
+                      <div className="text-xs text-neutral-400">Платформ</div>
                     </div>
-                    <div className="bg-neutral-50 rounded-lg p-3 text-center">
+                    <div className="bg-neutral-800 rounded-lg p-3 text-center">
                       <Trophy className="w-5 h-5 text-purple-500 mx-auto mb-1" />
-                      <div className="font-semibold text-neutral-900">{selectedGame.year}</div>
-                      <div className="text-xs text-neutral-500">Год</div>
+                      <div className="font-semibold text-white">{selectedGame.year}</div>
+                      <div className="text-xs text-neutral-400">Год</div>
                     </div>
                   </div>
 
                   <div>
-                    <h3 className="text-sm font-medium text-neutral-600 mb-2">Платформы:</h3>
+                    <h3 className="text-sm font-medium text-neutral-400 mb-2">Платформы:</h3>
                     <div className="flex gap-2 flex-wrap">
                       {selectedGame.platforms.map((platform) => (
                         <div
                           key={platform}
-                          className="px-3 py-1 bg-neutral-100 rounded-lg text-sm text-neutral-700"
+                          className="px-3 py-1 bg-neutral-800 rounded-lg text-sm text-neutral-300"
                         >
                           {platform}
                         </div>
@@ -647,10 +642,9 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* Кнопки статусов */}
               {authUser ? (
-                <div className="bg-neutral-50 rounded-xl p-5 mb-6">
-                  <h2 className="font-semibold text-neutral-900 mb-3">Добавить в список</h2>
+                <div className="bg-neutral-800 rounded-xl p-5 mb-6">
+                  <h2 className="font-semibold text-white mb-3">Добавить в список</h2>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                     <button
                       onClick={() => {
@@ -661,7 +655,7 @@ export default function Home() {
                       className={`px-4 py-2.5 rounded-lg text-sm font-medium transition flex items-center justify-center gap-2 ${
                         gameStatus === 'want'
                           ? 'bg-rose-500 text-white'
-                          : 'bg-white border border-neutral-200 text-neutral-700 hover:bg-neutral-100'
+                          : 'bg-neutral-900 border border-neutral-700 text-neutral-300 hover:bg-neutral-700'
                       }`}
                     >
                       <Heart className="w-4 h-4" /> Хочу пройти
@@ -675,7 +669,7 @@ export default function Home() {
                       className={`px-4 py-2.5 rounded-lg text-sm font-medium transition flex items-center justify-center gap-2 ${
                         gameStatus === 'playing'
                           ? 'bg-blue-500 text-white'
-                          : 'bg-white border border-neutral-200 text-neutral-700 hover:bg-neutral-100'
+                          : 'bg-neutral-900 border border-neutral-700 text-neutral-300 hover:bg-neutral-700'
                       }`}
                     >
                       <Gamepad className="w-4 h-4" /> В процессе
@@ -689,7 +683,7 @@ export default function Home() {
                       className={`px-4 py-2.5 rounded-lg text-sm font-medium transition flex items-center justify-center gap-2 ${
                         gameStatus === 'completed'
                           ? 'bg-emerald-500 text-white'
-                          : 'bg-white border border-neutral-200 text-neutral-700 hover:bg-neutral-100'
+                          : 'bg-neutral-900 border border-neutral-700 text-neutral-300 hover:bg-neutral-700'
                       }`}
                     >
                       <Check className="w-4 h-4" /> Прошёл
@@ -697,9 +691,9 @@ export default function Home() {
                   </div>
                 </div>
               ) : (
-                <div className="bg-neutral-50 rounded-xl p-6 mb-6 text-center">
-                  <Lock className="w-8 h-8 text-neutral-400 mx-auto mb-2" />
-                  <p className="text-neutral-600 mb-3">Войди, чтобы добавлять игры в список</p>
+                <div className="bg-neutral-800 rounded-xl p-6 mb-6 text-center">
+                  <Lock className="w-8 h-8 text-neutral-500 mx-auto mb-2" />
+                  <p className="text-neutral-400 mb-3">Войди, чтобы добавлять игры в список</p>
                   <a
                     href="/auth"
                     className="inline-block px-4 py-2 bg-indigo-500 text-white rounded-lg text-sm font-medium hover:bg-indigo-600 transition"
@@ -709,11 +703,10 @@ export default function Home() {
                 </div>
               )}
 
-              {/* Оценка и часы */}
               {authUser ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                  <div className="bg-neutral-50 rounded-xl p-5">
-                    <h3 className="font-semibold text-neutral-900 mb-3 flex items-center gap-2">
+                  <div className="bg-neutral-800 rounded-xl p-5">
+                    <h3 className="font-semibold text-white mb-3 flex items-center gap-2">
                       <Trophy className="w-4 h-4 text-indigo-500" /> Твоя оценка
                     </h3>
                     <div className="flex gap-2 mb-3">
@@ -728,7 +721,7 @@ export default function Home() {
                           className={`w-10 h-10 rounded-lg font-medium transition ${
                             userRating >= num
                               ? 'bg-yellow-400 text-white'
-                              : 'bg-white border border-neutral-200 text-neutral-600 hover:bg-neutral-100'
+                              : 'bg-neutral-900 border border-neutral-700 text-neutral-400 hover:bg-neutral-700'
                           }`}
                         >
                           {num}
@@ -736,12 +729,12 @@ export default function Home() {
                       ))}
                     </div>
                     {userRating > 0 && (
-                      <div className="text-sm text-neutral-600">Твоя оценка: {userRating}/5</div>
+                      <div className="text-sm text-neutral-400">Твоя оценка: {userRating}/5</div>
                     )}
                   </div>
 
-                  <div className="bg-neutral-50 rounded-xl p-5">
-                    <h3 className="font-semibold text-neutral-900 mb-3 flex items-center gap-2">
+                  <div className="bg-neutral-800 rounded-xl p-5">
+                    <h3 className="font-semibold text-white mb-3 flex items-center gap-2">
                       <Clock className="w-4 h-4 text-indigo-500" /> Часов наиграно
                     </h3>
                     <div className="flex items-center gap-2 mb-3">
@@ -753,27 +746,26 @@ export default function Home() {
                           setUserHours(v);
                           saveData(userRating, v, review, gameStatus);
                         }}
-                        className="w-20 px-3 py-2 bg-white border border-neutral-200 rounded-lg text-neutral-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        className="w-20 px-3 py-2 bg-neutral-900 border border-neutral-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                         placeholder="0"
                       />
-                      <span className="text-sm text-neutral-600">часов</span>
+                      <span className="text-sm text-neutral-400">часов</span>
                     </div>
                     {userHours > 0 && (
-                      <div className="text-sm text-neutral-600">Ты наиграл: {userHours}ч</div>
+                      <div className="text-sm text-neutral-400">Ты наиграл: {userHours}ч</div>
                     )}
                   </div>
                 </div>
               ) : (
-                <div className="bg-neutral-50 rounded-xl p-6 mb-6 text-center">
-                  <Lock className="w-8 h-8 text-neutral-400 mx-auto mb-2" />
-                  <p className="text-neutral-600">Войди, чтобы оценивать игры и указывать часы</p>
+                <div className="bg-neutral-800 rounded-xl p-6 mb-6 text-center">
+                  <Lock className="w-8 h-8 text-neutral-500 mx-auto mb-2" />
+                  <p className="text-neutral-400">Войди, чтобы оценивать игры и указывать часы</p>
                 </div>
               )}
 
-              {/* Рецензия */}
               {authUser ? (
-                <div className="bg-neutral-50 rounded-xl p-5">
-                  <h3 className="font-semibold text-neutral-900 mb-3 flex items-center gap-2">
+                <div className="bg-neutral-800 rounded-xl p-5">
+                  <h3 className="font-semibold text-white mb-3 flex items-center gap-2">
                     <MessageSquare className="w-4 h-4 text-indigo-500" /> Твоя рецензия
                   </h3>
                   <textarea
@@ -784,7 +776,7 @@ export default function Home() {
                       if (e.target.value.length > 10) addXp(XP_RULES.REVIEW);
                     }}
                     placeholder="Напиши своё мнение об игре..."
-                    className="w-full bg-white border border-neutral-200 rounded-lg p-3 text-neutral-900 placeholder:text-neutral-400 min-h-[100px] resize-y focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-3 text-white placeholder:text-neutral-500 min-h-[100px] resize-y focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   />
                   {review.length > 0 && (
                     <div className="mt-2 text-right">
@@ -793,9 +785,9 @@ export default function Home() {
                   )}
                 </div>
               ) : (
-                <div className="bg-neutral-50 rounded-xl p-6 text-center">
-                  <Lock className="w-8 h-8 text-neutral-400 mx-auto mb-2" />
-                  <p className="text-neutral-600">Войди, чтобы писать рецензии</p>
+                <div className="bg-neutral-800 rounded-xl p-6 text-center">
+                  <Lock className="w-8 h-8 text-neutral-500 mx-auto mb-2" />
+                  <p className="text-neutral-400">Войди, чтобы писать рецензии</p>
                 </div>
               )}
             </div>
