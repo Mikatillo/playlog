@@ -2,13 +2,15 @@ export interface Game {
   id: number;
   title: string;
   cover: string;
-  rating: number;
-  hours: number;
-  platforms: string[];
-  genre: string;
   year: number;
+  rating: number;
+  genre: string;
   description: string;
-  trailerUrl?: string;
+  descriptionRaw?: string;
+  descriptionRu?: string;
+  platforms: string[];
+  screenshots: { id: number; image: string }[];
+  trailer?: string;
 }
 
 export interface GameData {
@@ -40,20 +42,9 @@ export const XP_RULES = {
   COMPLETE: 50,
 };
 
-export function calculateLevel(totalXp: number): LevelInfo {
-  let level = 1;
-  let xpRemaining = totalXp;
-  let xpForNext = 100;
-  
-  while (xpRemaining >= xpForNext) {
-    xpRemaining -= xpForNext;
-    level++;
-    xpForNext = Math.floor(xpForNext * 1.5);
-  }
-  
-  return { 
-    level, 
-    xpInLevel: xpRemaining, 
-    xpToNext: xpForNext 
-  };
+export function calculateLevel(xp: number): LevelInfo {
+  const level = Math.floor(xp / 100) + 1;
+  const xpInLevel = xp % 100;
+  const xpToNext = 100;
+  return { level, xpInLevel, xpToNext };
 }

@@ -50,7 +50,8 @@ export default function Header({ profile, levelInfo }: HeaderProps) {
   };
 
   const level = userProfile ? calculateLevel(userProfile.xp).level : 0;
-  const displayName = userProfile?.nickname || user?.email?.split('@')[0] || '';
+  // Используем никнейм из профиля, а не email
+  const displayName = userProfile?.nickname || user?.user_metadata?.nickname || 'Игрок';
 
   return (
     <header className="sticky top-0 z-50 glass border-b border-neutral-800">

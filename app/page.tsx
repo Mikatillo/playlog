@@ -1,13 +1,12 @@
 'use client';
 
-import { Search, Filter, X, Star, Clock, MessageSquare, Trophy, TrendingUp, Download, Upload, Zap, Loader2, Lock, Check, Heart, Gamepad, Monitor } from 'lucide-react';
+import { Search, Filter, X, Star, Clock, MessageSquare, Trophy, TrendingUp, Zap, Loader2, Lock, Check, Heart, Gamepad, Monitor, Save } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { Game, GameData, XP_RULES, calculateLevel, UserProfile } from '@/types/game';
 import { mapRawgGame, RawgGame } from '@/lib/rawg';
 import { supabase } from '@/lib/supabase';
 import GameCard from '@/components/GameCard';
 import Header from '@/components/Header';
-import Sidebar from '@/components/Sidebar';
 
 const genres = [
   { id: '', name: 'Все' },
@@ -25,7 +24,6 @@ const genres = [
 const platforms = ['Все', 'PC', 'PS5', 'Xbox', 'Switch'];
 
 export default function Home() {
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
 
@@ -57,6 +55,7 @@ export default function Home() {
     completedGames: 0,
     totalHours: 0,
   });
+  const [translating, setTranslating] = useState(false);
 
   const levelInfo = calculateLevel(profile.xp);
 
@@ -224,47 +223,11 @@ export default function Home() {
     }
   };
 
-  const exportData = () => {
-    const data: Record<number, GameData> = {};
-    games.forEach((game) => {
-      const saved = localStorage.getItem(`game_${game.id}`);
-      if (saved) data[game.id] = JSON.parse(saved);
-    });
-    const blob = new Blob([JSON.stringify({ profile, games: data }, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `playlog_backup_${Date.now()}.json`;
-    a.click();
-  };
-
-  const importData = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const data = JSON.parse(e.target?.result as string);
-        if (data.profile) {
-          localStorage.setItem('user_profile', JSON.stringify(data.profile));
-          setProfile(data.profile);
-        }
-        if (data.games) {
-          Object.entries(data.games).forEach(([id, gameData]) => {
-            localStorage.setItem(`game_${id}`, JSON.stringify(gameData));
-          });
-        }
-        alert('Данные импортированы!');
-        window.location.reload();
-      } catch (err) {
-        alert('Ошибка импорта');
-      }
-    };
-    reader.readAsText(file);
-  };
-
-  const openGame = (game: Game) => {
+  const openGame = async (game: Game) => {
+    // Сначала показываем базовые данные
     setSelectedGame(game);
+    setTranslating(false);
+    
     const savedData = localStorage.getItem(`game_${game.id}`);
     if (savedData) {
       const data: GameData = JSON.parse(savedData);
@@ -278,10 +241,40 @@ export default function Home() {
       setReview('');
       setGameStatus('none');
     }
+
+    // Затем загружаем полные данные (скриншоты, трейлер)
+    try {
+      const response = await fetch(`/api/games/${game.id}`);
+      if (response.ok) {
+        const rawData = await response.json();
+        const fullGame = mapRawgGame(rawData);
+        setSelectedGame(fullGame);
+      }
+    } catch (error) {
+      console.error('Ошибка загрузки полных данных игры:', error);
+    }
   };
 
   const closeGame = () => {
     setSelectedGame(null);
+  };
+
+  const saveAndClose = async () => {
+    if (!selectedGame) return;
+    
+    await saveData(userRating, userHours, review, gameStatus);
+    
+    if (gameStatus !== 'none') {
+      addXp(XP_RULES.ADD_GAME);
+    }
+    if (userRating > 0) {
+      addXp(XP_RULES.RATE);
+    }
+    if (review.length > 10) {
+      addXp(XP_RULES.REVIEW);
+    }
+    
+    closeGame();
   };
 
   const saveData = async (
@@ -319,6 +312,28 @@ export default function Home() {
     }
   };
 
+  const handleTranslate = async () => {
+    if (!selectedGame?.descriptionRaw) return;
+    setTranslating(true);
+    try {
+      const response = await fetch('/api/translate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: selectedGame.descriptionRaw }),
+      });
+      const data = await response.json();
+      if (data.translatedText) {
+        setSelectedGame({
+          ...selectedGame,
+          descriptionRu: data.translatedText,
+        });
+      }
+    } catch (error) {
+      console.error('Translation error:', error);
+    }
+    setTranslating(false);
+  };
+
   const loadMore = () => {
     const nextPage = page + 1;
     setPage(nextPage);
@@ -335,51 +350,9 @@ export default function Home() {
         </div>
       )}
 
-      <div className="max-w-7xl mx-auto px-6 py-8 flex flex-col lg:flex-row gap-8">
-        {authUser && <Sidebar profile={profile} levelInfo={levelInfo} />}
-
-        <main className="flex-1 space-y-6">
-          {authUser && (
-            <div className="bg-neutral-900 rounded-xl border border-neutral-800 p-6">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div className="flex items-center gap-4">
-                  <div className="w-14 h-14 bg-gradient-to-br from-indigo-500 to-purple-500 rounded-full flex items-center justify-center text-white text-xl font-semibold">
-                    {profile.nickname.substring(0, 2).toUpperCase()}
-                  </div>
-                  <div>
-                    <h2 className="text-xl font-semibold text-white">
-                      Привет, {profile.nickname}! 👋
-                    </h2>
-                    <p className="text-sm text-neutral-400 mt-0.5">
-                      Уровень {levelInfo.level} • {profile.xp} XP • {profile.completedGames} игр пройдено
-                    </p>
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={exportData}
-                    className="px-4 py-2 bg-neutral-800 text-neutral-300 rounded-lg text-sm font-medium hover:bg-neutral-700 transition flex items-center gap-2"
-                  >
-                    <Download className="w-4 h-4" /> Экспорт
-                  </button>
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    className="px-4 py-2 bg-neutral-800 text-neutral-300 rounded-lg text-sm font-medium hover:bg-neutral-700 transition flex items-center gap-2"
-                  >
-                    <Upload className="w-4 h-4" /> Импорт
-                  </button>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept=".json"
-                    onChange={importData}
-                    className="hidden"
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-
+      <div className="max-w-7xl mx-auto px-6 py-8">
+        <main className="space-y-6">
+          {/* Поиск */}
           <div className="relative">
             <div className="bg-neutral-900 rounded-xl border border-neutral-800 p-4 flex items-center gap-3 shadow-sm">
               <Search className="w-5 h-5 text-neutral-500 flex-shrink-0" />
@@ -442,6 +415,7 @@ export default function Home() {
             )}
           </div>
 
+          {/* Фильтры */}
           {searchMode === 'browse' && (
             <div className="bg-neutral-900 rounded-xl border border-neutral-800 p-5 space-y-4">
               <div className="flex items-center gap-2 mb-3">
@@ -511,13 +485,13 @@ export default function Home() {
             </div>
           )}
 
+          {/* Результаты */}
           <div>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-white flex items-center gap-2">
                 <TrendingUp className="w-5 h-5 text-indigo-500" />
                 {searchMode === 'results' ? `Результаты: "${searchQuery}"` : 'Популярные игры'}
               </h2>
-              <span className="text-sm text-neutral-400">{games.length} игр</span>
             </div>
 
             {loading && games.length === 0 ? (
@@ -563,6 +537,7 @@ export default function Home() {
         </main>
       </div>
 
+      {/* Модальное окно игры */}
       {selectedGame && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-neutral-900 rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto relative shadow-2xl border border-neutral-800">
@@ -605,9 +580,76 @@ export default function Home() {
                         <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" /> {selectedGame.rating}
                       </span>
                     </div>
-                    <p className="text-neutral-400 leading-relaxed">{selectedGame.description}</p>
+                    
+                    {/* Краткое описание */}
+                    <p className="text-neutral-400 leading-relaxed mb-4">{selectedGame.description}</p>
+                    
+                    {/* Развёрнутое описание с переводом */}
+                    {selectedGame.descriptionRaw && (
+                      <div className="mb-4">
+                        <details className="group">
+                          <summary className="text-indigo-400 cursor-pointer text-sm font-medium hover:text-indigo-300 transition list-none flex items-center gap-2">
+                            <span>Показать полное описание</span>
+                            <span className="text-xs text-neutral-500">(EN)</span>
+                          </summary>
+                          <div 
+                            className="mt-3 text-neutral-400 leading-relaxed max-w-none"
+                            dangerouslySetInnerHTML={{ __html: selectedGame.descriptionRaw }}
+                          />
+                        </details>
+                        
+                        {/* Кнопка перевода */}
+                        {!selectedGame.descriptionRu && (
+                          <button
+                            onClick={handleTranslate}
+                            disabled={translating}
+                            className="mt-2 text-xs text-indigo-400 hover:text-indigo-300 transition flex items-center gap-1 disabled:opacity-50"
+                          >
+                            {translating ? (
+                              <>
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                                Перевожу...
+                              </>
+                            ) : (
+                              <>
+                                🌐 Перевести на русский
+                              </>
+                            )}
+                          </button>
+                        )}
+                        
+                        {selectedGame.descriptionRu && (
+                          <div className="mt-3">
+                            <div className="text-xs text-neutral-500 mb-2 flex items-center gap-1">
+                              🌐 Перевод на русский:
+                            </div>
+                            <p className="text-neutral-300 leading-relaxed">
+                              {selectedGame.descriptionRu}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
 
+                  {/* Трейлер */}
+                  {selectedGame.trailer && (
+                    <div className="bg-neutral-800 rounded-xl p-4">
+                      <h3 className="text-sm font-medium text-neutral-400 mb-3 flex items-center gap-2">
+                        <Monitor className="w-4 h-4 text-indigo-500" /> Трейлер
+                      </h3>
+                      <div className="aspect-video rounded-lg overflow-hidden bg-black">
+                        <iframe
+                          src={selectedGame.trailer.replace('watch?v=', 'embed/')}
+                          className="w-full h-full"
+                          allowFullScreen
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Статистика */}
                   <div className="grid grid-cols-3 gap-3">
                     <div className="bg-neutral-800 rounded-lg p-3 text-center">
                       <Star className="w-5 h-5 text-yellow-500 mx-auto mb-1" />
@@ -626,6 +668,7 @@ export default function Home() {
                     </div>
                   </div>
 
+                  {/* Платформы */}
                   <div>
                     <h3 className="text-sm font-medium text-neutral-400 mb-2">Платформы:</h3>
                     <div className="flex gap-2 flex-wrap">
@@ -639,9 +682,31 @@ export default function Home() {
                       ))}
                     </div>
                   </div>
+
+                  {/* Скриншоты */}
+                  {selectedGame.screenshots && selectedGame.screenshots.length > 0 && (
+                    <div>
+                      <h3 className="text-sm font-medium text-neutral-400 mb-3 flex items-center gap-2">
+                        <Monitor className="w-4 h-4 text-indigo-500" /> Скриншоты ({selectedGame.screenshots.length})
+                      </h3>
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                        {selectedGame.screenshots.map((shot) => (
+                          <div key={shot.id} className="aspect-video rounded-lg overflow-hidden bg-neutral-800 group/shot cursor-pointer">
+                            <img
+                              src={shot.image}
+                              alt={`Screenshot ${shot.id}`}
+                              className="w-full h-full object-cover group-hover/shot:scale-105 transition-transform duration-300"
+                              loading="lazy"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
+              {/* Статусы */}
               {authUser ? (
                 <div className="bg-neutral-800 rounded-xl p-5 mb-6">
                   <h2 className="font-semibold text-white mb-3">Добавить в список</h2>
@@ -703,6 +768,7 @@ export default function Home() {
                 </div>
               )}
 
+              {/* Оценка и часы */}
               {authUser ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                   <div className="bg-neutral-800 rounded-xl p-5">
@@ -740,9 +806,9 @@ export default function Home() {
                     <div className="flex items-center gap-2 mb-3">
                       <input
                         type="number"
-                        value={userHours}
+                        value={userHours === 0 ? '' : userHours}
                         onChange={(e) => {
-                          const v = parseInt(e.target.value) || 0;
+                          const v = e.target.value === '' ? 0 : parseInt(e.target.value) || 0;
                           setUserHours(v);
                           saveData(userRating, v, review, gameStatus);
                         }}
@@ -763,8 +829,9 @@ export default function Home() {
                 </div>
               )}
 
+              {/* Рецензия */}
               {authUser ? (
-                <div className="bg-neutral-800 rounded-xl p-5">
+                <div className="bg-neutral-800 rounded-xl p-5 mb-6">
                   <h3 className="font-semibold text-white mb-3 flex items-center gap-2">
                     <MessageSquare className="w-4 h-4 text-indigo-500" /> Твоя рецензия
                   </h3>
@@ -788,6 +855,25 @@ export default function Home() {
                 <div className="bg-neutral-800 rounded-xl p-6 text-center">
                   <Lock className="w-8 h-8 text-neutral-500 mx-auto mb-2" />
                   <p className="text-neutral-400">Войди, чтобы писать рецензии</p>
+                </div>
+              )}
+
+              {/* Кнопки */}
+              {authUser && (
+                <div className="flex gap-3 pt-4 border-t border-neutral-800">
+                  <button
+                    onClick={saveAndClose}
+                    className="flex-1 bg-indigo-500 hover:bg-indigo-600 text-white font-medium py-3 rounded-lg transition flex items-center justify-center gap-2"
+                  >
+                    <Save className="w-4 h-4" />
+                    Добавить
+                  </button>
+                  <button
+                    onClick={closeGame}
+                    className="px-6 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 font-medium py-3 rounded-lg transition"
+                  >
+                    Отмена
+                  </button>
                 </div>
               )}
             </div>

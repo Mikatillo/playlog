@@ -10,7 +10,8 @@ export async function GET(
   const { id } = await params;
 
   try {
-    const url = `${BASE_URL}/games/${id}?key=${API_KEY}`;
+    // Запрашиваем с параметром language=rus для русского описания
+    const url = `${BASE_URL}/games/${id}?key=${API_KEY}&language=rus`;
     const response = await fetch(url, { 
       next: { revalidate: 3600 } 
     });

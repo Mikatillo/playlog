@@ -21,9 +21,9 @@ export default function GameCard({ game, onClick, userGameData }: GameCardProps)
   }, []);
 
   const statusIcon = {
-    want: <Heart className="w-3 h-3" />,
-    playing: <Gamepad className="w-3 h-3" />,
-    completed: <Check className="w-3 h-3" />,
+    want: <Heart className="w-3.5 h-3.5" />,
+    playing: <Gamepad className="w-3.5 h-3.5" />,
+    completed: <Check className="w-3.5 h-3.5" />,
     none: null,
   };
 
@@ -31,6 +31,13 @@ export default function GameCard({ game, onClick, userGameData }: GameCardProps)
     want: 'bg-rose-500',
     playing: 'bg-blue-500',
     completed: 'bg-emerald-500',
+    none: '',
+  };
+
+  const statusLabel = {
+    want: 'Хочу пройти',
+    playing: 'В процессе',
+    completed: 'Пройдена',
     none: '',
   };
 
@@ -52,9 +59,19 @@ export default function GameCard({ game, onClick, userGameData }: GameCardProps)
           }}
         />
         
+        {/* Значок статуса в правом верхнем углу */}
         {showUserData && showUserData.status !== 'none' && (
-          <div className={`absolute top-2 right-2 w-7 h-7 ${statusColor[showUserData.status]} rounded-full flex items-center justify-center text-white shadow-md`}>
+          <div className={`absolute top-2 right-2 ${statusColor[showUserData.status]} rounded-full p-1.5 shadow-lg`}>
             {statusIcon[showUserData.status]}
+          </div>
+        )}
+
+        {/* Подпись статуса внизу обложки */}
+        {showUserData && showUserData.status !== 'none' && (
+          <div className={`absolute bottom-0 left-0 right-0 ${statusColor[showUserData.status]} py-1.5 text-center`}>
+            <span className="text-[10px] font-medium text-white uppercase tracking-wide">
+              {statusLabel[showUserData.status]}
+            </span>
           </div>
         )}
 
@@ -76,16 +93,24 @@ export default function GameCard({ game, onClick, userGameData }: GameCardProps)
           <span className="truncate ml-2">{game.genre}</span>
         </div>
 
-        {showUserData && (showUserData.rating > 0 || showUserData.hours > 0) && (
+        {showUserData && (
           <div className="mt-2 pt-2 border-t border-neutral-800 flex items-center gap-3 text-xs">
-            {showUserData.rating > 0 && (
-              <span className="flex items-center gap-1 text-neutral-400">
-                <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
+            {/* Оценка */}
+            {showUserData.rating > 0 ? (
+              <span className="flex items-center gap-1 text-yellow-400">
+                <Star className="w-3 h-3 fill-yellow-400" />
                 {showUserData.rating}
               </span>
+            ) : (
+              <span className="flex items-center gap-1 text-neutral-600">
+                <Star className="w-3 h-3" />
+                Без оценки
+              </span>
             )}
+
+            {/* Часы */}
             {showUserData.hours > 0 && (
-              <span className="flex items-center gap-1 text-neutral-400">
+              <span className="flex items-center gap-1 text-neutral-400 ml-auto">
                 <Clock className="w-3 h-3" />
                 {showUserData.hours}ч
               </span>
