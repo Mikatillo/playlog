@@ -2,6 +2,8 @@
 
 import { Star, Clock, Heart, Gamepad, Check } from 'lucide-react';
 import { Game, GameData } from '@/types/game';
+import { supabase } from '@/lib/supabase';
+import { useState, useEffect } from 'react';
 
 interface GameCardProps {
   game: Game;
@@ -10,6 +12,14 @@ interface GameCardProps {
 }
 
 export default function GameCard({ game, onClick, userGameData }: GameCardProps) {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      setIsAuthenticated(!!user);
+    });
+  }, []);
+
   const statusIcon = {
     want: <Heart className="w-3 h-3" />,
     playing: <Gamepad className="w-3 h-3" />,
@@ -23,6 +33,8 @@ export default function GameCard({ game, onClick, userGameData }: GameCardProps)
     completed: 'bg-emerald-500',
     none: '',
   };
+
+  const showUserData = isAuthenticated && userGameData;
 
   return (
     <div
@@ -40,9 +52,9 @@ export default function GameCard({ game, onClick, userGameData }: GameCardProps)
           }}
         />
         
-        {userGameData && userGameData.status !== 'none' && (
-          <div className={`absolute top-2 right-2 w-7 h-7 ${statusColor[userGameData.status]} rounded-full flex items-center justify-center text-white shadow-md`}>
-            {statusIcon[userGameData.status]}
+        {showUserData && showUserData.status !== 'none' && (
+          <div className={`absolute top-2 right-2 w-7 h-7 ${statusColor[showUserData.status]} rounded-full flex items-center justify-center text-white shadow-md`}>
+            {statusIcon[showUserData.status]}
           </div>
         )}
 
@@ -64,18 +76,18 @@ export default function GameCard({ game, onClick, userGameData }: GameCardProps)
           <span className="truncate ml-2">{game.genre}</span>
         </div>
 
-        {userGameData && (userGameData.rating > 0 || userGameData.hours > 0) && (
+        {showUserData && (showUserData.rating > 0 || showUserData.hours > 0) && (
           <div className="mt-2 pt-2 border-t border-neutral-800 flex items-center gap-3 text-xs">
-            {userGameData.rating > 0 && (
+            {showUserData.rating > 0 && (
               <span className="flex items-center gap-1 text-neutral-400">
                 <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
-                {userGameData.rating}
+                {showUserData.rating}
               </span>
             )}
-            {userGameData.hours > 0 && (
+            {showUserData.hours > 0 && (
               <span className="flex items-center gap-1 text-neutral-400">
                 <Clock className="w-3 h-3" />
-                {userGameData.hours}ч
+                {showUserData.hours}ч
               </span>
             )}
           </div>

@@ -45,6 +45,7 @@ export default function Header({ profile, levelInfo }: HeaderProps) {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
+    localStorage.clear();
     window.location.href = '/';
   };
 
