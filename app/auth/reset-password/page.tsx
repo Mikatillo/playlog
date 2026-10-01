@@ -22,18 +22,17 @@ export default function ResetPasswordPage() {
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
         setValid(true);
-      } else {
-        // пробуем с hash-токеном из письма
-        const hash = window.location.hash;
-        if (hash.includes('access_token') || hash.includes('type=recovery')) {
-          // Supabase JS сам обработает hash при инициализации
-          setTimeout(async () => {
-            const { data: { session: s2 } } = await supabase.auth.getSession();
-            if (s2) setValid(true);
-            setChecking(false);
-          }, 500);
-          return;
-        }
+        setChecking(false);
+        return;
+      }
+      const hash = window.location.hash;
+      if (hash.includes('access_token') || hash.includes('type=recovery')) {
+        setTimeout(async () => {
+          const { data: { session: s2 } } = await supabase.auth.getSession();
+          if (s2) setValid(true);
+          setChecking(false);
+        }, 500);
+        return;
       }
       setChecking(false);
     };
@@ -42,19 +41,12 @@ export default function ResetPasswordPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (password.length < 6) {
-      setError('Пароль должен быть минимум 6 символов');
-      return;
-    }
-    if (password !== confirm) {
-      setError('Пароли не совпадают');
-      return;
-    }
+    if (password.length < 6) return setError('Пароль должен быть минимум 6 символов');
+    if (password !== confirm) return setError('Пароли не совпадают');
     setLoading(true);
     setError(null);
 
     const { error: supaError } = await supabase.auth.updateUser({ password });
-
     setLoading(false);
     if (supaError) {
       setError(supaError.message);

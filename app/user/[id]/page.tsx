@@ -358,7 +358,7 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
                   >
                     <ThumbsUp className={`w-4 h-4 ${liked ? 'fill-current' : ''}`} />
                     {likesCount > 0 ? likesCount : ''}
-                    <span>{liked ? 'В избранном' : 'Лайкнуть'}</span>
+                    <span>{liked ? ' ' : 'Лайкнуть'}</span>
                   </button>
                 )}
               </div>
