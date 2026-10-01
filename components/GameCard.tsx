@@ -1,6 +1,6 @@
 'use client';
 
-import { Star, Clock, Heart, Gamepad, Check } from 'lucide-react';
+import { Star, Clock, Heart, Gamepad, Check, XCircle } from 'lucide-react';
 import { Game, GameData } from '@/types/game';
 import { supabase } from '@/lib/supabase';
 import { useState, useEffect } from 'react';
@@ -9,6 +9,13 @@ interface GameCardProps {
   game: Game;
   onClick: () => void;
   userGameData?: GameData;
+}
+
+function getMetacriticColor(score: number): string {
+  if (score >= 75) return 'bg-emerald-500/90 text-white';
+  if (score >= 50) return 'bg-yellow-500/90 text-black';
+  if (score >= 25) return 'bg-orange-500/90 text-white';
+  return 'bg-red-500/90 text-white';
 }
 
 export default function GameCard({ game, onClick, userGameData }: GameCardProps) {
@@ -21,9 +28,10 @@ export default function GameCard({ game, onClick, userGameData }: GameCardProps)
   }, []);
 
   const statusIcon = {
-    want: <Heart className="w-3.5 h-3.5" />,
-    playing: <Gamepad className="w-3.5 h-3.5" />,
-    completed: <Check className="w-3.5 h-3.5" />,
+    want: <Heart className="w-3 h-3" />,
+    playing: <Gamepad className="w-3 h-3" />,
+    completed: <Check className="w-3 h-3" />,
+    dropped: <XCircle className="w-3 h-3" />,
     none: null,
   };
 
@@ -31,13 +39,7 @@ export default function GameCard({ game, onClick, userGameData }: GameCardProps)
     want: 'bg-rose-500',
     playing: 'bg-blue-500',
     completed: 'bg-emerald-500',
-    none: '',
-  };
-
-  const statusLabel = {
-    want: 'Хочу пройти',
-    playing: 'В процессе',
-    completed: 'Пройдена',
+    dropped: 'bg-neutral-500',
     none: '',
   };
 
@@ -48,69 +50,64 @@ export default function GameCard({ game, onClick, userGameData }: GameCardProps)
       onClick={onClick}
       className="group cursor-pointer bg-neutral-900 rounded-xl border border-neutral-800 overflow-hidden hover:shadow-lg hover:border-neutral-700 transition-all duration-200 hover:-translate-y-1"
     >
-      <div className="relative aspect-[2/3] overflow-hidden bg-neutral-800">
+      <div className="relative aspect-video bg-neutral-800 overflow-hidden">
         <img
           src={game.cover}
           alt={game.title}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
           onError={(e) => {
             (e.target as HTMLImageElement).src =
-              'https://via.placeholder.com/300x450/171717/525252?text=No+Image';
+              'https://via.placeholder.com/400x225/171717/525252?text=No+Image';
           }}
         />
         
-        {/* Значок статуса в правом верхнем углу */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
+
+        {game.metacritic && game.metacritic > 0 && (
+          <div className={`absolute top-2 right-2 ${getMetacriticColor(game.metacritic)} px-2 py-1 rounded-lg flex items-center gap-1 shadow-lg`}>
+            <span className="text-xs font-bold">{game.metacritic}</span>
+            <span className="text-[9px] opacity-70">MC</span>
+          </div>
+        )}
+
+        {/* Значок статуса только в левом верхнем углу */}
         {showUserData && showUserData.status !== 'none' && (
-          <div className={`absolute top-2 right-2 ${statusColor[showUserData.status]} rounded-full p-1.5 shadow-lg`}>
+          <div className={`absolute top-2 left-2 ${statusColor[showUserData.status]} rounded-full p-1.5 shadow-lg`}>
             {statusIcon[showUserData.status]}
           </div>
         )}
 
-        {/* Подпись статуса внизу обложки */}
-        {showUserData && showUserData.status !== 'none' && (
-          <div className={`absolute bottom-0 left-0 right-0 ${statusColor[showUserData.status]} py-1.5 text-center`}>
-            <span className="text-[10px] font-medium text-white uppercase tracking-wide">
-              {statusLabel[showUserData.status]}
-            </span>
-          </div>
-        )}
-
-        {game.rating > 0 && (
-          <div className="absolute bottom-2 left-2 bg-black/70 backdrop-blur-sm text-white px-2 py-1 rounded-md flex items-center gap-1">
-            <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
-            <span className="text-xs font-medium">{game.rating}</span>
-          </div>
-        )}
+        <div className="absolute bottom-2 left-2 right-2">
+          <h3 className="font-semibold text-sm text-white line-clamp-1 drop-shadow-lg">
+            {game.title}
+          </h3>
+        </div>
       </div>
 
-      <div className="p-3">
-        <h3 className="font-medium text-sm text-white line-clamp-1 mb-1 group-hover:text-indigo-400 transition">
-          {game.title}
-        </h3>
+      <div className="p-3 space-y-2">
+        <div className="flex flex-wrap gap-1">
+          {game.genres?.slice(0, 3).map((g) => (
+            <span key={g.id} className="text-[10px] text-neutral-400 bg-neutral-800 px-1.5 py-0.5 rounded">
+              {g.name}
+            </span>
+          ))}
+        </div>
         
         <div className="flex items-center justify-between text-xs text-neutral-500">
           <span>{game.year}</span>
-          <span className="truncate ml-2">{game.genre}</span>
+          <span className="truncate ml-2">{game.platforms?.slice(0, 2).join(', ') || 'PC'}</span>
         </div>
 
-        {showUserData && (
-          <div className="mt-2 pt-2 border-t border-neutral-800 flex items-center gap-3 text-xs">
-            {/* Оценка */}
-            {showUserData.rating > 0 ? (
+        {showUserData && (showUserData.rating > 0 || showUserData.hours > 0) && (
+          <div className="pt-2 border-t border-neutral-800 flex items-center gap-3 text-xs">
+            {showUserData.rating > 0 && (
               <span className="flex items-center gap-1 text-yellow-400">
                 <Star className="w-3 h-3 fill-yellow-400" />
                 {showUserData.rating}
               </span>
-            ) : (
-              <span className="flex items-center gap-1 text-neutral-600">
-                <Star className="w-3 h-3" />
-                Без оценки
-              </span>
             )}
-
-            {/* Часы */}
             {showUserData.hours > 0 && (
-              <span className="flex items-center gap-1 text-neutral-400 ml-auto">
+              <span className="flex items-center gap-1 text-neutral-400">
                 <Clock className="w-3 h-3" />
                 {showUserData.hours}ч
               </span>

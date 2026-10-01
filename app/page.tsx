@@ -1,6 +1,6 @@
 'use client';
 
-import { Search, Filter, X, Star, Clock, MessageSquare, Trophy, TrendingUp, Zap, Loader2, Lock, Check, Heart, Gamepad, Monitor, Save } from 'lucide-react';
+import { Search, Filter, X, Star, Clock, MessageSquare, Trophy, TrendingUp, Zap, Loader2, Lock, Check, Heart, Gamepad, Monitor, Save, ChevronDown, ChevronUp, XCircle, Award } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { Game, GameData, XP_RULES, calculateLevel, UserProfile } from '@/types/game';
 import { mapRawgGame, RawgGame } from '@/lib/rawg';
@@ -23,6 +23,27 @@ const genres = [
 
 const platforms = ['Все', 'PC', 'PS5', 'Xbox', 'Switch'];
 
+function getRatingColor(rating: number): string {
+  if (rating >= 8) return 'text-emerald-400';
+  if (rating >= 6) return 'text-yellow-400';
+  if (rating >= 4) return 'text-orange-400';
+  return 'text-red-400';
+}
+
+function getSliderColor(value: number): string {
+  if (value >= 8) return '#10b981';
+  if (value >= 6) return '#eab308';
+  if (value >= 4) return '#f97316';
+  return '#ef4444';
+}
+
+function getMetacriticColor(score: number): string {
+  if (score >= 75) return 'bg-emerald-500/90 text-white';
+  if (score >= 50) return 'bg-yellow-500/90 text-black';
+  if (score >= 25) return 'bg-orange-500/90 text-white';
+  return 'bg-red-500/90 text-white';
+}
+
 export default function Home() {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
@@ -39,7 +60,7 @@ export default function Home() {
   const [userRating, setUserRating] = useState(0);
   const [userHours, setUserHours] = useState(0);
   const [review, setReview] = useState('');
-  const [gameStatus, setGameStatus] = useState<'none' | 'want' | 'playing' | 'completed'>('none');
+  const [gameStatus, setGameStatus] = useState<'none' | 'want' | 'playing' | 'completed' | 'dropped'>('none');
   const [saved, setSaved] = useState(false);
   const [xpGain, setXpGain] = useState<number | null>(null);
   const [games, setGames] = useState<Game[]>([]);
@@ -55,7 +76,12 @@ export default function Home() {
     completedGames: 0,
     totalHours: 0,
   });
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [selectedScreenshot, setSelectedScreenshot] = useState<string | null>(null);
+  const [descriptionExpanded, setDescriptionExpanded] = useState(false);
+  const [screenshotsLoaded, setScreenshotsLoaded] = useState(false);
   const [translating, setTranslating] = useState(false);
+  const [descriptionRu, setDescriptionRu] = useState<string | null>(null);
 
   const levelInfo = calculateLevel(profile.xp);
 
@@ -223,10 +249,49 @@ export default function Home() {
     }
   };
 
-  const openGame = async (game: Game) => {
-    // Сначала показываем базовые данные
-    setSelectedGame(game);
+  const translateDescription = async (text: string, gameId: number) => {
+    const cached = localStorage.getItem(`translation_${gameId}`);
+    if (cached) {
+      setDescriptionRu(cached);
+      return;
+    }
+
+    if (/[а-яА-ЯёЁ]/.test(text)) {
+      setDescriptionRu(text);
+      localStorage.setItem(`translation_${gameId}`, text);
+      return;
+    }
+
+    setTranslating(true);
+    try {
+      const response = await fetch('/api/translate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
+      
+      const data = await response.json();
+      
+      if (data.translatedText) {
+        setDescriptionRu(data.translatedText);
+        localStorage.setItem(`translation_${gameId}`, data.translatedText);
+      } else if (data.error) {
+        console.error('Translation error:', data.error);
+        setDescriptionRu(text);
+      }
+    } catch (error) {
+      console.error('Translation error:', error);
+      setDescriptionRu(text);
+    }
     setTranslating(false);
+  };
+
+  const openGame = async (game: Game) => {
+    setSelectedGame(game);
+    setDescriptionExpanded(false);
+    setScreenshotsLoaded(false);
+    setTranslating(false);
+    setDescriptionRu(null);
     
     const savedData = localStorage.getItem(`game_${game.id}`);
     if (savedData) {
@@ -242,21 +307,29 @@ export default function Home() {
       setGameStatus('none');
     }
 
-    // Затем загружаем полные данные (скриншоты, трейлер)
     try {
-      const response = await fetch(`/api/games/${game.id}`);
+      const response = await fetch(`/api/games/${game.id}?full=true`);
       if (response.ok) {
         const rawData = await response.json();
         const fullGame = mapRawgGame(rawData);
         setSelectedGame(fullGame);
+        setScreenshotsLoaded(true);
+        
+        if (fullGame.descriptionRaw) {
+          translateDescription(fullGame.descriptionRaw, game.id);
+        }
       }
     } catch (error) {
       console.error('Ошибка загрузки полных данных игры:', error);
+      setScreenshotsLoaded(true);
     }
   };
 
   const closeGame = () => {
     setSelectedGame(null);
+    setDescriptionExpanded(false);
+    setScreenshotsLoaded(false);
+    setDescriptionRu(null);
   };
 
   const saveAndClose = async () => {
@@ -264,15 +337,12 @@ export default function Home() {
     
     await saveData(userRating, userHours, review, gameStatus);
     
-    if (gameStatus !== 'none') {
-      addXp(XP_RULES.ADD_GAME);
-    }
-    if (userRating > 0) {
-      addXp(XP_RULES.RATE);
-    }
-    if (review.length > 10) {
-      addXp(XP_RULES.REVIEW);
-    }
+    if (gameStatus === 'completed') addXp(XP_RULES.COMPLETE);
+    else if (gameStatus === 'dropped') addXp(XP_RULES.DROP);
+    else if (gameStatus !== 'none') addXp(XP_RULES.ADD_GAME);
+    
+    if (userRating > 0) addXp(XP_RULES.RATE);
+    if (review.length > 10) addXp(XP_RULES.REVIEW);
     
     closeGame();
   };
@@ -281,7 +351,7 @@ export default function Home() {
     newRating: number,
     newHours: number,
     newReview: string,
-    newStatus: 'none' | 'want' | 'playing' | 'completed'
+    newStatus: 'none' | 'want' | 'playing' | 'completed' | 'dropped'
   ) => {
     if (!selectedGame) return;
     const data: GameData = {
@@ -312,28 +382,6 @@ export default function Home() {
     }
   };
 
-  const handleTranslate = async () => {
-    if (!selectedGame?.descriptionRaw) return;
-    setTranslating(true);
-    try {
-      const response = await fetch('/api/translate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: selectedGame.descriptionRaw }),
-      });
-      const data = await response.json();
-      if (data.translatedText) {
-        setSelectedGame({
-          ...selectedGame,
-          descriptionRu: data.translatedText,
-        });
-      }
-    } catch (error) {
-      console.error('Translation error:', error);
-    }
-    setTranslating(false);
-  };
-
   const loadMore = () => {
     const nextPage = page + 1;
     setPage(nextPage);
@@ -342,7 +390,20 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-[#0a0a0a]">
-      <Header profile={profile} levelInfo={levelInfo} />
+      <Header 
+        profile={profile} 
+        levelInfo={levelInfo}
+        achievementsStats={{
+          total: games.length,
+          completed: 0,
+          playing: 0,
+          want: 0,
+          dropped: 0,
+          totalHours: 0,
+          ratedGames: 0,
+          reviewsCount: 0,
+        }}
+      />
 
       {xpGain && (
         <div className="fixed top-20 left-1/2 -translate-x-1/2 bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-medium z-50 shadow-lg animate-bounce">
@@ -404,9 +465,6 @@ export default function Home() {
                         <span className="text-xs text-neutral-400">{game.genre}</span>
                         <span className="text-xs text-neutral-600">•</span>
                         <span className="text-xs text-neutral-400">{game.year}</span>
-                        <span className="text-xs text-neutral-400 flex items-center gap-1 ml-auto">
-                          <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" /> {game.rating}
-                        </span>
                       </div>
                     </div>
                   </div>
@@ -417,71 +475,90 @@ export default function Home() {
 
           {/* Фильтры */}
           {searchMode === 'browse' && (
-            <div className="bg-neutral-900 rounded-xl border border-neutral-800 p-5 space-y-4">
-              <div className="flex items-center gap-2 mb-3">
-                <Filter className="w-4 h-4 text-neutral-400" />
-                <h2 className="font-semibold text-white">Фильтры</h2>
-              </div>
-
-              <div>
-                <label className="text-xs font-medium text-neutral-400 mb-2 block">Жанр</label>
-                <div className="flex flex-wrap gap-2">
-                  {genres.map((genre) => (
-                    <button
-                      key={genre.id}
-                      onClick={() => {
-                        setSelectedGenre(genre.id);
-                        setPage(1);
-                      }}
-                      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
-                        selectedGenre === genre.id
-                          ? 'bg-indigo-500 text-white'
-                          : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'
-                      }`}
-                    >
-                      {genre.name}
-                    </button>
-                  ))}
+            <div className="bg-neutral-900 rounded-xl border border-neutral-800 overflow-hidden">
+              <button
+                onClick={() => setFiltersOpen(!filtersOpen)}
+                className="w-full px-5 py-4 flex items-center justify-between hover:bg-neutral-800/50 transition"
+              >
+                <div className="flex items-center gap-2">
+                  <Filter className="w-4 h-4 text-neutral-400" />
+                  <h2 className="font-semibold text-white">Фильтры</h2>
+                  {(selectedGenre || selectedPlatform !== 'Все') && (
+                    <span className="text-xs bg-indigo-500 text-white px-2 py-0.5 rounded-full">
+                      Активно
+                    </span>
+                  )}
                 </div>
-              </div>
+                {filtersOpen ? (
+                  <ChevronUp className="w-4 h-4 text-neutral-400" />
+                ) : (
+                  <ChevronDown className="w-4 h-4 text-neutral-400" />
+                )}
+              </button>
 
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-4 border-t border-neutral-800">
-                <div>
-                  <label className="text-xs font-medium text-neutral-400 mb-2 block">Платформа</label>
-                  <div className="flex flex-wrap gap-2">
-                    {platforms.map((platform) => (
-                      <button
-                        key={platform}
-                        onClick={() => setSelectedPlatform(platform)}
-                        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
-                          selectedPlatform === platform
-                            ? 'bg-indigo-500 text-white'
-                            : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'
-                        }`}
+              {filtersOpen && (
+                <div className="px-5 pb-5 space-y-4 border-t border-neutral-800 pt-4">
+                  <div>
+                    <label className="text-xs font-medium text-neutral-400 mb-2 block">Жанр</label>
+                    <div className="flex flex-wrap gap-2">
+                      {genres.map((genre) => (
+                        <button
+                          key={genre.id}
+                          onClick={() => {
+                            setSelectedGenre(genre.id);
+                            setPage(1);
+                          }}
+                          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
+                            selectedGenre === genre.id
+                              ? 'bg-indigo-500 text-white'
+                              : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'
+                          }`}
+                        >
+                          {genre.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-4 border-t border-neutral-800">
+                    <div>
+                      <label className="text-xs font-medium text-neutral-400 mb-2 block">Платформа</label>
+                      <div className="flex flex-wrap gap-2">
+                        {platforms.map((platform) => (
+                          <button
+                            key={platform}
+                            onClick={() => setSelectedPlatform(platform)}
+                            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
+                              selectedPlatform === platform
+                                ? 'bg-indigo-500 text-white'
+                                : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'
+                            }`}
+                          >
+                            {platform}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-medium text-neutral-400 mb-2 block">Сортировка</label>
+                      <select
+                        value={sortBy}
+                        onChange={(e) => {
+                          setSortBy(e.target.value);
+                          setPage(1);
+                        }}
+                        className="px-3 py-1.5 bg-neutral-800 border-0 rounded-lg text-sm text-neutral-300 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                       >
-                        {platform}
-                      </button>
-                    ))}
+                        <option value="-added">Популярность</option>
+                        <option value="-rating">Рейтинг</option>
+                        <option value="-released">Дата выхода</option>
+                        <option value="-metacritic">Metacritic</option>
+                      </select>
+                    </div>
                   </div>
                 </div>
-
-                <div>
-                  <label className="text-xs font-medium text-neutral-400 mb-2 block">Сортировка</label>
-                  <select
-                    value={sortBy}
-                    onChange={(e) => {
-                      setSortBy(e.target.value);
-                      setPage(1);
-                    }}
-                    className="px-3 py-1.5 bg-neutral-800 border-0 rounded-lg text-sm text-neutral-300 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  >
-                    <option value="-added">Популярность</option>
-                    <option value="-rating">Рейтинг</option>
-                    <option value="-released">Дата выхода</option>
-                    <option value="-metacritic">Metacritic</option>
-                  </select>
-                </div>
-              </div>
+              )}
             </div>
           )}
 
@@ -505,7 +582,7 @@ export default function Home() {
               </div>
             ) : (
               <>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                   {games.map((game) => {
                     const savedData = localStorage.getItem(`game_${game.id}`);
                     const userData: GameData | null = savedData ? JSON.parse(savedData) : null;
@@ -555,196 +632,193 @@ export default function Home() {
             )}
 
             <div className="p-8">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
-                <div>
-                  <div className="rounded-xl overflow-hidden shadow-lg">
-                    <img
-                      src={selectedGame.cover}
-                      alt={selectedGame.title}
-                      className="w-full aspect-[2/3] object-cover"
-                    />
-                  </div>
-                </div>
+              {/* Обложка */}
+              <div className="mb-6">
+                <div className="relative aspect-video rounded-xl overflow-hidden bg-neutral-800">
+                  <img
+                    src={selectedGame.cover}
+                    alt={selectedGame.title}
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
+                  
+                  {selectedGame.metacritic && selectedGame.metacritic > 0 && (
+                    <div className={`absolute top-4 right-4 ${getMetacriticColor(selectedGame.metacritic)} px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-lg`}>
+                      <span className="text-sm font-bold">{selectedGame.metacritic}</span>
+                      <span className="text-[10px] opacity-70">MC</span>
+                    </div>
+                  )}
 
-                <div className="md:col-span-2 space-y-4">
-                  <div>
-                    <h1 className="text-3xl font-bold text-white mb-3">{selectedGame.title}</h1>
-                    <div className="flex flex-wrap gap-2 mb-4">
-                      <span className="px-3 py-1 bg-indigo-500/10 text-indigo-400 rounded-lg text-sm font-medium">
-                        {selectedGame.genre}
-                      </span>
-                      <span className="px-3 py-1 bg-neutral-800 text-neutral-300 rounded-lg text-sm font-medium">
+                  <div className="absolute bottom-4 left-4 right-4">
+                    <h1 className="text-3xl font-bold text-white drop-shadow-lg">{selectedGame.title}</h1>
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {selectedGame.genres?.map((g) => (
+                        <span key={g.id} className="px-2 py-1 bg-white/20 backdrop-blur-sm text-white rounded text-xs font-medium">
+                          {g.name}
+                        </span>
+                      ))}
+                      <span className="px-2 py-1 bg-white/20 backdrop-blur-sm text-white rounded text-xs font-medium">
                         {selectedGame.year}
                       </span>
-                      <span className="px-3 py-1 bg-yellow-500/10 text-yellow-400 rounded-lg text-sm font-medium flex items-center gap-1">
-                        <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" /> {selectedGame.rating}
-                      </span>
                     </div>
-                    
-                    {/* Краткое описание */}
-                    <p className="text-neutral-400 leading-relaxed mb-4">{selectedGame.description}</p>
-                    
-                    {/* Развёрнутое описание с переводом */}
-                    {selectedGame.descriptionRaw && (
-                      <div className="mb-4">
-                        <details className="group">
-                          <summary className="text-indigo-400 cursor-pointer text-sm font-medium hover:text-indigo-300 transition list-none flex items-center gap-2">
-                            <span>Показать полное описание</span>
-                            <span className="text-xs text-neutral-500">(EN)</span>
-                          </summary>
-                          <div 
-                            className="mt-3 text-neutral-400 leading-relaxed max-w-none"
-                            dangerouslySetInnerHTML={{ __html: selectedGame.descriptionRaw }}
-                          />
-                        </details>
-                        
-                        {/* Кнопка перевода */}
-                        {!selectedGame.descriptionRu && (
+                  </div>
+                </div>
+              </div>
+
+              {/* Оценки */}
+              <div className="flex flex-wrap gap-2 mb-6">
+                {selectedGame.metacritic && selectedGame.metacritic > 0 && (
+                  <span className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium ${getMetacriticColor(selectedGame.metacritic)}`}>
+                    <Award className="w-4 h-4" />
+                    <span>{selectedGame.metacritic}</span>
+                    <span className="text-[10px] opacity-70">Metacritic</span>
+                  </span>
+                )}
+              </div>
+
+              {/* Описание */}
+              <div className="mb-6">
+                {translating ? (
+                  <div className="flex items-center gap-3 p-4 bg-neutral-800 rounded-lg">
+                    <Loader2 className="w-5 h-5 text-indigo-400 animate-spin" />
+                    <div>
+                      <div className="text-sm text-white font-medium">Переводим описание...</div>
+                      <div className="text-xs text-neutral-400 mt-0.5">Google Translate</div>
+                    </div>
+                  </div>
+                ) : descriptionRu ? (
+                  <div>
+                    {descriptionExpanded ? (
+                      <div>
+                        <p className="text-neutral-300 leading-relaxed">{descriptionRu}</p>
+                        <button
+                          onClick={() => setDescriptionExpanded(false)}
+                          className="mt-2 text-sm text-indigo-400 hover:text-indigo-300 transition flex items-center gap-1"
+                        >
+                          Свернуть
+                          <ChevronUp className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div>
+                        <p className="text-neutral-300 leading-relaxed line-clamp-4">
+                          {descriptionRu}
+                        </p>
+                        {descriptionRu.length > 300 && (
                           <button
-                            onClick={handleTranslate}
-                            disabled={translating}
-                            className="mt-2 text-xs text-indigo-400 hover:text-indigo-300 transition flex items-center gap-1 disabled:opacity-50"
+                            onClick={() => setDescriptionExpanded(true)}
+                            className="mt-2 text-sm text-indigo-400 hover:text-indigo-300 transition flex items-center gap-1"
                           >
-                            {translating ? (
-                              <>
-                                <Loader2 className="w-3 h-3 animate-spin" />
-                                Перевожу...
-                              </>
-                            ) : (
-                              <>
-                                🌐 Перевести на русский
-                              </>
-                            )}
+                            Читать полностью
+                            <ChevronDown className="w-4 h-4" />
                           </button>
-                        )}
-                        
-                        {selectedGame.descriptionRu && (
-                          <div className="mt-3">
-                            <div className="text-xs text-neutral-500 mb-2 flex items-center gap-1">
-                              🌐 Перевод на русский:
-                            </div>
-                            <p className="text-neutral-300 leading-relaxed">
-                              {selectedGame.descriptionRu}
-                            </p>
-                          </div>
                         )}
                       </div>
                     )}
                   </div>
-
-                  {/* Трейлер */}
-                  {selectedGame.trailer && (
-                    <div className="bg-neutral-800 rounded-xl p-4">
-                      <h3 className="text-sm font-medium text-neutral-400 mb-3 flex items-center gap-2">
-                        <Monitor className="w-4 h-4 text-indigo-500" /> Трейлер
-                      </h3>
-                      <div className="aspect-video rounded-lg overflow-hidden bg-black">
-                        <iframe
-                          src={selectedGame.trailer.replace('watch?v=', 'embed/')}
-                          className="w-full h-full"
-                          allowFullScreen
-                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Статистика */}
-                  <div className="grid grid-cols-3 gap-3">
-                    <div className="bg-neutral-800 rounded-lg p-3 text-center">
-                      <Star className="w-5 h-5 text-yellow-500 mx-auto mb-1" />
-                      <div className="font-semibold text-white">{selectedGame.rating}</div>
-                      <div className="text-xs text-neutral-400">Рейтинг</div>
-                    </div>
-                    <div className="bg-neutral-800 rounded-lg p-3 text-center">
-                      <Monitor className="w-5 h-5 text-indigo-500 mx-auto mb-1" />
-                      <div className="font-semibold text-white">{selectedGame.platforms.length}</div>
-                      <div className="text-xs text-neutral-400">Платформ</div>
-                    </div>
-                    <div className="bg-neutral-800 rounded-lg p-3 text-center">
-                      <Trophy className="w-5 h-5 text-purple-500 mx-auto mb-1" />
-                      <div className="font-semibold text-white">{selectedGame.year}</div>
-                      <div className="text-xs text-neutral-400">Год</div>
-                    </div>
-                  </div>
-
-                  {/* Платформы */}
+                ) : (
                   <div>
-                    <h3 className="text-sm font-medium text-neutral-400 mb-2">Платформы:</h3>
-                    <div className="flex gap-2 flex-wrap">
-                      {selectedGame.platforms.map((platform) => (
-                        <div
-                          key={platform}
-                          className="px-3 py-1 bg-neutral-800 rounded-lg text-sm text-neutral-300"
-                        >
-                          {platform}
-                        </div>
-                      ))}
-                    </div>
+                    <p className="text-neutral-400 leading-relaxed mb-4 line-clamp-3">{selectedGame.description}</p>
+                    <button
+                      onClick={() => {
+                        if (selectedGame?.descriptionRaw) {
+                          translateDescription(selectedGame.descriptionRaw, selectedGame.id);
+                        }
+                      }}
+                      className="text-sm text-indigo-400 hover:text-indigo-300 transition flex items-center gap-2"
+                    >
+                      Перевести на русский
+                    </button>
                   </div>
+                )}
+              </div>
 
-                  {/* Скриншоты */}
-                  {selectedGame.screenshots && selectedGame.screenshots.length > 0 && (
-                    <div>
-                      <h3 className="text-sm font-medium text-neutral-400 mb-3 flex items-center gap-2">
-                        <Monitor className="w-4 h-4 text-indigo-500" /> Скриншоты ({selectedGame.screenshots.length})
-                      </h3>
-                      <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                        {selectedGame.screenshots.map((shot) => (
-                          <div key={shot.id} className="aspect-video rounded-lg overflow-hidden bg-neutral-800 group/shot cursor-pointer">
-                            <img
-                              src={shot.image}
-                              alt={`Screenshot ${shot.id}`}
-                              className="w-full h-full object-cover group-hover/shot:scale-105 transition-transform duration-300"
-                              loading="lazy"
-                            />
-                          </div>
-                        ))}
-                      </div>
+              {/* Платформы */}
+              <div className="mb-6">
+                <h3 className="text-sm font-medium text-neutral-400 mb-2">Платформы:</h3>
+                <div className="flex gap-2 flex-wrap">
+                  {selectedGame.platforms.map((platform) => (
+                    <div
+                      key={platform}
+                      className="px-3 py-1 bg-neutral-800 rounded-lg text-sm text-neutral-300"
+                    >
+                      {platform}
                     </div>
-                  )}
+                  ))}
                 </div>
               </div>
+
+              {/* Скриншоты */}
+              {!screenshotsLoaded ? (
+                <div className="mb-6">
+                  <h3 className="text-sm font-medium text-neutral-400 mb-3 flex items-center gap-2">
+                    <Monitor className="w-4 h-4 text-indigo-500" /> Скриншоты
+                  </h3>
+                  <div className="bg-neutral-800 rounded-lg p-8 flex flex-col items-center justify-center">
+                    <Loader2 className="w-8 h-8 text-indigo-400 animate-spin mb-3" />
+                    <div className="text-sm text-neutral-400">Загрузка скриншотов...</div>
+                  </div>
+                </div>
+              ) : selectedGame.screenshots && selectedGame.screenshots.length > 0 ? (
+                <div className="mb-6">
+                  <h3 className="text-sm font-medium text-neutral-400 mb-3 flex items-center gap-2">
+                    <Monitor className="w-4 h-4 text-indigo-500" /> Скриншоты ({selectedGame.screenshots.length})
+                  </h3>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                    {selectedGame.screenshots.map((shot) => (
+                      <div 
+                        key={shot.id} 
+                        className="aspect-video rounded-lg overflow-hidden bg-neutral-800 cursor-pointer group/shot"
+                        onClick={() => setSelectedScreenshot(shot.image)}
+                      >
+                        <img
+                          src={shot.image}
+                          alt={`Screenshot ${shot.id}`}
+                          className="w-full h-full object-cover group-hover/shot:scale-110 transition-transform duration-300"
+                          loading="lazy"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="mb-6">
+                  <h3 className="text-sm font-medium text-neutral-400 mb-3 flex items-center gap-2">
+                    <Monitor className="w-4 h-4 text-indigo-500" /> Скриншоты
+                  </h3>
+                  <div className="bg-neutral-800 rounded-lg p-6 text-center text-neutral-500 text-sm">
+                    Скриншоты не найдены для этой игры
+                  </div>
+                </div>
+              )}
 
               {/* Статусы */}
               {authUser ? (
                 <div className="bg-neutral-800 rounded-xl p-5 mb-6">
                   <h2 className="font-semibold text-white mb-3">Добавить в список</h2>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                     <button
-                      onClick={() => {
-                        setGameStatus('want');
-                        saveData(userRating, userHours, review, 'want');
-                        addXp(XP_RULES.ADD_GAME);
-                      }}
+                      onClick={() => setGameStatus('want')}
                       className={`px-4 py-2.5 rounded-lg text-sm font-medium transition flex items-center justify-center gap-2 ${
                         gameStatus === 'want'
                           ? 'bg-rose-500 text-white'
                           : 'bg-neutral-900 border border-neutral-700 text-neutral-300 hover:bg-neutral-700'
                       }`}
                     >
-                      <Heart className="w-4 h-4" /> Хочу пройти
+                      <Heart className="w-4 h-4" /> Хочу
                     </button>
                     <button
-                      onClick={() => {
-                        setGameStatus('playing');
-                        saveData(userRating, userHours, review, 'playing');
-                        addXp(XP_RULES.ADD_GAME);
-                      }}
+                      onClick={() => setGameStatus('playing')}
                       className={`px-4 py-2.5 rounded-lg text-sm font-medium transition flex items-center justify-center gap-2 ${
                         gameStatus === 'playing'
                           ? 'bg-blue-500 text-white'
                           : 'bg-neutral-900 border border-neutral-700 text-neutral-300 hover:bg-neutral-700'
                       }`}
                     >
-                      <Gamepad className="w-4 h-4" /> В процессе
+                      <Gamepad className="w-4 h-4" /> Играю
                     </button>
                     <button
-                      onClick={() => {
-                        setGameStatus('completed');
-                        saveData(userRating, userHours, review, 'completed');
-                        addXp(XP_RULES.COMPLETE);
-                      }}
+                      onClick={() => setGameStatus('completed')}
                       className={`px-4 py-2.5 rounded-lg text-sm font-medium transition flex items-center justify-center gap-2 ${
                         gameStatus === 'completed'
                           ? 'bg-emerald-500 text-white'
@@ -753,95 +827,95 @@ export default function Home() {
                     >
                       <Check className="w-4 h-4" /> Прошёл
                     </button>
+                    <button
+                      onClick={() => setGameStatus('dropped')}
+                      className={`px-4 py-2.5 rounded-lg text-sm font-medium transition flex items-center justify-center gap-2 ${
+                        gameStatus === 'dropped'
+                          ? 'bg-neutral-500 text-white'
+                          : 'bg-neutral-900 border border-neutral-700 text-neutral-300 hover:bg-neutral-700'
+                      }`}
+                    >
+                      <XCircle className="w-4 h-4" /> Заброшено
+                    </button>
                   </div>
                 </div>
               ) : (
                 <div className="bg-neutral-800 rounded-xl p-6 mb-6 text-center">
                   <Lock className="w-8 h-8 text-neutral-500 mx-auto mb-2" />
                   <p className="text-neutral-400 mb-3">Войди, чтобы добавлять игры в список</p>
-                  <a
-                    href="/auth"
-                    className="inline-block px-4 py-2 bg-indigo-500 text-white rounded-lg text-sm font-medium hover:bg-indigo-600 transition"
-                  >
+                  <a href="/auth" className="inline-block px-4 py-2 bg-indigo-500 text-white rounded-lg text-sm font-medium hover:bg-indigo-600 transition">
                     Войти
                   </a>
                 </div>
               )}
 
-              {/* Оценка и часы */}
-              {authUser ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                  <div className="bg-neutral-800 rounded-xl p-5">
-                    <h3 className="font-semibold text-white mb-3 flex items-center gap-2">
+              {/* Оценка */}
+              {authUser && (
+                <div className="bg-neutral-800 rounded-xl p-5 mb-6">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-semibold text-white flex items-center gap-2">
                       <Trophy className="w-4 h-4 text-indigo-500" /> Твоя оценка
                     </h3>
-                    <div className="flex gap-2 mb-3">
-                      {[1, 2, 3, 4, 5].map((num) => (
-                        <button
-                          key={num}
-                          onClick={() => {
-                            setUserRating(num);
-                            saveData(num, userHours, review, gameStatus);
-                            addXp(XP_RULES.RATE);
-                          }}
-                          className={`w-10 h-10 rounded-lg font-medium transition ${
-                            userRating >= num
-                              ? 'bg-yellow-400 text-white'
-                              : 'bg-neutral-900 border border-neutral-700 text-neutral-400 hover:bg-neutral-700'
-                          }`}
-                        >
-                          {num}
-                        </button>
-                      ))}
-                    </div>
-                    {userRating > 0 && (
-                      <div className="text-sm text-neutral-400">Твоя оценка: {userRating}/5</div>
-                    )}
+                    <span className={`text-2xl font-bold ${getRatingColor(userRating)}`}>
+                      {userRating > 0 ? `${userRating}/10` : '—'}
+                    </span>
                   </div>
-
-                  <div className="bg-neutral-800 rounded-xl p-5">
-                    <h3 className="font-semibold text-white mb-3 flex items-center gap-2">
-                      <Clock className="w-4 h-4 text-indigo-500" /> Часов наиграно
-                    </h3>
-                    <div className="flex items-center gap-2 mb-3">
-                      <input
-                        type="number"
-                        value={userHours === 0 ? '' : userHours}
-                        onChange={(e) => {
-                          const v = e.target.value === '' ? 0 : parseInt(e.target.value) || 0;
-                          setUserHours(v);
-                          saveData(userRating, v, review, gameStatus);
-                        }}
-                        className="w-20 px-3 py-2 bg-neutral-900 border border-neutral-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        placeholder="0"
-                      />
-                      <span className="text-sm text-neutral-400">часов</span>
+                  
+                  <div className="relative">
+                    <input
+                      type="range"
+                      min="0"
+                      max="10"
+                      step="1"
+                      value={userRating}
+                      onChange={(e) => {
+                        const v = parseInt(e.target.value);
+                        setUserRating(v);
+                      }}
+                      className="w-full h-2 rounded-full appearance-none cursor-pointer"
+                      style={{
+                        background: `linear-gradient(to right, ${getSliderColor(userRating)} 0%, ${getSliderColor(userRating)} ${userRating * 10}%, #404040 ${userRating * 10}%, #404040 100%)`,
+                      }}
+                    />
+                    <div className="flex justify-between text-xs text-neutral-500 mt-2">
+                      <span>0</span><span>1</span><span>2</span><span>3</span><span>4</span>
+                      <span>5</span><span>6</span><span>7</span><span>8</span><span>9</span><span>10</span>
                     </div>
-                    {userHours > 0 && (
-                      <div className="text-sm text-neutral-400">Ты наиграл: {userHours}ч</div>
-                    )}
                   </div>
                 </div>
-              ) : (
-                <div className="bg-neutral-800 rounded-xl p-6 mb-6 text-center">
-                  <Lock className="w-8 h-8 text-neutral-500 mx-auto mb-2" />
-                  <p className="text-neutral-400">Войди, чтобы оценивать игры и указывать часы</p>
+              )}
+
+              {/* Часы */}
+              {authUser && (
+                <div className="bg-neutral-800 rounded-xl p-5 mb-6">
+                  <h3 className="font-semibold text-white mb-3 flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-indigo-500" /> Часов наиграно
+                  </h3>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      value={userHours === 0 ? '' : userHours}
+                      onChange={(e) => {
+                        const v = e.target.value === '' ? 0 : parseInt(e.target.value) || 0;
+                        setUserHours(v);
+                      }}
+                      className="w-24 px-3 py-2 bg-neutral-900 border border-neutral-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      placeholder="0"
+                    />
+                    <span className="text-sm text-neutral-400">часов</span>
+                  </div>
                 </div>
               )}
 
               {/* Рецензия */}
-              {authUser ? (
+              {authUser && (
                 <div className="bg-neutral-800 rounded-xl p-5 mb-6">
                   <h3 className="font-semibold text-white mb-3 flex items-center gap-2">
                     <MessageSquare className="w-4 h-4 text-indigo-500" /> Твоя рецензия
                   </h3>
                   <textarea
                     value={review}
-                    onChange={(e) => {
-                      setReview(e.target.value);
-                      saveData(userRating, userHours, e.target.value, gameStatus);
-                      if (e.target.value.length > 10) addXp(XP_RULES.REVIEW);
-                    }}
+                    onChange={(e) => setReview(e.target.value)}
                     placeholder="Напиши своё мнение об игре..."
                     className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-3 text-white placeholder:text-neutral-500 min-h-[100px] resize-y focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   />
@@ -850,11 +924,6 @@ export default function Home() {
                       <span className="text-xs text-neutral-500">{review.length} символов</span>
                     </div>
                   )}
-                </div>
-              ) : (
-                <div className="bg-neutral-800 rounded-xl p-6 text-center">
-                  <Lock className="w-8 h-8 text-neutral-500 mx-auto mb-2" />
-                  <p className="text-neutral-400">Войди, чтобы писать рецензии</p>
                 </div>
               )}
 
@@ -866,7 +935,7 @@ export default function Home() {
                     className="flex-1 bg-indigo-500 hover:bg-indigo-600 text-white font-medium py-3 rounded-lg transition flex items-center justify-center gap-2"
                   >
                     <Save className="w-4 h-4" />
-                    Добавить
+                    Сохранить
                   </button>
                   <button
                     onClick={closeGame}
@@ -878,6 +947,28 @@ export default function Home() {
               )}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Модалка скриншота */}
+      {selectedScreenshot && (
+        <div 
+          className="fixed inset-0 bg-black/90 backdrop-blur-sm z-[60] flex items-center justify-center p-4 cursor-pointer"
+          onClick={() => setSelectedScreenshot(null)}
+        >
+          <button
+            onClick={() => setSelectedScreenshot(null)}
+            className="absolute top-4 right-4 w-12 h-12 bg-neutral-800 hover:bg-neutral-700 rounded-full flex items-center justify-center transition z-10"
+          >
+            <X className="w-6 h-6 text-white" />
+          </button>
+          
+          <img
+            src={selectedScreenshot}
+            alt="Screenshot"
+            className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
         </div>
       )}
     </div>

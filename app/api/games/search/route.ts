@@ -7,22 +7,18 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const search = searchParams.get('search') || '';
 
-  if (!search) {
-    return NextResponse.json({ results: [], count: 0 });
-  }
-
   try {
-    const url = `${BASE_URL}/games?key=${API_KEY}&search=${encodeURIComponent(search)}&page_size=20`;
-    const response = await fetch(url);
-    
+    const url = `${BASE_URL}/games?key=${API_KEY}&search=${encodeURIComponent(search)}&language=rus`;
+    const response = await fetch(url, { next: { revalidate: 3600 } });
+
     if (!response.ok) {
-      return NextResponse.json({ results: [], count: 0, error: 'API error' });
+      return NextResponse.json({ error: 'Failed to fetch' }, { status: 500 });
     }
-    
+
     const data = await response.json();
     return NextResponse.json(data);
   } catch (error) {
-    console.error('Search error:', error);
-    return NextResponse.json({ results: [], count: 0, error: 'Failed' });
+    console.error('Search API error:', error);
+    return NextResponse.json({ error: 'Failed to fetch' }, { status: 500 });
   }
 }
