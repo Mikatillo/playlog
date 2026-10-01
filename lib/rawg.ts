@@ -12,6 +12,7 @@ export interface RawgGame {
   platforms: { platform: { name: string } }[];
   screenshots?: { id: number; image: string }[];
   movies?: { id: number; data: { 480: string; max: string }; preview: string }[];
+  playtime?: number; // <-- ДОБАВЛЕНО
 }
 
 export interface Game {
@@ -30,11 +31,12 @@ export interface Game {
   screenshots: { id: number; image: string }[];
   trailer?: string;
   metacritic?: number;
+  playtime?: number; // <-- ДОБАВЛЕНО
 }
 
 export function mapRawgGame(raw: RawgGame): Game {
   const cleanDescription = raw.description?.replace(/<[^>]*>/g, '').substring(0, 300) || 'Описание отсутствует';
-  
+
   return {
     id: raw.id,
     title: raw.name,
@@ -51,5 +53,6 @@ export function mapRawgGame(raw: RawgGame): Game {
     screenshots: raw.screenshots || [],
     trailer: raw.movies?.[0]?.data?.max || raw.movies?.[0]?.preview || '',
     metacritic: raw.metacritic || undefined,
+    playtime: raw.playtime || undefined, // <-- ДОБАВЛЕНО
   };
 }

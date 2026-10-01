@@ -47,7 +47,6 @@ function getMetacriticColor(score: number): string {
 export default function Home() {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
-
   const [selectedGenre, setSelectedGenre] = useState('');
   const [selectedPlatform, setSelectedPlatform] = useState('Все');
   const [searchQuery, setSearchQuery] = useState('');
@@ -114,10 +113,8 @@ export default function Home() {
     try {
       let url = `/api/games?page=${pageNum}&pageSize=20&ordering=${sortBy}`;
       if (selectedGenre) url += `&genres=${selectedGenre}`;
-
       const response = await fetch(url);
       const data = await response.json();
-
       if (data.results) {
         const mappedGames = data.results.map((g: RawgGame) => mapRawgGame(g));
         setGames(append ? [...games, ...mappedGames] : mappedGames);
@@ -232,14 +229,12 @@ export default function Home() {
     });
     setXpGain(amount);
     setTimeout(() => setXpGain(null), 2000);
-
     if (authUser) {
       const { data: currentProfile } = await supabase
         .from('profiles')
         .select('xp')
         .eq('id', authUser.id)
         .single();
-
       if (currentProfile) {
         await supabase
           .from('profiles')
@@ -255,13 +250,11 @@ export default function Home() {
       setDescriptionRu(cached);
       return;
     }
-
     if (/[а-яА-ЯёЁ]/.test(text)) {
       setDescriptionRu(text);
       localStorage.setItem(`translation_${gameId}`, text);
       return;
     }
-
     setTranslating(true);
     try {
       const response = await fetch('/api/translate', {
@@ -269,9 +262,7 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text }),
       });
-      
       const data = await response.json();
-      
       if (data.translatedText) {
         setDescriptionRu(data.translatedText);
         localStorage.setItem(`translation_${gameId}`, data.translatedText);
@@ -292,7 +283,6 @@ export default function Home() {
     setScreenshotsLoaded(false);
     setTranslating(false);
     setDescriptionRu(null);
-    
     const savedData = localStorage.getItem(`game_${game.id}`);
     if (savedData) {
       const data: GameData = JSON.parse(savedData);
@@ -306,7 +296,6 @@ export default function Home() {
       setReview('');
       setGameStatus('none');
     }
-
     try {
       const response = await fetch(`/api/games/${game.id}?full=true`);
       if (response.ok) {
@@ -314,7 +303,6 @@ export default function Home() {
         const fullGame = mapRawgGame(rawData);
         setSelectedGame(fullGame);
         setScreenshotsLoaded(true);
-        
         if (fullGame.descriptionRaw) {
           translateDescription(fullGame.descriptionRaw, game.id);
         }
@@ -334,16 +322,12 @@ export default function Home() {
 
   const saveAndClose = async () => {
     if (!selectedGame) return;
-    
     await saveData(userRating, userHours, review, gameStatus);
-    
     if (gameStatus === 'completed') addXp(XP_RULES.COMPLETE);
     else if (gameStatus === 'dropped') addXp(XP_RULES.DROP);
     else if (gameStatus !== 'none') addXp(XP_RULES.ADD_GAME);
-    
     if (userRating > 0) addXp(XP_RULES.RATE);
     if (review.length > 10) addXp(XP_RULES.REVIEW);
-    
     closeGame();
   };
 
@@ -364,7 +348,6 @@ export default function Home() {
     localStorage.setItem(`game_${selectedGame.id}`, JSON.stringify(data));
     setSaved(true);
     setTimeout(() => setSaved(false), 1500);
-
     if (authUser) {
       await supabase
         .from('user_games')
@@ -390,8 +373,8 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-[#0a0a0a]">
-      <Header 
-        profile={profile} 
+      <Header
+        profile={profile}
         levelInfo={levelInfo}
         achievementsStats={{
           total: games.length,
@@ -404,13 +387,11 @@ export default function Home() {
           reviewsCount: 0,
         }}
       />
-
       {xpGain && (
         <div className="fixed top-20 left-1/2 -translate-x-1/2 bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-medium z-50 shadow-lg animate-bounce">
           <Zap className="w-4 h-4 inline mr-1" /> +{xpGain} XP!
         </div>
       )}
-
       <div className="max-w-7xl mx-auto px-6 py-8">
         <main className="space-y-6">
           {/* Поиск */}
@@ -438,7 +419,6 @@ export default function Home() {
                 </button>
               )}
             </div>
-
             {showSuggestions && suggestions.length > 0 && (
               <div
                 ref={suggestionsRef}
@@ -495,7 +475,6 @@ export default function Home() {
                   <ChevronDown className="w-4 h-4 text-neutral-400" />
                 )}
               </button>
-
               {filtersOpen && (
                 <div className="px-5 pb-5 space-y-4 border-t border-neutral-800 pt-4">
                   <div>
@@ -519,7 +498,6 @@ export default function Home() {
                       ))}
                     </div>
                   </div>
-
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-4 border-t border-neutral-800">
                     <div>
                       <label className="text-xs font-medium text-neutral-400 mb-2 block">Платформа</label>
@@ -539,7 +517,6 @@ export default function Home() {
                         ))}
                       </div>
                     </div>
-
                     <div>
                       <label className="text-xs font-medium text-neutral-400 mb-2 block">Сортировка</label>
                       <select
@@ -570,7 +547,6 @@ export default function Home() {
                 {searchMode === 'results' ? `Результаты: "${searchQuery}"` : 'Популярные игры'}
               </h2>
             </div>
-
             {loading && games.length === 0 ? (
               <div className="flex items-center justify-center py-20">
                 <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
@@ -596,7 +572,6 @@ export default function Home() {
                     );
                   })}
                 </div>
-
                 {hasMore && searchMode === 'browse' && (
                   <div className="text-center mt-8">
                     <button
@@ -624,13 +599,11 @@ export default function Home() {
             >
               <X className="w-5 h-5 text-neutral-400" />
             </button>
-
             {saved && (
               <div className="fixed top-4 right-20 bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm font-medium z-50 shadow-lg">
                 Сохранено!
               </div>
             )}
-
             <div className="p-8">
               {/* Обложка */}
               <div className="mb-6">
@@ -641,14 +614,12 @@ export default function Home() {
                     className="w-full h-full object-cover"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
-                  
                   {selectedGame.metacritic && selectedGame.metacritic > 0 && (
                     <div className={`absolute top-4 right-4 ${getMetacriticColor(selectedGame.metacritic)} px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-lg`}>
                       <span className="text-sm font-bold">{selectedGame.metacritic}</span>
                       <span className="text-[10px] opacity-70">MC</span>
                     </div>
                   )}
-
                   <div className="absolute bottom-4 left-4 right-4">
                     <h1 className="text-3xl font-bold text-white drop-shadow-lg">{selectedGame.title}</h1>
                     <div className="flex flex-wrap gap-2 mt-2">
@@ -766,8 +737,8 @@ export default function Home() {
                   </h3>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                     {selectedGame.screenshots.map((shot) => (
-                      <div 
-                        key={shot.id} 
+                      <div
+                        key={shot.id}
                         className="aspect-video rounded-lg overflow-hidden bg-neutral-800 cursor-pointer group/shot"
                         onClick={() => setSelectedScreenshot(shot.image)}
                       >
@@ -860,7 +831,6 @@ export default function Home() {
                       {userRating > 0 ? `${userRating}/10` : '—'}
                     </span>
                   </div>
-                  
                   <div className="relative">
                     <input
                       type="range"
@@ -885,12 +855,20 @@ export default function Home() {
                 </div>
               )}
 
-              {/* Часы */}
+              {/* Часы (ОБНОВЛЕНО: добавлена плашка со средним временем) */}
               {authUser && (
                 <div className="bg-neutral-800 rounded-xl p-5 mb-6">
-                  <h3 className="font-semibold text-white mb-3 flex items-center gap-2">
-                    <Clock className="w-4 h-4 text-indigo-500" /> Часов наиграно
-                  </h3>
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-semibold text-white flex items-center gap-2">
+                      <Clock className="w-4 h-4 text-indigo-500" /> Часов наиграно
+                    </h3>
+                    {selectedGame.playtime && (
+                      <span className="text-xs text-neutral-400 bg-neutral-900/50 px-2.5 py-1 rounded-md border border-neutral-700 flex items-center gap-1.5">
+                        <span className="text-indigo-400">⏱</span> 
+                        Среднее время игроков: ~{selectedGame.playtime} ч.
+                      </span>
+                    )}
+                  </div>
                   <div className="flex items-center gap-2">
                     <input
                       type="number"
@@ -952,7 +930,7 @@ export default function Home() {
 
       {/* Модалка скриншота */}
       {selectedScreenshot && (
-        <div 
+        <div
           className="fixed inset-0 bg-black/90 backdrop-blur-sm z-[60] flex items-center justify-center p-4 cursor-pointer"
           onClick={() => setSelectedScreenshot(null)}
         >
@@ -962,7 +940,6 @@ export default function Home() {
           >
             <X className="w-6 h-6 text-white" />
           </button>
-          
           <img
             src={selectedScreenshot}
             alt="Screenshot"

@@ -39,12 +39,12 @@ export default function MyGamesPage() {
   const [games, setGames] = useState<Game[]>([]);
   const [loading, setLoading] = useState(true);
   const [authUser, setAuthUser] = useState<any>(null);
-  const [profile, setProfile] = useState({ 
-    nickname: '', 
-    xp: 0, 
-    totalGames: 0, 
-    completedGames: 0, 
-    totalHours: 0 
+  const [profile, setProfile] = useState({
+    nickname: '',
+    xp: 0,
+    totalGames: 0,
+    completedGames: 0,
+    totalHours: 0
   });
   const [selectedGame, setSelectedGame] = useState<Game | null>(null);
   const [modalLoading, setModalLoading] = useState(false);
@@ -65,21 +65,17 @@ export default function MyGamesPage() {
   useEffect(() => {
     const loadData = async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      
       if (!user) {
         setAuthUser(null);
         setLoading(false);
         return;
       }
-
       setAuthUser(user);
-
       const { data: profileData } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', user.id)
         .single();
-
       if (profileData) {
         setProfile({
           nickname: profileData.nickname || user.email?.split('@')[0] || 'Игрок',
@@ -89,15 +85,12 @@ export default function MyGamesPage() {
           totalHours: profileData.total_hours || 0,
         });
       }
-
       const { data: gamesData } = await supabase
         .from('user_games')
         .select('*');
-
       if (gamesData && gamesData.length > 0) {
         const saved = new Map<number, GameData>();
         const gameIds: number[] = [];
-        
         gamesData.forEach(g => {
           saved.set(g.game_id, {
             rating: g.rating || 0,
@@ -108,14 +101,12 @@ export default function MyGamesPage() {
           });
           gameIds.push(g.game_id);
         });
-        
         setUserGames(saved);
         await loadGames(gameIds);
       } else {
         setLoading(false);
       }
     };
-
     loadData();
   }, []);
 
@@ -160,13 +151,11 @@ export default function MyGamesPage() {
       setDescriptionRu(cached);
       return;
     }
-
-    if (/[а-яА-ЯёЁ]/.test(text)) {
+    if (/[\u0410-\u044F]/.test(text)) {
       setDescriptionRu(text);
       localStorage.setItem(`translation_${gameId}`, text);
       return;
     }
-
     setTranslating(true);
     try {
       const response = await fetch('/api/translate', {
@@ -174,9 +163,7 @@ export default function MyGamesPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text }),
       });
-      
       const data = await response.json();
-      
       if (data.translatedText) {
         setDescriptionRu(data.translatedText);
         localStorage.setItem(`translation_${gameId}`, data.translatedText);
@@ -208,11 +195,10 @@ export default function MyGamesPage() {
       filtered = getGameList(activeTab);
     }
     if (searchInput) {
-      filtered = filtered.filter(game => 
+      filtered = filtered.filter(game =>
         game.title.toLowerCase().includes(searchInput.toLowerCase())
       );
     }
-
     filtered.sort((a, b) => {
       const dataA = userGames.get(a.id);
       const dataB = userGames.get(b.id);
@@ -220,7 +206,6 @@ export default function MyGamesPage() {
       const ratingB = dataB?.rating || 0;
       const hoursA = dataA?.hours || 0;
       const hoursB = dataB?.hours || 0;
-
       switch (sortBy) {
         case 'rating-asc':
           return ratingA - ratingB;
@@ -238,7 +223,6 @@ export default function MyGamesPage() {
           return 0;
       }
     });
-
     return filtered;
   }, [activeTab, searchInput, games, userGames, sortBy]);
 
@@ -249,10 +233,9 @@ export default function MyGamesPage() {
     const dropped = getGameList('dropped');
     const totalHours = Array.from(userGames.values()).reduce((sum, data) => sum + (data.hours || 0), 0);
     const ratedGames = Array.from(userGames.values()).filter(d => d.rating > 0);
-    const avgRating = ratedGames.length > 0 
+    const avgRating = ratedGames.length > 0
       ? (ratedGames.reduce((sum, data) => sum + data.rating, 0) / ratedGames.length).toFixed(1)
       : '—';
-
     return {
       total: userGames.size,
       completed: completed.length,
@@ -280,7 +263,6 @@ export default function MyGamesPage() {
     setScreenshotsLoaded(false);
     setDescriptionRu(null);
     setTranslating(false);
-    
     const data = userGames.get(game.id);
     if (data) {
       setModalRating(data.rating || 0);
@@ -293,19 +275,16 @@ export default function MyGamesPage() {
       setModalReview('');
       setModalStatus('none');
     }
-
     const fullGame = await loadFullGameData(game);
     if (fullGame) {
       setSelectedGame(fullGame);
       setScreenshotsLoaded(true);
-      
       if (fullGame.descriptionRaw) {
         translateDescription(fullGame.descriptionRaw, game.id);
       }
     } else {
       setScreenshotsLoaded(true);
     }
-    
     setModalLoading(false);
   };
 
@@ -320,7 +299,6 @@ export default function MyGamesPage() {
 
   const saveModalData = async () => {
     if (!selectedGame || !authUser) return;
-    
     await supabase
       .from('user_games')
       .upsert(
@@ -334,7 +312,6 @@ export default function MyGamesPage() {
         },
         { onConflict: 'user_id,game_id' }
       );
-    
     setUserGames(prev => {
       const newMap = new Map(prev);
       newMap.set(selectedGame.id, {
@@ -346,28 +323,23 @@ export default function MyGamesPage() {
       });
       return newMap;
     });
-    
     setSaved(true);
     setTimeout(() => setSaved(false), 1500);
   };
 
   const deleteGame = async () => {
     if (!selectedGame || !authUser) return;
-    
     await supabase
       .from('user_games')
       .delete()
       .eq('user_id', authUser.id)
       .eq('game_id', selectedGame.id);
-    
     setUserGames(prev => {
       const newMap = new Map(prev);
       newMap.delete(selectedGame.id);
       return newMap;
     });
-    
     setGames(prev => prev.filter(g => g.id !== selectedGame.id));
-    
     closeGame();
   };
 
@@ -389,8 +361,8 @@ export default function MyGamesPage() {
 
   return (
     <div className="min-h-screen bg-[#0a0a0a]">
-      <Header 
-        profile={profile} 
+      <Header
+        profile={profile}
         levelInfo={levelInfo}
         achievementsStats={{
           total: stats.total,
@@ -403,7 +375,6 @@ export default function MyGamesPage() {
           reviewsCount: Array.from(userGames.values()).filter(d => d.review && d.review.length > 0).length,
         }}
       />
-
       <div className="max-w-7xl mx-auto px-6 py-8">
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-white mb-2">Мои игры</h1>
@@ -447,7 +418,6 @@ export default function MyGamesPage() {
               <ChevronDown className="w-4 h-4 text-neutral-400" />
             )}
           </button>
-
           {filtersOpen && (
             <div className="px-5 pb-5 space-y-4 border-t border-neutral-800 pt-4">
               <div>
@@ -472,7 +442,6 @@ export default function MyGamesPage() {
                   })}
                 </div>
               </div>
-
               <div>
                 <label className="text-xs font-medium text-neutral-400 mb-2 block">Сортировка</label>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
@@ -629,13 +598,11 @@ export default function MyGamesPage() {
             >
               <X className="w-5 h-5 text-neutral-400" />
             </button>
-
             {saved && (
               <div className="fixed top-4 right-20 bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm font-medium z-50 shadow-lg">
                 Сохранено!
               </div>
             )}
-
             {modalLoading ? (
               <div className="flex items-center justify-center py-20">
                 <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
@@ -677,14 +644,12 @@ export default function MyGamesPage() {
                       className="w-full h-full object-cover"
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
-                    
                     {selectedGame.metacritic && selectedGame.metacritic > 0 && (
                       <div className={`absolute top-4 right-4 ${getMetacriticColor(selectedGame.metacritic)} px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-lg`}>
                         <span className="text-sm font-bold">{selectedGame.metacritic}</span>
                         <span className="text-[10px] opacity-70">MC</span>
                       </div>
                     )}
-
                     <div className="absolute bottom-4 left-4 right-4">
                       <h1 className="text-3xl font-bold text-white drop-shadow-lg">{selectedGame.title}</h1>
                       <div className="flex flex-wrap gap-2 mt-2">
@@ -802,8 +767,8 @@ export default function MyGamesPage() {
                     </h3>
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                       {selectedGame.screenshots.map((shot) => (
-                        <div 
-                          key={shot.id} 
+                        <div
+                          key={shot.id}
                           className="aspect-video rounded-lg overflow-hidden bg-neutral-800 cursor-pointer group/shot"
                           onClick={() => setSelectedScreenshot(shot.image)}
                         >
@@ -885,7 +850,6 @@ export default function MyGamesPage() {
                       {modalRating > 0 ? `${modalRating}/10` : '—'}
                     </span>
                   </div>
-                  
                   <div className="relative">
                     <input
                       type="range"
@@ -909,11 +873,19 @@ export default function MyGamesPage() {
                   </div>
                 </div>
 
-                {/* Часы */}
+                {/* Часы (ОБНОВЛЕНО: добавлена плашка со средним временем) */}
                 <div className="bg-neutral-800 rounded-xl p-5 mb-6">
-                  <h3 className="font-semibold text-white mb-3 flex items-center gap-2">
-                    <Clock className="w-4 h-4 text-indigo-500" /> Часов наиграно
-                  </h3>
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-semibold text-white flex items-center gap-2">
+                      <Clock className="w-4 h-4 text-indigo-500" /> Часов наиграно
+                    </h3>
+                    {selectedGame && 'playtime' in selectedGame && (selectedGame as any).playtime && (
+                      <span className="text-xs text-neutral-400 bg-neutral-900/50 px-2.5 py-1 rounded-md border border-neutral-700 flex items-center gap-1.5">
+                        <span className="text-indigo-400">⏱</span> 
+                        Среднее время игроков: ~{(selectedGame as any).playtime} ч.
+                      </span>
+                    )}
+                  </div>
                   <div className="flex items-center gap-2">
                     <input
                       type="number"
@@ -984,7 +956,7 @@ export default function MyGamesPage() {
 
       {/* Модалка скриншота */}
       {selectedScreenshot && (
-        <div 
+        <div
           className="fixed inset-0 bg-black/90 backdrop-blur-sm z-[60] flex items-center justify-center p-4 cursor-pointer"
           onClick={() => setSelectedScreenshot(null)}
         >
@@ -994,7 +966,6 @@ export default function MyGamesPage() {
           >
             <X className="w-6 h-6 text-white" />
           </button>
-          
           <img
             src={selectedScreenshot}
             alt="Screenshot"

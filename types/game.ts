@@ -15,6 +15,7 @@ export interface Game {
   trailer?: string;
   metacritic?: number;
   steamRating?: number;
+  playtime?: number; // <-- ДОБАВЛЕНО: среднее время прохождения
 }
 
 export interface GameData {
@@ -53,6 +54,7 @@ export function calculateLevel(xp: number): LevelInfo {
   const xpToNext = 100;
   return { level, xpInLevel, xpToNext };
 }
+
 export interface AchievementLevel {
   level: number;
   threshold: number;
