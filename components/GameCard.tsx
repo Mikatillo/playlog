@@ -2,13 +2,12 @@
 
 import { Star, Clock, Heart, Gamepad, Check, XCircle } from 'lucide-react';
 import { Game, GameData } from '@/types/game';
-import { supabase } from '@/lib/supabase';
-import { useState, useEffect } from 'react';
 
 interface GameCardProps {
   game: Game;
   onClick: () => void;
   userGameData?: GameData;
+  isAuthenticated?: boolean;
 }
 
 function getMetacriticColor(score: number): string {
@@ -18,15 +17,12 @@ function getMetacriticColor(score: number): string {
   return 'bg-red-500/90 text-white';
 }
 
-export default function GameCard({ game, onClick, userGameData }: GameCardProps) {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      setIsAuthenticated(!!user);
-    });
-  }, []);
-
+export default function GameCard({
+  game,
+  onClick,
+  userGameData,
+  isAuthenticated = false,
+}: GameCardProps) {
   const statusIcon = {
     want: <Heart className="w-3 h-3" />,
     playing: <Gamepad className="w-3 h-3" />,
@@ -60,19 +56,22 @@ export default function GameCard({ game, onClick, userGameData }: GameCardProps)
               'https://via.placeholder.com/400x225/171717/525252?text=No+Image';
           }}
         />
-        
+
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
 
         {game.metacritic && game.metacritic > 0 && (
-          <div className={`absolute top-2 right-2 ${getMetacriticColor(game.metacritic)} px-2 py-1 rounded-lg flex items-center gap-1 shadow-lg`}>
+          <div
+            className={`absolute top-2 right-2 ${getMetacriticColor(game.metacritic)} px-2 py-1 rounded-lg flex items-center gap-1 shadow-lg`}
+          >
             <span className="text-xs font-bold">{game.metacritic}</span>
             <span className="text-[9px] opacity-70">MC</span>
           </div>
         )}
 
-        {/* Значок статуса только в левом верхнем углу */}
         {showUserData && showUserData.status !== 'none' && (
-          <div className={`absolute top-2 left-2 ${statusColor[showUserData.status]} rounded-full p-1.5 shadow-lg`}>
+          <div
+            className={`absolute top-2 left-2 ${statusColor[showUserData.status]} rounded-full p-1.5 shadow-lg`}
+          >
             {statusIcon[showUserData.status]}
           </div>
         )}
@@ -87,15 +86,20 @@ export default function GameCard({ game, onClick, userGameData }: GameCardProps)
       <div className="p-3 space-y-2">
         <div className="flex flex-wrap gap-1">
           {game.genres?.slice(0, 3).map((g) => (
-            <span key={g.id} className="text-[10px] text-neutral-400 bg-neutral-800 px-1.5 py-0.5 rounded">
+            <span
+              key={g.id}
+              className="text-[10px] text-neutral-400 bg-neutral-800 px-1.5 py-0.5 rounded"
+            >
               {g.name}
             </span>
           ))}
         </div>
-        
+
         <div className="flex items-center justify-between text-xs text-neutral-500">
           <span>{game.year}</span>
-          <span className="truncate ml-2">{game.platforms?.slice(0, 2).join(', ') || 'PC'}</span>
+          <span className="truncate ml-2">
+            {game.platforms?.slice(0, 2).join(', ') || 'PC'}
+          </span>
         </div>
 
         {showUserData && (showUserData.rating > 0 || showUserData.hours > 0) && (

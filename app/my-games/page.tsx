@@ -1,15 +1,25 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { Heart, Gamepad, Check, Trophy, Star, Clock, Award, Flame, Zap, Crown, Loader2, Lock, X, MessageSquare, Monitor, Trash2, AlertTriangle, XCircle, ChevronDown, ChevronUp, Filter, SortAsc, SortDesc } from 'lucide-react';
-import { Game, GameData, calculateLevel, XP_RULES } from '@/types/game';
+import {
+  Heart, Gamepad, Check, Trophy, Star, Clock, Award, Loader2, Lock,
+  X, MessageSquare, Monitor, Trash2, AlertTriangle, XCircle,
+  ChevronDown, ChevronUp, Filter, SortAsc, SortDesc,
+} from 'lucide-react';
+import { Game, GameData, calculateLevel } from '@/types/game';
 import { mapRawgGame, RawgGame } from '@/lib/rawg';
 import { supabase } from '@/lib/supabase';
 import GameCard from '@/components/GameCard';
 import Header from '@/components/Header';
 
 type TabType = 'all' | 'want' | 'playing' | 'completed' | 'dropped';
-type SortType = 'rating-asc' | 'rating-desc' | 'hours-asc' | 'hours-desc' | 'year-asc' | 'year-desc';
+type SortType =
+  | 'rating-asc'
+  | 'rating-desc'
+  | 'hours-asc'
+  | 'hours-desc'
+  | 'year-asc'
+  | 'year-desc';
 
 function getRatingColor(rating: number): string {
   if (rating >= 8) return 'text-emerald-400';
@@ -44,14 +54,16 @@ export default function MyGamesPage() {
     xp: 0,
     totalGames: 0,
     completedGames: 0,
-    totalHours: 0
+    totalHours: 0,
   });
   const [selectedGame, setSelectedGame] = useState<Game | null>(null);
   const [modalLoading, setModalLoading] = useState(false);
   const [modalRating, setModalRating] = useState(0);
   const [modalHours, setModalHours] = useState(0);
   const [modalReview, setModalReview] = useState('');
-  const [modalStatus, setModalStatus] = useState<'none' | 'want' | 'playing' | 'completed' | 'dropped'>('none');
+  const [modalStatus, setModalStatus] = useState<
+    'none' | 'want' | 'playing' | 'completed' | 'dropped'
+  >('none');
   const [saved, setSaved] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [selectedScreenshot, setSelectedScreenshot] = useState<string | null>(null);
@@ -63,69 +75,82 @@ export default function MyGamesPage() {
   const [translating, setTranslating] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
+
     const loadData = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const user = session?.user ?? null;
+      if (cancelled) return;
       if (!user) {
         setAuthUser(null);
         setLoading(false);
         return;
       }
       setAuthUser(user);
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single();
-      if (profileData) {
+
+      const [profileRes, gamesRes] = await Promise.all([
+        supabase.from('profiles').select('*').eq('id', user.id).single(),
+        supabase.from('user_games').select('*').eq('user_id', user.id),
+      ]);
+      if (cancelled) return;
+
+      if (profileRes.data) {
+        const p = profileRes.data;
         setProfile({
-          nickname: profileData.nickname || user.email?.split('@')[0] || 'Игрок',
-          xp: profileData.xp || 0,
-          totalGames: profileData.total_games || 0,
-          completedGames: profileData.completed_games || 0,
-          totalHours: profileData.total_hours || 0,
+          nickname: p.nickname || user.email?.split('@')[0] || 'Игрок',
+          xp: p.xp || 0,
+          totalGames: p.total_games || 0,
+          completedGames: p.completed_games || 0,
+          totalHours: p.total_hours || 0,
         });
       }
-      const { data: gamesData } = await supabase
-        .from('user_games')
-        .select('*');
-      if (gamesData && gamesData.length > 0) {
-        const saved = new Map<number, GameData>();
-        const gameIds: number[] = [];
-        gamesData.forEach(g => {
-          saved.set(g.game_id, {
+
+      if (gamesRes.data && gamesRes.data.length > 0) {
+        const map = new Map<number, GameData>();
+        const ids: number[] = [];
+        gamesRes.data.forEach((g) => {
+          map.set(g.game_id, {
             rating: g.rating || 0,
             hours: g.hours || 0,
             review: g.review || '',
             status: g.status || 'none',
             xp: 0,
           });
-          gameIds.push(g.game_id);
+          ids.push(g.game_id);
         });
-        setUserGames(saved);
-        await loadGames(gameIds);
+        setUserGames(map);
+        await loadGames(ids);
       } else {
         setLoading(false);
       }
     };
+
     loadData();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const loadGames = async (ids: number[]) => {
     setLoading(true);
     try {
-      const loadedGames: Game[] = [];
-      for (const id of ids) {
-        try {
-          const response = await fetch(`/api/games/${id}`);
-          if (response.ok) {
-            const data: RawgGame = await response.json();
-            loadedGames.push(mapRawgGame(data));
+      const results = await Promise.all(
+        ids.map(async (id) => {
+          try {
+            const response = await fetch(`/api/games/${id}`);
+            if (response.ok) {
+              const data: RawgGame = await response.json();
+              return mapRawgGame(data);
+            }
+          } catch (err) {
+            console.error(`Ошибка загрузки игры ${id}:`, err);
           }
-        } catch (err) {
-          console.error(`Ошибка загрузки игры ${id}:`, err);
-        }
-      }
-      setGames(loadedGames);
+          return null;
+        }),
+      );
+      setGames(results.filter((g): g is Game => g !== null));
     } catch (error) {
       console.error('Ошибка загрузки игр:', error);
     }
@@ -181,7 +206,7 @@ export default function MyGamesPage() {
   const levelInfo = calculateLevel(profile.xp);
 
   const getGameList = (status: 'want' | 'playing' | 'completed' | 'dropped') => {
-    return games.filter(game => {
+    return games.filter((game) => {
       const data = userGames.get(game.id);
       return data?.status === status;
     });
@@ -195,8 +220,8 @@ export default function MyGamesPage() {
       filtered = getGameList(activeTab);
     }
     if (searchInput) {
-      filtered = filtered.filter(game =>
-        game.title.toLowerCase().includes(searchInput.toLowerCase())
+      filtered = filtered.filter((game) =>
+        game.title.toLowerCase().includes(searchInput.toLowerCase()),
       );
     }
     filtered.sort((a, b) => {
@@ -231,11 +256,17 @@ export default function MyGamesPage() {
     const playing = getGameList('playing');
     const want = getGameList('want');
     const dropped = getGameList('dropped');
-    const totalHours = Array.from(userGames.values()).reduce((sum, data) => sum + (data.hours || 0), 0);
-    const ratedGames = Array.from(userGames.values()).filter(d => d.rating > 0);
-    const avgRating = ratedGames.length > 0
-      ? (ratedGames.reduce((sum, data) => sum + data.rating, 0) / ratedGames.length).toFixed(1)
-      : '—';
+    const totalHours = Array.from(userGames.values()).reduce(
+      (sum, data) => sum + (data.hours || 0),
+      0,
+    );
+    const ratedGames = Array.from(userGames.values()).filter((d) => d.rating > 0);
+    const avgRating =
+      ratedGames.length > 0
+        ? (
+            ratedGames.reduce((sum, data) => sum + data.rating, 0) / ratedGames.length
+          ).toFixed(1)
+        : '—';
     return {
       total: userGames.size,
       completed: completed.length,
@@ -299,20 +330,18 @@ export default function MyGamesPage() {
 
   const saveModalData = async () => {
     if (!selectedGame || !authUser) return;
-    await supabase
-      .from('user_games')
-      .upsert(
-        {
-          user_id: authUser.id,
-          game_id: selectedGame.id,
-          rating: modalRating,
-          hours: modalHours,
-          review: modalReview,
-          status: modalStatus,
-        },
-        { onConflict: 'user_id,game_id' }
-      );
-    setUserGames(prev => {
+    await supabase.from('user_games').upsert(
+      {
+        user_id: authUser.id,
+        game_id: selectedGame.id,
+        rating: modalRating,
+        hours: modalHours,
+        review: modalReview,
+        status: modalStatus,
+      },
+      { onConflict: 'user_id,game_id' },
+    );
+    setUserGames((prev) => {
       const newMap = new Map(prev);
       newMap.set(selectedGame.id, {
         rating: modalRating,
@@ -334,12 +363,12 @@ export default function MyGamesPage() {
       .delete()
       .eq('user_id', authUser.id)
       .eq('game_id', selectedGame.id);
-    setUserGames(prev => {
+    setUserGames((prev) => {
       const newMap = new Map(prev);
       newMap.delete(selectedGame.id);
       return newMap;
     });
-    setGames(prev => prev.filter(g => g.id !== selectedGame.id));
+    setGames((prev) => prev.filter((g) => g.id !== selectedGame.id));
     closeGame();
   };
 
@@ -350,8 +379,13 @@ export default function MyGamesPage() {
         <div className="max-w-7xl mx-auto px-6 py-20 text-center">
           <Lock className="w-16 h-16 text-neutral-600 mx-auto mb-4" />
           <h1 className="text-2xl font-bold text-white mb-4">Доступ закрыт</h1>
-          <p className="text-lg text-neutral-400 mb-6">Войди в аккаунт, чтобы видеть свои игры</p>
-          <a href="/auth" className="inline-block bg-indigo-500 text-white font-medium px-6 py-3 rounded-lg hover:bg-indigo-600 transition">
+          <p className="text-lg text-neutral-400 mb-6">
+            Войди в аккаунт, чтобы видеть свои игры
+          </p>
+          <a
+            href="/auth"
+            className="inline-block bg-indigo-500 text-white font-medium px-6 py-3 rounded-lg hover:bg-indigo-600 transition"
+          >
             Войти
           </a>
         </div>
@@ -364,6 +398,8 @@ export default function MyGamesPage() {
       <Header
         profile={profile}
         levelInfo={levelInfo}
+        userId={authUser?.id}
+        onProfileUpdate={(updated) => setProfile((prev) => ({ ...prev, ...updated }))}
         achievementsStats={{
           total: stats.total,
           completed: stats.completed,
@@ -371,8 +407,10 @@ export default function MyGamesPage() {
           want: stats.want,
           dropped: stats.dropped,
           totalHours: stats.totalHours,
-          ratedGames: Array.from(userGames.values()).filter(d => d.rating > 0).length,
-          reviewsCount: Array.from(userGames.values()).filter(d => d.review && d.review.length > 0).length,
+          ratedGames: Array.from(userGames.values()).filter((d) => d.rating > 0).length,
+          reviewsCount: Array.from(userGames.values()).filter(
+            (d) => d.review && d.review.length > 0,
+          ).length,
         }}
       />
       <div className="max-w-7xl mx-auto px-6 py-8">
@@ -403,7 +441,7 @@ export default function MyGamesPage() {
               <h2 className="font-semibold text-white">Фильтры</h2>
               {activeTab !== 'all' && (
                 <span className="text-xs bg-indigo-500 text-white px-2 py-0.5 rounded-full">
-                  {tabs.find(t => t.id === activeTab)?.label}
+                  {tabs.find((t) => t.id === activeTab)?.label}
                 </span>
               )}
               {sortBy !== 'year-desc' && (
@@ -421,7 +459,9 @@ export default function MyGamesPage() {
           {filtersOpen && (
             <div className="px-5 pb-5 space-y-4 border-t border-neutral-800 pt-4">
               <div>
-                <label className="text-xs font-medium text-neutral-400 mb-2 block">Статус</label>
+                <label className="text-xs font-medium text-neutral-400 mb-2 block">
+                  Статус
+                </label>
                 <div className="flex flex-wrap gap-2">
                   {tabs.map((tab) => {
                     const Icon = tab.icon;
@@ -443,7 +483,9 @@ export default function MyGamesPage() {
                 </div>
               </div>
               <div>
-                <label className="text-xs font-medium text-neutral-400 mb-2 block">Сортировка</label>
+                <label className="text-xs font-medium text-neutral-400 mb-2 block">
+                  Сортировка
+                </label>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   <button
                     onClick={() => setSortBy('year-desc')}
@@ -551,7 +593,10 @@ export default function MyGamesPage() {
           </div>
           <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-4 text-center">
             <Star className="w-5 h-5 text-yellow-500 mx-auto mb-1" />
-            <div className="text-xl font-bold text-white">{stats.avgRating}<span className="text-sm text-neutral-500">/10</span></div>
+            <div className="text-xl font-bold text-white">
+              {stats.avgRating}
+              <span className="text-sm text-neutral-500">/10</span>
+            </div>
             <div className="text-xs text-neutral-400">Ср. оценка</div>
           </div>
         </div>
@@ -581,6 +626,7 @@ export default function MyGamesPage() {
                   game={game}
                   onClick={() => openGame(game)}
                   userGameData={data}
+                  isAuthenticated={!!authUser}
                 />
               );
             })}
@@ -614,7 +660,9 @@ export default function MyGamesPage() {
                   <AlertTriangle className="w-16 h-16 text-red-500 mx-auto mb-4" />
                   <h2 className="text-2xl font-bold text-white mb-2">Удалить игру?</h2>
                   <p className="text-neutral-400 mb-6">
-                    Ты уверен, что хочешь удалить <span className="text-white font-medium">{selectedGame.title}</span> из своего списка?
+                    Ты уверен, что хочешь удалить{' '}
+                    <span className="text-white font-medium">{selectedGame.title}</span> из
+                    своего списка?
                   </p>
                   <div className="flex gap-3 justify-center">
                     <button
@@ -645,16 +693,23 @@ export default function MyGamesPage() {
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
                     {selectedGame.metacritic && selectedGame.metacritic > 0 && (
-                      <div className={`absolute top-4 right-4 ${getMetacriticColor(selectedGame.metacritic)} px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-lg`}>
+                      <div
+                        className={`absolute top-4 right-4 ${getMetacriticColor(selectedGame.metacritic)} px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-lg`}
+                      >
                         <span className="text-sm font-bold">{selectedGame.metacritic}</span>
                         <span className="text-[10px] opacity-70">MC</span>
                       </div>
                     )}
                     <div className="absolute bottom-4 left-4 right-4">
-                      <h1 className="text-3xl font-bold text-white drop-shadow-lg">{selectedGame.title}</h1>
+                      <h1 className="text-3xl font-bold text-white drop-shadow-lg">
+                        {selectedGame.title}
+                      </h1>
                       <div className="flex flex-wrap gap-2 mt-2">
                         {selectedGame.genres?.map((g) => (
-                          <span key={g.id} className="px-2 py-1 bg-white/20 backdrop-blur-sm text-white rounded text-xs font-medium">
+                          <span
+                            key={g.id}
+                            className="px-2 py-1 bg-white/20 backdrop-blur-sm text-white rounded text-xs font-medium"
+                          >
                             {g.name}
                           </span>
                         ))}
@@ -669,7 +724,9 @@ export default function MyGamesPage() {
                 {/* Оценки */}
                 <div className="flex flex-wrap gap-2 mb-6">
                   {selectedGame.metacritic && selectedGame.metacritic > 0 && (
-                    <span className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium ${getMetacriticColor(selectedGame.metacritic)}`}>
+                    <span
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium ${getMetacriticColor(selectedGame.metacritic)}`}
+                    >
                       <Award className="w-4 h-4" />
                       <span>{selectedGame.metacritic}</span>
                       <span className="text-[10px] opacity-70">Metacritic</span>
@@ -683,7 +740,9 @@ export default function MyGamesPage() {
                     <div className="flex items-center gap-3 p-4 bg-neutral-800 rounded-lg">
                       <Loader2 className="w-5 h-5 text-indigo-400 animate-spin" />
                       <div>
-                        <div className="text-sm text-white font-medium">Переводим описание...</div>
+                        <div className="text-sm text-white font-medium">
+                          Переводим описание...
+                        </div>
                         <div className="text-xs text-neutral-400 mt-0.5">Google Translate</div>
                       </div>
                     </div>
@@ -719,7 +778,9 @@ export default function MyGamesPage() {
                     </div>
                   ) : (
                     <div>
-                      <p className="text-neutral-400 leading-relaxed mb-4 line-clamp-3">{selectedGame.description}</p>
+                      <p className="text-neutral-400 leading-relaxed mb-4 line-clamp-3">
+                        {selectedGame.description}
+                      </p>
                       <button
                         onClick={() => {
                           if (selectedGame?.descriptionRaw) {
@@ -763,7 +824,8 @@ export default function MyGamesPage() {
                 ) : selectedGame.screenshots && selectedGame.screenshots.length > 0 ? (
                   <div className="mb-6">
                     <h3 className="text-sm font-medium text-neutral-400 mb-3 flex items-center gap-2">
-                      <Monitor className="w-4 h-4 text-indigo-500" /> Скриншоты ({selectedGame.screenshots.length})
+                      <Monitor className="w-4 h-4 text-indigo-500" /> Скриншоты (
+                      {selectedGame.screenshots.length})
                     </h3>
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                       {selectedGame.screenshots.map((shot) => (
@@ -857,10 +919,7 @@ export default function MyGamesPage() {
                       max="10"
                       step="1"
                       value={modalRating}
-                      onChange={(e) => {
-                        const v = parseInt(e.target.value);
-                        setModalRating(v);
-                      }}
+                      onChange={(e) => setModalRating(parseInt(e.target.value))}
                       className="w-full h-2 rounded-full appearance-none cursor-pointer"
                       style={{
                         background: `linear-gradient(to right, ${getSliderColor(modalRating)} 0%, ${getSliderColor(modalRating)} ${modalRating * 10}%, #404040 ${modalRating * 10}%, #404040 100%)`,
@@ -868,21 +927,22 @@ export default function MyGamesPage() {
                     />
                     <div className="flex justify-between text-xs text-neutral-500 mt-2">
                       <span>0</span><span>1</span><span>2</span><span>3</span><span>4</span>
-                      <span>5</span><span>6</span><span>7</span><span>8</span><span>9</span><span>10</span>
+                      <span>5</span><span>6</span><span>7</span><span>8</span><span>9</span>
+                      <span>10</span>
                     </div>
                   </div>
                 </div>
 
-                {/* Часы (ОБНОВЛЕНО: добавлена плашка со средним временем) */}
+                {/* Часы */}
                 <div className="bg-neutral-800 rounded-xl p-5 mb-6">
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="font-semibold text-white flex items-center gap-2">
                       <Clock className="w-4 h-4 text-indigo-500" /> Часов наиграно
                     </h3>
-                    {selectedGame && 'playtime' in selectedGame && (selectedGame as any).playtime && (
+                    {selectedGame.playtime && (
                       <span className="text-xs text-neutral-400 bg-neutral-900/50 px-2.5 py-1 rounded-md border border-neutral-700 flex items-center gap-1.5">
-                        <span className="text-indigo-400">⏱</span> 
-                        Среднее время игроков: ~{(selectedGame as any).playtime} ч.
+                        <span className="text-indigo-400">⏱</span>
+                        Среднее время игроков: ~{selectedGame.playtime} ч.
                       </span>
                     )}
                   </div>
@@ -914,7 +974,9 @@ export default function MyGamesPage() {
                   />
                   {modalReview.length > 0 && (
                     <div className="mt-2 text-right">
-                      <span className="text-xs text-neutral-500">{modalReview.length} символов</span>
+                      <span className="text-xs text-neutral-500">
+                        {modalReview.length} символов
+                      </span>
                     </div>
                   )}
                 </div>

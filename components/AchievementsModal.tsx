@@ -1,7 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { X, Heart, Gamepad, Check, Trophy, Star, Clock, Award, Flame, Zap, Crown, Lock, MessageSquare, TrendingUp, BookOpen } from 'lucide-react';
+import {
+  X, Gamepad, Check, Trophy, Star, Clock,
+  Flame, Crown, Lock, TrendingUp, BookOpen,
+} from 'lucide-react';
 import { ACHIEVEMENT_LEVELS, getAchievementLevel } from '@/types/game';
 
 interface AchievementsModalProps {
@@ -20,7 +23,15 @@ interface AchievementsModalProps {
 }
 
 const iconMap: Record<string, any> = {
-  Heart, Gamepad, Check, Trophy, Star, Clock, Award, Flame, Zap, Crown, MessageSquare, TrendingUp, BookOpen, Lock,
+  Check,
+  Gamepad,
+  Trophy,
+  Star,
+  Clock,
+  Flame,
+  Crown,
+  TrendingUp,
+  BookOpen,
 };
 
 interface AchievementDef {
@@ -123,7 +134,6 @@ export default function AchievementsModal({ isOpen, onClose, stats }: Achievemen
         </button>
 
         <div className="p-8">
-          {/* Заголовок */}
           <div className="mb-6">
             <div className="flex items-center gap-3 mb-2">
               <div className="w-12 h-12 bg-gradient-to-br from-yellow-400 to-amber-600 rounded-xl flex items-center justify-center shadow-lg">
@@ -135,11 +145,12 @@ export default function AchievementsModal({ isOpen, onClose, stats }: Achievemen
               </div>
             </div>
 
-            {/* Общий прогресс */}
             <div className="mt-4 bg-neutral-800 rounded-xl p-4">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm font-medium text-white">Общий прогресс</span>
-                <span className="text-sm font-bold text-yellow-400">{totalLevels} / {maxLevels} уровней</span>
+                <span className="text-sm font-bold text-yellow-400">
+                  {totalLevels} / {maxLevels} уровней
+                </span>
               </div>
               <div className="w-full h-3 bg-neutral-700 rounded-full overflow-hidden">
                 <div
@@ -151,7 +162,6 @@ export default function AchievementsModal({ isOpen, onClose, stats }: Achievemen
             </div>
           </div>
 
-          {/* Сетка достижений */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {ACHIEVEMENTS.map((achievement) => {
               const value = achievement.getValue(stats);
@@ -174,10 +184,7 @@ export default function AchievementsModal({ isOpen, onClose, stats }: Achievemen
                       className="w-10 h-10 rounded-lg flex items-center justify-center"
                       style={{ backgroundColor: levelData.color + '20' }}
                     >
-                      <Icon
-                        className="w-5 h-5"
-                        style={{ color: levelData.color }}
-                      />
+                      <Icon className="w-5 h-5" style={{ color: levelData.color }} />
                     </div>
                     <div className="text-right">
                       <div className="text-xs font-bold" style={{ color: levelData.color }}>
@@ -196,14 +203,10 @@ export default function AchievementsModal({ isOpen, onClose, stats }: Achievemen
                     {achievement.description}
                   </div>
 
-                  {/* Прогресс-бар */}
                   <div className="w-full h-1.5 bg-neutral-700 rounded-full overflow-hidden">
                     <div
                       className="h-full rounded-full transition-all duration-500"
-                      style={{
-                        width: `${progress}%`,
-                        backgroundColor: levelData.color,
-                      }}
+                      style={{ width: `${progress}%`, backgroundColor: levelData.color }}
                     />
                   </div>
                   <div className="text-[10px] text-neutral-500 mt-1">
@@ -214,7 +217,6 @@ export default function AchievementsModal({ isOpen, onClose, stats }: Achievemen
             })}
           </div>
 
-          {/* Легенда уровней */}
           <div className="mt-6 pt-6 border-t border-neutral-800">
             <h3 className="text-sm font-medium text-white mb-3">Уровни достижений</h3>
             <div className="flex flex-wrap gap-2">
@@ -223,10 +225,7 @@ export default function AchievementsModal({ isOpen, onClose, stats }: Achievemen
                   key={lvl.level}
                   className="flex items-center gap-1.5 px-2 py-1 bg-neutral-800 rounded-lg"
                 >
-                  <div
-                    className="w-3 h-3 rounded-full"
-                    style={{ backgroundColor: lvl.color }}
-                  />
+                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: lvl.color }} />
                   <span className="text-xs text-neutral-400">Ур. {lvl.level}</span>
                 </div>
               ))}
@@ -235,7 +234,6 @@ export default function AchievementsModal({ isOpen, onClose, stats }: Achievemen
         </div>
       </div>
 
-      {/* Детали достижения */}
       {selectedAchievement && (
         <div
           className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] flex items-center justify-center p-4"
@@ -254,7 +252,10 @@ export default function AchievementsModal({ isOpen, onClose, stats }: Achievemen
 
             {(() => {
               const value = selectedAchievement.getValue(stats);
-              const { level, progress, nextThreshold } = getAchievementLevel(selectedAchievement.thresholds, value);
+              const { level, progress, nextThreshold } = getAchievementLevel(
+                selectedAchievement.thresholds,
+                value,
+              );
               const levelData = ACHIEVEMENT_LEVELS[level - 1] || ACHIEVEMENT_LEVELS[0];
               const Icon = iconMap[selectedAchievement.icon] || Trophy;
               const isMaxLevel = level === 10;
@@ -275,7 +276,13 @@ export default function AchievementsModal({ isOpen, onClose, stats }: Achievemen
                       <h2 className="text-xl font-bold text-white">{selectedAchievement.title}</h2>
                       <p className="text-sm text-neutral-400">{selectedAchievement.description}</p>
                       <div className="mt-1 flex items-center gap-2">
-                        <span className="text-xs font-bold px-2 py-0.5 rounded" style={{ backgroundColor: levelData.color + '20', color: levelData.color }}>
+                        <span
+                          className="text-xs font-bold px-2 py-0.5 rounded"
+                          style={{
+                            backgroundColor: levelData.color + '20',
+                            color: levelData.color,
+                          }}
+                        >
                           Уровень {level}
                         </span>
                         {isMaxLevel && (
@@ -290,21 +297,21 @@ export default function AchievementsModal({ isOpen, onClose, stats }: Achievemen
                   <div className="bg-neutral-800 rounded-xl p-4 mb-4">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-sm text-neutral-400">Прогресс</span>
-                      <span className="text-sm font-bold text-white">{value} {isMaxLevel ? '(макс.)' : `/ ${nextThreshold}`}</span>
+                      <span className="text-sm font-bold text-white">
+                        {value} {isMaxLevel ? '(макс.)' : `/ ${nextThreshold}`}
+                      </span>
                     </div>
                     <div className="w-full h-3 bg-neutral-700 rounded-full overflow-hidden">
                       <div
                         className="h-full rounded-full transition-all duration-500"
-                        style={{
-                          width: `${progress}%`,
-                          backgroundColor: levelData.color,
-                        }}
+                        style={{ width: `${progress}%`, backgroundColor: levelData.color }}
                       />
                     </div>
-                    <div className="text-xs text-neutral-500 mt-1">{Math.round(progress)}% до следующего уровня</div>
+                    <div className="text-xs text-neutral-500 mt-1">
+                      {Math.round(progress)}% до следующего уровня
+                    </div>
                   </div>
 
-                  {/* Все уровни */}
                   <div>
                     <h3 className="text-sm font-medium text-white mb-3">Все уровни</h3>
                     <div className="space-y-2">
@@ -324,22 +331,28 @@ export default function AchievementsModal({ isOpen, onClose, stats }: Achievemen
                             <div
                               className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
                               style={{
-                                backgroundColor: isUnlocked ? lvlData.color + '20' : 'rgba(115,115,115,0.1)',
+                                backgroundColor: isUnlocked
+                                  ? lvlData.color + '20'
+                                  : 'rgba(115,115,115,0.1)',
                                 opacity: isUnlocked ? 1 : 0.4,
                               }}
                             >
-                              <span className="text-xs font-bold" style={{ color: isUnlocked ? lvlData.color : '#737373' }}>
+                              <span
+                                className="text-xs font-bold"
+                                style={{ color: isUnlocked ? lvlData.color : '#737373' }}
+                              >
                                 {lvl}
                               </span>
                             </div>
                             <div className="flex-1 min-w-0">
                               <div className="text-xs font-medium text-white">Уровень {lvl}</div>
-                              <div className="text-[10px] text-neutral-500">{threshold} {selectedAchievement.description.toLowerCase()}</div>
+                              <div className="text-[10px] text-neutral-500">
+                                {threshold} {selectedAchievement.description.toLowerCase()}
+                              </div>
                             </div>
-                            {isUnlocked && (
+                            {isUnlocked ? (
                               <Check className="w-4 h-4 flex-shrink-0" style={{ color: lvlData.color }} />
-                            )}
-                            {!isUnlocked && (
+                            ) : (
                               <Lock className="w-4 h-4 flex-shrink-0 text-neutral-600" />
                             )}
                           </div>

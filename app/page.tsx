@@ -1,6 +1,10 @@
 'use client';
 
-import { Search, Filter, X, Star, Clock, MessageSquare, Trophy, TrendingUp, Zap, Loader2, Lock, Check, Heart, Gamepad, Monitor, Save, ChevronDown, ChevronUp, XCircle, Award } from 'lucide-react';
+import {
+  Search, Filter, X, Clock, MessageSquare, Trophy, TrendingUp,
+  Zap, Loader2, Lock, Check, Heart, Gamepad, Monitor, Save,
+  ChevronDown, ChevronUp, XCircle, Award,
+} from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { Game, GameData, XP_RULES, calculateLevel, UserProfile } from '@/types/game';
 import { mapRawgGame, RawgGame } from '@/lib/rawg';
@@ -20,8 +24,6 @@ const genres = [
   { id: '11', name: 'Sports' },
   { id: '40', name: 'Indie' },
 ];
-
-const platforms = ['Все', 'PC', 'PS5', 'Xbox', 'Switch'];
 
 function getRatingColor(rating: number): string {
   if (rating >= 8) return 'text-emerald-400';
@@ -47,8 +49,9 @@ function getMetacriticColor(score: number): string {
 export default function Home() {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
+  const suggestionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const [selectedGenre, setSelectedGenre] = useState('');
-  const [selectedPlatform, setSelectedPlatform] = useState('Все');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchInput, setSearchInput] = useState('');
   const [searchMode, setSearchMode] = useState<'browse' | 'results'>('browse');
@@ -66,8 +69,8 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
-  const [suggestionTimeout, setSuggestionTimeout] = useState<NodeJS.Timeout | null>(null);
   const [authUser, setAuthUser] = useState<any>(null);
+  const [userGames, setUserGames] = useState<Map<number, GameData>>(new Map());
   const [profile, setProfile] = useState<UserProfile>({
     nickname: '',
     xp: 0,
@@ -85,27 +88,53 @@ export default function Home() {
   const levelInfo = calculateLevel(profile.xp);
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
+    let cancelled = false;
+
+    const loadUserData = async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const user = session?.user ?? null;
+      if (cancelled) return;
       setAuthUser(user);
-      if (user) {
-        supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', user.id)
-          .single()
-          .then(({ data }) => {
-            if (data) {
-              setProfile({
-                nickname: data.nickname || user.email?.split('@')[0] || 'Игрок',
-                xp: data.xp || 0,
-                totalGames: data.total_games || 0,
-                completedGames: data.completed_games || 0,
-                totalHours: data.total_hours || 0,
-              });
-            }
-          });
+      if (!user) return;
+
+      const [profileRes, gamesRes] = await Promise.all([
+        supabase.from('profiles').select('*').eq('id', user.id).single(),
+        supabase.from('user_games').select('*').eq('user_id', user.id),
+      ]);
+      if (cancelled) return;
+
+      if (profileRes.data) {
+        const p = profileRes.data;
+        setProfile({
+          nickname: p.nickname || user.email?.split('@')[0] || 'Игрок',
+          xp: p.xp || 0,
+          totalGames: p.total_games || 0,
+          completedGames: p.completed_games || 0,
+          totalHours: p.total_hours || 0,
+        });
       }
-    });
+
+      if (gamesRes.data) {
+        const map = new Map<number, GameData>();
+        gamesRes.data.forEach((g) => {
+          map.set(g.game_id, {
+            rating: g.rating || 0,
+            hours: g.hours || 0,
+            review: g.review || '',
+            status: g.status || 'none',
+            xp: 0,
+          });
+        });
+        setUserGames(map);
+      }
+    };
+
+    loadUserData();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const loadGames = async (pageNum: number, append: boolean = false) => {
@@ -117,7 +146,7 @@ export default function Home() {
       const data = await response.json();
       if (data.results) {
         const mappedGames = data.results.map((g: RawgGame) => mapRawgGame(g));
-        setGames(append ? [...games, ...mappedGames] : mappedGames);
+        setGames((prev) => (append ? [...prev, ...mappedGames] : mappedGames));
         setHasMore(data.next !== null);
       }
     } catch (error) {
@@ -128,13 +157,13 @@ export default function Home() {
 
   const handleInputChange = (value: string) => {
     setSearchInput(value);
-    if (suggestionTimeout) clearTimeout(suggestionTimeout);
+    if (suggestionTimeoutRef.current) clearTimeout(suggestionTimeoutRef.current);
     if (value.length < 2) {
       setSuggestions([]);
       setShowSuggestions(false);
       return;
     }
-    const timeout = setTimeout(async () => {
+    suggestionTimeoutRef.current = setTimeout(async () => {
       try {
         const response = await fetch(`/api/games/search?search=${encodeURIComponent(value)}`);
         const data = await response.json();
@@ -147,7 +176,6 @@ export default function Home() {
         console.error('Ошибка подсказок:', error);
       }
     }, 300);
-    setSuggestionTimeout(timeout);
   };
 
   const handleSearchSubmit = async (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -157,7 +185,9 @@ export default function Home() {
       setSearchMode('results');
       setLoading(true);
       try {
-        const response = await fetch(`/api/games/search?search=${encodeURIComponent(searchInput.trim())}`);
+        const response = await fetch(
+          `/api/games/search?search=${encodeURIComponent(searchInput.trim())}`,
+        );
         const data = await response.json();
         if (data.results) {
           const mappedGames = data.results.map((g: RawgGame) => mapRawgGame(g));
@@ -197,6 +227,7 @@ export default function Home() {
     setSearchMode('browse');
     setSuggestions([]);
     setShowSuggestions(false);
+    setPage(1);
     loadGames(1);
   };
 
@@ -222,11 +253,7 @@ export default function Home() {
   }, [selectedGenre, sortBy, searchMode]);
 
   const addXp = async (amount: number) => {
-    setProfile((prev) => {
-      const newProfile = { ...prev, xp: prev.xp + amount };
-      localStorage.setItem('user_profile', JSON.stringify(newProfile));
-      return newProfile;
-    });
+    setProfile((prev) => ({ ...prev, xp: prev.xp + amount }));
     setXpGain(amount);
     setTimeout(() => setXpGain(null), 2000);
     if (authUser) {
@@ -283,9 +310,9 @@ export default function Home() {
     setScreenshotsLoaded(false);
     setTranslating(false);
     setDescriptionRu(null);
-    const savedData = localStorage.getItem(`game_${game.id}`);
-    if (savedData) {
-      const data: GameData = JSON.parse(savedData);
+
+    const data = userGames.get(game.id);
+    if (data) {
       setUserRating(data.rating || 0);
       setUserHours(data.hours || 0);
       setReview(data.review || '');
@@ -296,6 +323,7 @@ export default function Home() {
       setReview('');
       setGameStatus('none');
     }
+
     try {
       const response = await fetch(`/api/games/${game.id}?full=true`);
       if (response.ok) {
@@ -320,6 +348,42 @@ export default function Home() {
     setDescriptionRu(null);
   };
 
+  const saveData = async (
+    newRating: number,
+    newHours: number,
+    newReview: string,
+    newStatus: 'none' | 'want' | 'playing' | 'completed' | 'dropped',
+  ) => {
+    if (!selectedGame || !authUser) return;
+
+    await supabase.from('user_games').upsert(
+      {
+        user_id: authUser.id,
+        game_id: selectedGame.id,
+        rating: newRating,
+        hours: newHours,
+        review: newReview,
+        status: newStatus,
+      },
+      { onConflict: 'user_id,game_id' },
+    );
+
+    setUserGames((prev) => {
+      const newMap = new Map(prev);
+      newMap.set(selectedGame.id, {
+        rating: newRating,
+        hours: newHours,
+        review: newReview,
+        status: newStatus,
+        xp: 0,
+      });
+      return newMap;
+    });
+
+    setSaved(true);
+    setTimeout(() => setSaved(false), 1500);
+  };
+
   const saveAndClose = async () => {
     if (!selectedGame) return;
     await saveData(userRating, userHours, review, gameStatus);
@@ -329,40 +393,6 @@ export default function Home() {
     if (userRating > 0) addXp(XP_RULES.RATE);
     if (review.length > 10) addXp(XP_RULES.REVIEW);
     closeGame();
-  };
-
-  const saveData = async (
-    newRating: number,
-    newHours: number,
-    newReview: string,
-    newStatus: 'none' | 'want' | 'playing' | 'completed' | 'dropped'
-  ) => {
-    if (!selectedGame) return;
-    const data: GameData = {
-      rating: newRating,
-      hours: newHours,
-      review: newReview,
-      status: newStatus,
-      xp: 0,
-    };
-    localStorage.setItem(`game_${selectedGame.id}`, JSON.stringify(data));
-    setSaved(true);
-    setTimeout(() => setSaved(false), 1500);
-    if (authUser) {
-      await supabase
-        .from('user_games')
-        .upsert(
-          {
-            user_id: authUser.id,
-            game_id: selectedGame.id,
-            rating: newRating,
-            hours: newHours,
-            review: newReview,
-            status: newStatus,
-          },
-          { onConflict: 'user_id,game_id' }
-        );
-    }
   };
 
   const loadMore = () => {
@@ -376,15 +406,19 @@ export default function Home() {
       <Header
         profile={profile}
         levelInfo={levelInfo}
+        userId={authUser?.id}
+        onProfileUpdate={(updated) => setProfile((prev) => ({ ...prev, ...updated }))}
         achievementsStats={{
-          total: games.length,
-          completed: 0,
-          playing: 0,
-          want: 0,
-          dropped: 0,
-          totalHours: 0,
-          ratedGames: 0,
-          reviewsCount: 0,
+          total: userGames.size,
+          completed: Array.from(userGames.values()).filter((d) => d.status === 'completed').length,
+          playing: Array.from(userGames.values()).filter((d) => d.status === 'playing').length,
+          want: Array.from(userGames.values()).filter((d) => d.status === 'want').length,
+          dropped: Array.from(userGames.values()).filter((d) => d.status === 'dropped').length,
+          totalHours: Array.from(userGames.values()).reduce((s, d) => s + (d.hours || 0), 0),
+          ratedGames: Array.from(userGames.values()).filter((d) => d.rating > 0).length,
+          reviewsCount: Array.from(userGames.values()).filter(
+            (d) => d.review && d.review.length > 0,
+          ).length,
         }}
       />
       {xpGain && (
@@ -463,7 +497,7 @@ export default function Home() {
                 <div className="flex items-center gap-2">
                   <Filter className="w-4 h-4 text-neutral-400" />
                   <h2 className="font-semibold text-white">Фильтры</h2>
-                  {(selectedGenre || selectedPlatform !== 'Все') && (
+                  {selectedGenre && (
                     <span className="text-xs bg-indigo-500 text-white px-2 py-0.5 rounded-full">
                       Активно
                     </span>
@@ -498,41 +532,23 @@ export default function Home() {
                       ))}
                     </div>
                   </div>
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-4 border-t border-neutral-800">
-                    <div>
-                      <label className="text-xs font-medium text-neutral-400 mb-2 block">Платформа</label>
-                      <div className="flex flex-wrap gap-2">
-                        {platforms.map((platform) => (
-                          <button
-                            key={platform}
-                            onClick={() => setSelectedPlatform(platform)}
-                            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
-                              selectedPlatform === platform
-                                ? 'bg-indigo-500 text-white'
-                                : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'
-                            }`}
-                          >
-                            {platform}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <div>
-                      <label className="text-xs font-medium text-neutral-400 mb-2 block">Сортировка</label>
-                      <select
-                        value={sortBy}
-                        onChange={(e) => {
-                          setSortBy(e.target.value);
-                          setPage(1);
-                        }}
-                        className="px-3 py-1.5 bg-neutral-800 border-0 rounded-lg text-sm text-neutral-300 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      >
-                        <option value="-added">Популярность</option>
-                        <option value="-rating">Рейтинг</option>
-                        <option value="-released">Дата выхода</option>
-                        <option value="-metacritic">Metacritic</option>
-                      </select>
-                    </div>
+                  <div className="pt-4 border-t border-neutral-800">
+                    <label className="text-xs font-medium text-neutral-400 mb-2 block">
+                      Сортировка
+                    </label>
+                    <select
+                      value={sortBy}
+                      onChange={(e) => {
+                        setSortBy(e.target.value);
+                        setPage(1);
+                      }}
+                      className="px-3 py-1.5 bg-neutral-800 border-0 rounded-lg text-sm text-neutral-300 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    >
+                      <option value="-added">Популярность</option>
+                      <option value="-rating">Рейтинг</option>
+                      <option value="-released">Дата выхода</option>
+                      <option value="-metacritic">Metacritic</option>
+                    </select>
                   </div>
                 </div>
               )}
@@ -559,18 +575,15 @@ export default function Home() {
             ) : (
               <>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                  {games.map((game) => {
-                    const savedData = localStorage.getItem(`game_${game.id}`);
-                    const userData: GameData | null = savedData ? JSON.parse(savedData) : null;
-                    return (
-                      <GameCard
-                        key={game.id}
-                        game={game}
-                        onClick={() => openGame(game)}
-                        userGameData={userData || undefined}
-                      />
-                    );
-                  })}
+                  {games.map((game) => (
+                    <GameCard
+                      key={game.id}
+                      game={game}
+                      onClick={() => openGame(game)}
+                      userGameData={userGames.get(game.id)}
+                      isAuthenticated={!!authUser}
+                    />
+                  ))}
                 </div>
                 {hasMore && searchMode === 'browse' && (
                   <div className="text-center mt-8">
@@ -615,16 +628,23 @@ export default function Home() {
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
                   {selectedGame.metacritic && selectedGame.metacritic > 0 && (
-                    <div className={`absolute top-4 right-4 ${getMetacriticColor(selectedGame.metacritic)} px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-lg`}>
+                    <div
+                      className={`absolute top-4 right-4 ${getMetacriticColor(selectedGame.metacritic)} px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-lg`}
+                    >
                       <span className="text-sm font-bold">{selectedGame.metacritic}</span>
                       <span className="text-[10px] opacity-70">MC</span>
                     </div>
                   )}
                   <div className="absolute bottom-4 left-4 right-4">
-                    <h1 className="text-3xl font-bold text-white drop-shadow-lg">{selectedGame.title}</h1>
+                    <h1 className="text-3xl font-bold text-white drop-shadow-lg">
+                      {selectedGame.title}
+                    </h1>
                     <div className="flex flex-wrap gap-2 mt-2">
                       {selectedGame.genres?.map((g) => (
-                        <span key={g.id} className="px-2 py-1 bg-white/20 backdrop-blur-sm text-white rounded text-xs font-medium">
+                        <span
+                          key={g.id}
+                          className="px-2 py-1 bg-white/20 backdrop-blur-sm text-white rounded text-xs font-medium"
+                        >
                           {g.name}
                         </span>
                       ))}
@@ -639,7 +659,9 @@ export default function Home() {
               {/* Оценки */}
               <div className="flex flex-wrap gap-2 mb-6">
                 {selectedGame.metacritic && selectedGame.metacritic > 0 && (
-                  <span className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium ${getMetacriticColor(selectedGame.metacritic)}`}>
+                  <span
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium ${getMetacriticColor(selectedGame.metacritic)}`}
+                  >
                     <Award className="w-4 h-4" />
                     <span>{selectedGame.metacritic}</span>
                     <span className="text-[10px] opacity-70">Metacritic</span>
@@ -689,7 +711,9 @@ export default function Home() {
                   </div>
                 ) : (
                   <div>
-                    <p className="text-neutral-400 leading-relaxed mb-4 line-clamp-3">{selectedGame.description}</p>
+                    <p className="text-neutral-400 leading-relaxed mb-4 line-clamp-3">
+                      {selectedGame.description}
+                    </p>
                     <button
                       onClick={() => {
                         if (selectedGame?.descriptionRaw) {
@@ -733,7 +757,8 @@ export default function Home() {
               ) : selectedGame.screenshots && selectedGame.screenshots.length > 0 ? (
                 <div className="mb-6">
                   <h3 className="text-sm font-medium text-neutral-400 mb-3 flex items-center gap-2">
-                    <Monitor className="w-4 h-4 text-indigo-500" /> Скриншоты ({selectedGame.screenshots.length})
+                    <Monitor className="w-4 h-4 text-indigo-500" /> Скриншоты (
+                    {selectedGame.screenshots.length})
                   </h3>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                     {selectedGame.screenshots.map((shot) => (
@@ -814,7 +839,10 @@ export default function Home() {
                 <div className="bg-neutral-800 rounded-xl p-6 mb-6 text-center">
                   <Lock className="w-8 h-8 text-neutral-500 mx-auto mb-2" />
                   <p className="text-neutral-400 mb-3">Войди, чтобы добавлять игры в список</p>
-                  <a href="/auth" className="inline-block px-4 py-2 bg-indigo-500 text-white rounded-lg text-sm font-medium hover:bg-indigo-600 transition">
+                  <a
+                    href="/auth"
+                    className="inline-block px-4 py-2 bg-indigo-500 text-white rounded-lg text-sm font-medium hover:bg-indigo-600 transition"
+                  >
                     Войти
                   </a>
                 </div>
@@ -838,10 +866,7 @@ export default function Home() {
                       max="10"
                       step="1"
                       value={userRating}
-                      onChange={(e) => {
-                        const v = parseInt(e.target.value);
-                        setUserRating(v);
-                      }}
+                      onChange={(e) => setUserRating(parseInt(e.target.value))}
                       className="w-full h-2 rounded-full appearance-none cursor-pointer"
                       style={{
                         background: `linear-gradient(to right, ${getSliderColor(userRating)} 0%, ${getSliderColor(userRating)} ${userRating * 10}%, #404040 ${userRating * 10}%, #404040 100%)`,
@@ -849,13 +874,14 @@ export default function Home() {
                     />
                     <div className="flex justify-between text-xs text-neutral-500 mt-2">
                       <span>0</span><span>1</span><span>2</span><span>3</span><span>4</span>
-                      <span>5</span><span>6</span><span>7</span><span>8</span><span>9</span><span>10</span>
+                      <span>5</span><span>6</span><span>7</span><span>8</span><span>9</span>
+                      <span>10</span>
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* Часы (ОБНОВЛЕНО: добавлена плашка со средним временем) */}
+              {/* Часы */}
               {authUser && (
                 <div className="bg-neutral-800 rounded-xl p-5 mb-6">
                   <div className="flex items-center justify-between mb-3">
@@ -864,7 +890,7 @@ export default function Home() {
                     </h3>
                     {selectedGame.playtime && (
                       <span className="text-xs text-neutral-400 bg-neutral-900/50 px-2.5 py-1 rounded-md border border-neutral-700 flex items-center gap-1.5">
-                        <span className="text-indigo-400">⏱</span> 
+                        <span className="text-indigo-400">⏱</span>
                         Среднее время игроков: ~{selectedGame.playtime} ч.
                       </span>
                     )}
