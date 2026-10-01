@@ -1,9 +1,9 @@
-// types/game.ts
 export interface Game {
   id: number;
   title: string;
   cover: string;
   year: number;
+  released?: string; // ISO дата YYYY-MM-DD
   rating: number;
   genre: string;
   genres?: { id: number; name: string }[];
@@ -28,6 +28,7 @@ export interface GameData {
 
 export interface UserProfile {
   nickname: string;
+  avatarUrl?: string;
   xp: number;
   totalGames: number;
   completedGames: number;

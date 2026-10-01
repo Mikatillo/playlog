@@ -1,4 +1,3 @@
-// lib/rawg.ts
 import type { Game } from '@/types/game';
 
 export interface RawgGame {
@@ -28,6 +27,7 @@ export function mapRawgGame(raw: RawgGame): Game {
     title: raw.name,
     cover: raw.background_image,
     year: Number(raw.released?.split('-')[0]) || 0,
+    released: raw.released || undefined,
     rating: Math.round(raw.rating * 10) / 10,
     genre: raw.genres?.[0]?.name || 'Неизвестно',
     genres: raw.genres || [],

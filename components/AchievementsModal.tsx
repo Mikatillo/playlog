@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   X, Gamepad, Check, Trophy, Star, Clock,
   Flame, Crown, Lock, TrendingUp, BookOpen,
@@ -110,8 +110,28 @@ const ACHIEVEMENTS: AchievementDef[] = [
   },
 ];
 
-export default function AchievementsModal({ isOpen, onClose, stats }: AchievementsModalProps) {
+export default function AchievementsModal({
+  isOpen,
+  onClose,
+  stats,
+}: AchievementsModalProps) {
   const [selectedAchievement, setSelectedAchievement] = useState<AchievementDef | null>(null);
+
+  // Escape закрывает сначала детали, потом саму модалку
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (selectedAchievement) {
+          setSelectedAchievement(null);
+        } else {
+          onClose();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleEsc);
+    return () => window.removeEventListener('keydown', handleEsc);
+  }, [isOpen, selectedAchievement, onClose]);
 
   if (!isOpen) return null;
 
@@ -134,6 +154,7 @@ export default function AchievementsModal({ isOpen, onClose, stats }: Achievemen
         </button>
 
         <div className="p-8">
+          {/* Заголовок */}
           <div className="mb-6">
             <div className="flex items-center gap-3 mb-2">
               <div className="w-12 h-12 bg-gradient-to-br from-yellow-400 to-amber-600 rounded-xl flex items-center justify-center shadow-lg">
@@ -145,6 +166,7 @@ export default function AchievementsModal({ isOpen, onClose, stats }: Achievemen
               </div>
             </div>
 
+            {/* Общий прогресс */}
             <div className="mt-4 bg-neutral-800 rounded-xl p-4">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm font-medium text-white">Общий прогресс</span>
@@ -162,10 +184,14 @@ export default function AchievementsModal({ isOpen, onClose, stats }: Achievemen
             </div>
           </div>
 
+          {/* Сетка достижений */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {ACHIEVEMENTS.map((achievement) => {
               const value = achievement.getValue(stats);
-              const { level, progress, nextThreshold } = getAchievementLevel(achievement.thresholds, value);
+              const { level, progress, nextThreshold } = getAchievementLevel(
+                achievement.thresholds,
+                value,
+              );
               const levelData = ACHIEVEMENT_LEVELS[level - 1] || ACHIEVEMENT_LEVELS[0];
               const Icon = iconMap[achievement.icon] || Trophy;
               const isMaxLevel = level === 10;
@@ -206,7 +232,10 @@ export default function AchievementsModal({ isOpen, onClose, stats }: Achievemen
                   <div className="w-full h-1.5 bg-neutral-700 rounded-full overflow-hidden">
                     <div
                       className="h-full rounded-full transition-all duration-500"
-                      style={{ width: `${progress}%`, backgroundColor: levelData.color }}
+                      style={{
+                        width: `${progress}%`,
+                        backgroundColor: levelData.color,
+                      }}
                     />
                   </div>
                   <div className="text-[10px] text-neutral-500 mt-1">
@@ -217,6 +246,7 @@ export default function AchievementsModal({ isOpen, onClose, stats }: Achievemen
             })}
           </div>
 
+          {/* Легенда уровней */}
           <div className="mt-6 pt-6 border-t border-neutral-800">
             <h3 className="text-sm font-medium text-white mb-3">Уровни достижений</h3>
             <div className="flex flex-wrap gap-2">
@@ -234,6 +264,7 @@ export default function AchievementsModal({ isOpen, onClose, stats }: Achievemen
         </div>
       </div>
 
+      {/* Детали достижения */}
       {selectedAchievement && (
         <div
           className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] flex items-center justify-center p-4"
@@ -273,8 +304,12 @@ export default function AchievementsModal({ isOpen, onClose, stats }: Achievemen
                       <Icon className="w-8 h-8" style={{ color: levelData.color }} />
                     </div>
                     <div>
-                      <h2 className="text-xl font-bold text-white">{selectedAchievement.title}</h2>
-                      <p className="text-sm text-neutral-400">{selectedAchievement.description}</p>
+                      <h2 className="text-xl font-bold text-white">
+                        {selectedAchievement.title}
+                      </h2>
+                      <p className="text-sm text-neutral-400">
+                        {selectedAchievement.description}
+                      </p>
                       <div className="mt-1 flex items-center gap-2">
                         <span
                           className="text-xs font-bold px-2 py-0.5 rounded"
@@ -304,7 +339,10 @@ export default function AchievementsModal({ isOpen, onClose, stats }: Achievemen
                     <div className="w-full h-3 bg-neutral-700 rounded-full overflow-hidden">
                       <div
                         className="h-full rounded-full transition-all duration-500"
-                        style={{ width: `${progress}%`, backgroundColor: levelData.color }}
+                        style={{
+                          width: `${progress}%`,
+                          backgroundColor: levelData.color,
+                        }}
                       />
                     </div>
                     <div className="text-xs text-neutral-500 mt-1">
@@ -312,6 +350,7 @@ export default function AchievementsModal({ isOpen, onClose, stats }: Achievemen
                     </div>
                   </div>
 
+                  {/* Все уровни */}
                   <div>
                     <h3 className="text-sm font-medium text-white mb-3">Все уровни</h3>
                     <div className="space-y-2">
@@ -345,13 +384,18 @@ export default function AchievementsModal({ isOpen, onClose, stats }: Achievemen
                               </span>
                             </div>
                             <div className="flex-1 min-w-0">
-                              <div className="text-xs font-medium text-white">Уровень {lvl}</div>
+                              <div className="text-xs font-medium text-white">
+                                Уровень {lvl}
+                              </div>
                               <div className="text-[10px] text-neutral-500">
                                 {threshold} {selectedAchievement.description.toLowerCase()}
                               </div>
                             </div>
                             {isUnlocked ? (
-                              <Check className="w-4 h-4 flex-shrink-0" style={{ color: lvlData.color }} />
+                              <Check
+                                className="w-4 h-4 flex-shrink-0"
+                                style={{ color: lvlData.color }}
+                              />
                             ) : (
                               <Lock className="w-4 h-4 flex-shrink-0 text-neutral-600" />
                             )}

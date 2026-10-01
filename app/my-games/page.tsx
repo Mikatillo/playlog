@@ -2,15 +2,22 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import {
-  Heart, Gamepad, Check, Trophy, Star, Clock, Award, Loader2, Lock,
-  X, MessageSquare, Monitor, Trash2, AlertTriangle, XCircle,
-  ChevronDown, ChevronUp, Filter, SortAsc, SortDesc,
+  Heart, Gamepad, Check, Trophy, Star, Clock,
+  Loader2, Lock, X, MessageSquare, Trash2, AlertTriangle, XCircle,
+  ChevronDown, ChevronUp, Compass, ArrowUpDown, Filter,
 } from 'lucide-react';
-import { Game, GameData, calculateLevel } from '@/types/game';
+import Link from 'next/link';
+import { Game, GameData } from '@/types/game';
 import { mapRawgGame, RawgGame } from '@/lib/rawg';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/contexts/ToastContext';
+import { getRatingColor, getSliderColor } from '@/lib/utils';
 import GameCard from '@/components/GameCard';
-import Header from '@/components/Header';
+import GameCardSkeleton from '@/components/GameCardSkeleton';
+import GameMediaCarousel from '@/components/GameMediaCarousel';
+import SteamRating from '@/components/SteamRating';
+import ReviewsSection from '@/components/ReviewsSection';
 
 type TabType = 'all' | 'want' | 'playing' | 'completed' | 'dropped';
 type SortType =
@@ -21,41 +28,22 @@ type SortType =
   | 'year-asc'
   | 'year-desc';
 
-function getRatingColor(rating: number): string {
-  if (rating >= 8) return 'text-emerald-400';
-  if (rating >= 6) return 'text-yellow-400';
-  if (rating >= 4) return 'text-orange-400';
-  return 'text-red-400';
-}
-
-function getSliderColor(value: number): string {
-  if (value >= 8) return '#10b981';
-  if (value >= 6) return '#eab308';
-  if (value >= 4) return '#f97316';
-  return '#ef4444';
-}
-
-function getMetacriticColor(score: number): string {
-  if (score >= 75) return 'bg-emerald-500/90 text-white';
-  if (score >= 50) return 'bg-yellow-500/90 text-black';
-  if (score >= 25) return 'bg-orange-500/90 text-white';
-  return 'bg-red-500/90 text-white';
-}
+const sortOptions: { value: SortType; label: string }[] = [
+  { value: 'year-desc', label: 'Новые' },
+  { value: 'year-asc', label: 'Старые' },
+  { value: 'rating-desc', label: 'Оценка ↓' },
+  { value: 'rating-asc', label: 'Оценка ↑' },
+  { value: 'hours-desc', label: 'Часы ↓' },
+  { value: 'hours-asc', label: 'Часы ↑' },
+];
 
 export default function MyGamesPage() {
+  const { userId, userGames, setUserGames, loading: authLoading } = useAuth();
+  const { showToast } = useToast();
+
   const [activeTab, setActiveTab] = useState<TabType>('all');
-  const [searchInput, setSearchInput] = useState('');
-  const [userGames, setUserGames] = useState<Map<number, GameData>>(new Map());
   const [games, setGames] = useState<Game[]>([]);
   const [loading, setLoading] = useState(true);
-  const [authUser, setAuthUser] = useState<any>(null);
-  const [profile, setProfile] = useState({
-    nickname: '',
-    xp: 0,
-    totalGames: 0,
-    completedGames: 0,
-    totalHours: 0,
-  });
   const [selectedGame, setSelectedGame] = useState<Game | null>(null);
   const [modalLoading, setModalLoading] = useState(false);
   const [modalRating, setModalRating] = useState(0);
@@ -64,98 +52,85 @@ export default function MyGamesPage() {
   const [modalStatus, setModalStatus] = useState<
     'none' | 'want' | 'playing' | 'completed' | 'dropped'
   >('none');
-  const [saved, setSaved] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [selectedScreenshot, setSelectedScreenshot] = useState<string | null>(null);
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
-  const [filtersOpen, setFiltersOpen] = useState(false);
   const [sortBy, setSortBy] = useState<SortType>('year-desc');
-  const [screenshotsLoaded, setScreenshotsLoaded] = useState(false);
   const [descriptionRu, setDescriptionRu] = useState<string | null>(null);
   const [translating, setTranslating] = useState(false);
 
   useEffect(() => {
+    if (authLoading) return;
+
+    const ids = Array.from(userGames.keys());
+    if (ids.length === 0) {
+      setGames([]);
+      setLoading(false);
+      return;
+    }
+
     let cancelled = false;
 
-    const loadData = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      const user = session?.user ?? null;
+    const loadGames = async () => {
+      setLoading(true);
+      try {
+        const response = await fetch(`/api/games/batch?ids=${ids.join(',')}`);
+        if (cancelled) return;
+        if (response.ok) {
+          const data = await response.json();
+          const mapped = (data.results || []).map((g: RawgGame) => mapRawgGame(g));
+          setGames(mapped);
+        }
+      } catch (error) {
+        console.error('Ошибка загрузки игр:', error);
+      }
       if (cancelled) return;
-      if (!user) {
-        setAuthUser(null);
-        setLoading(false);
-        return;
-      }
-      setAuthUser(user);
-
-      const [profileRes, gamesRes] = await Promise.all([
-        supabase.from('profiles').select('*').eq('id', user.id).single(),
-        supabase.from('user_games').select('*').eq('user_id', user.id),
-      ]);
-      if (cancelled) return;
-
-      if (profileRes.data) {
-        const p = profileRes.data;
-        setProfile({
-          nickname: p.nickname || user.email?.split('@')[0] || 'Игрок',
-          xp: p.xp || 0,
-          totalGames: p.total_games || 0,
-          completedGames: p.completed_games || 0,
-          totalHours: p.total_hours || 0,
-        });
-      }
-
-      if (gamesRes.data && gamesRes.data.length > 0) {
-        const map = new Map<number, GameData>();
-        const ids: number[] = [];
-        gamesRes.data.forEach((g) => {
-          map.set(g.game_id, {
-            rating: g.rating || 0,
-            hours: g.hours || 0,
-            review: g.review || '',
-            status: g.status || 'none',
-            xp: 0,
-          });
-          ids.push(g.game_id);
-        });
-        setUserGames(map);
-        await loadGames(ids);
-      } else {
-        setLoading(false);
-      }
+      setLoading(false);
     };
 
-    loadData();
+    loadGames();
+
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [authLoading, userGames]);
 
-  const loadGames = async (ids: number[]) => {
-    setLoading(true);
-    try {
-      const results = await Promise.all(
-        ids.map(async (id) => {
-          try {
-            const response = await fetch(`/api/games/${id}`);
-            if (response.ok) {
-              const data: RawgGame = await response.json();
-              return mapRawgGame(data);
-            }
-          } catch (err) {
-            console.error(`Ошибка загрузки игры ${id}:`, err);
-          }
-          return null;
-        }),
-      );
-      setGames(results.filter((g): g is Game => g !== null));
-    } catch (error) {
-      console.error('Ошибка загрузки игр:', error);
-    }
-    setLoading(false);
-  };
+  useEffect(() => {
+    if (authLoading || !userId) return;
+    const values = Array.from(userGames.values());
+    const totalGames = userGames.size;
+    const completedGames = values.filter((d) => d.status === 'completed').length;
+    const totalHours = values.reduce((s, d) => s + (d.hours || 0), 0);
+
+    supabase
+      .from('profiles')
+      .update({
+        total_games: totalGames,
+        completed_games: completedGames,
+        total_hours: totalHours,
+      })
+      .eq('id', userId)
+      .then(({ error }) => {
+        if (error) console.error('Profile sync error:', error);
+      });
+  }, [userGames, userId, authLoading]);
+
+  useEffect(() => {
+    if (!selectedGame) return;
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (selectedScreenshot) {
+          setSelectedScreenshot(null);
+        } else if (showDeleteConfirm) {
+          setShowDeleteConfirm(false);
+        } else {
+          closeGame();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleEsc);
+    return () => window.removeEventListener('keydown', handleEsc);
+  }, [selectedGame, selectedScreenshot, showDeleteConfirm]);
 
   const loadFullGameData = async (game: Game): Promise<Game | null> => {
     try {
@@ -203,8 +178,6 @@ export default function MyGamesPage() {
     setTranslating(false);
   };
 
-  const levelInfo = calculateLevel(profile.xp);
-
   const getGameList = (status: 'want' | 'playing' | 'completed' | 'dropped') => {
     return games.filter((game) => {
       const data = userGames.get(game.id);
@@ -218,11 +191,6 @@ export default function MyGamesPage() {
       filtered = games;
     } else {
       filtered = getGameList(activeTab);
-    }
-    if (searchInput) {
-      filtered = filtered.filter((game) =>
-        game.title.toLowerCase().includes(searchInput.toLowerCase()),
-      );
     }
     filtered.sort((a, b) => {
       const dataA = userGames.get(a.id);
@@ -249,7 +217,7 @@ export default function MyGamesPage() {
       }
     });
     return filtered;
-  }, [activeTab, searchInput, games, userGames, sortBy]);
+  }, [activeTab, games, userGames, sortBy]);
 
   const stats = useMemo(() => {
     const completed = getGameList('completed');
@@ -278,12 +246,12 @@ export default function MyGamesPage() {
     };
   }, [userGames, games]);
 
-  const tabs: { id: TabType; label: string; icon: any; count: number }[] = [
-    { id: 'all', label: 'Все', icon: Trophy, count: stats.total },
-    { id: 'want', label: 'Хочу', icon: Heart, count: stats.want },
-    { id: 'playing', label: 'Играю', icon: Gamepad, count: stats.playing },
-    { id: 'completed', label: 'Прошёл', icon: Check, count: stats.completed },
-    { id: 'dropped', label: 'Заброшено', icon: XCircle, count: stats.dropped },
+  const statusOptions: { id: TabType; label: string; count: number }[] = [
+    { id: 'all', label: 'Все игры', count: stats.total },
+    { id: 'want', label: 'Хочу пройти', count: stats.want },
+    { id: 'playing', label: 'Играю', count: stats.playing },
+    { id: 'completed', label: 'Пройдено', count: stats.completed },
+    { id: 'dropped', label: 'Заброшено', count: stats.dropped },
   ];
 
   const openGame = async (game: Game) => {
@@ -291,9 +259,9 @@ export default function MyGamesPage() {
     setModalLoading(true);
     setShowDeleteConfirm(false);
     setDescriptionExpanded(false);
-    setScreenshotsLoaded(false);
     setDescriptionRu(null);
     setTranslating(false);
+    setSelectedScreenshot(null);
     const data = userGames.get(game.id);
     if (data) {
       setModalRating(data.rating || 0);
@@ -309,12 +277,9 @@ export default function MyGamesPage() {
     const fullGame = await loadFullGameData(game);
     if (fullGame) {
       setSelectedGame(fullGame);
-      setScreenshotsLoaded(true);
       if (fullGame.descriptionRaw) {
         translateDescription(fullGame.descriptionRaw, game.id);
       }
-    } else {
-      setScreenshotsLoaded(true);
     }
     setModalLoading(false);
   };
@@ -329,10 +294,10 @@ export default function MyGamesPage() {
   };
 
   const saveModalData = async () => {
-    if (!selectedGame || !authUser) return;
+    if (!selectedGame || !userId) return;
     await supabase.from('user_games').upsert(
       {
-        user_id: authUser.id,
+        user_id: userId,
         game_id: selectedGame.id,
         rating: modalRating,
         hours: modalHours,
@@ -341,6 +306,27 @@ export default function MyGamesPage() {
       },
       { onConflict: 'user_id,game_id' },
     );
+
+    // Публикуем рецензию, если текст достаточно длинный
+    if (modalReview.trim().length >= 20) {
+      try {
+        await fetch('/api/reviews', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId,
+            gameId: selectedGame.id,
+            gameTitle: selectedGame.title,
+            gameCover: selectedGame.cover,
+            rating: modalRating > 0 ? modalRating : null,
+            text: modalReview.trim(),
+          }),
+        });
+      } catch (err) {
+        console.error('Publish review error:', err);
+      }
+    }
+
     setUserGames((prev) => {
       const newMap = new Map(prev);
       newMap.set(selectedGame.id, {
@@ -352,16 +338,41 @@ export default function MyGamesPage() {
       });
       return newMap;
     });
-    setSaved(true);
-    setTimeout(() => setSaved(false), 1500);
+    showToast('Изменения сохранены', 'success');
+  };
+
+  const publishReview = async () => {
+    if (!userId || !selectedGame) return;
+    if (modalReview.trim().length < 20) {
+      showToast('Минимум 20 символов для публикации', 'error');
+      return;
+    }
+    try {
+      await fetch('/api/reviews', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId,
+          gameId: selectedGame.id,
+          gameTitle: selectedGame.title,
+          gameCover: selectedGame.cover,
+          rating: modalRating > 0 ? modalRating : null,
+          text: modalReview.trim(),
+        }),
+      });
+      showToast('Рецензия опубликована', 'success');
+    } catch {
+      showToast('Не удалось опубликовать', 'error');
+    }
   };
 
   const deleteGame = async () => {
-    if (!selectedGame || !authUser) return;
+    if (!selectedGame || !userId) return;
+    const title = selectedGame.title;
     await supabase
       .from('user_games')
       .delete()
-      .eq('user_id', authUser.id)
+      .eq('user_id', userId)
       .eq('game_id', selectedGame.id);
     setUserGames((prev) => {
       const newMap = new Map(prev);
@@ -369,25 +380,25 @@ export default function MyGamesPage() {
       return newMap;
     });
     setGames((prev) => prev.filter((g) => g.id !== selectedGame.id));
+    showToast(`«${title}» удалена из коллекции`, 'info');
     closeGame();
   };
 
-  if (!authUser && !loading) {
+  if (!authLoading && !userId) {
     return (
       <div className="min-h-screen bg-[#0a0a0a]">
-        <Header />
         <div className="max-w-7xl mx-auto px-6 py-20 text-center">
           <Lock className="w-16 h-16 text-neutral-600 mx-auto mb-4" />
           <h1 className="text-2xl font-bold text-white mb-4">Доступ закрыт</h1>
           <p className="text-lg text-neutral-400 mb-6">
             Войди в аккаунт, чтобы видеть свои игры
           </p>
-          <a
+          <Link
             href="/auth"
             className="inline-block bg-indigo-500 text-white font-medium px-6 py-3 rounded-lg hover:bg-indigo-600 transition"
           >
             Войти
-          </a>
+          </Link>
         </div>
       </div>
     );
@@ -395,205 +406,46 @@ export default function MyGamesPage() {
 
   return (
     <div className="min-h-screen bg-[#0a0a0a]">
-      <Header
-        profile={profile}
-        levelInfo={levelInfo}
-        userId={authUser?.id}
-        onProfileUpdate={(updated) => setProfile((prev) => ({ ...prev, ...updated }))}
-        achievementsStats={{
-          total: stats.total,
-          completed: stats.completed,
-          playing: stats.playing,
-          want: stats.want,
-          dropped: stats.dropped,
-          totalHours: stats.totalHours,
-          ratedGames: Array.from(userGames.values()).filter((d) => d.rating > 0).length,
-          reviewsCount: Array.from(userGames.values()).filter(
-            (d) => d.review && d.review.length > 0,
-          ).length,
-        }}
-      />
-      <div className="max-w-7xl mx-auto px-6 py-8">
+      <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-8">
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-white mb-2">Мои игры</h1>
           <p className="text-neutral-400">Твоя личная коллекция</p>
         </div>
 
-        {/* Поиск */}
-        <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-3 mb-6">
-          <input
-            type="text"
-            placeholder="Поиск в моих играх..."
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            className="w-full bg-transparent px-4 py-2 text-white placeholder:text-neutral-500 focus:outline-none"
-          />
-        </div>
-
-        {/* Фильтр */}
-        <div className="bg-neutral-900 rounded-xl border border-neutral-800 overflow-hidden mb-6">
-          <button
-            onClick={() => setFiltersOpen(!filtersOpen)}
-            className="w-full px-5 py-4 flex items-center justify-between hover:bg-neutral-800/50 transition"
-          >
-            <div className="flex items-center gap-2">
-              <Filter className="w-4 h-4 text-neutral-400" />
-              <h2 className="font-semibold text-white">Фильтры</h2>
-              {activeTab !== 'all' && (
-                <span className="text-xs bg-indigo-500 text-white px-2 py-0.5 rounded-full">
-                  {tabs.find((t) => t.id === activeTab)?.label}
-                </span>
-              )}
-              {sortBy !== 'year-desc' && (
-                <span className="text-xs bg-indigo-500 text-white px-2 py-0.5 rounded-full ml-1">
-                  Сортировка
-                </span>
-              )}
-            </div>
-            {filtersOpen ? (
-              <ChevronUp className="w-4 h-4 text-neutral-400" />
-            ) : (
-              <ChevronDown className="w-4 h-4 text-neutral-400" />
-            )}
-          </button>
-          {filtersOpen && (
-            <div className="px-5 pb-5 space-y-4 border-t border-neutral-800 pt-4">
-              <div>
-                <label className="text-xs font-medium text-neutral-400 mb-2 block">
-                  Статус
-                </label>
-                <div className="flex flex-wrap gap-2">
-                  {tabs.map((tab) => {
-                    const Icon = tab.icon;
-                    return (
-                      <button
-                        key={tab.id}
-                        onClick={() => setActiveTab(tab.id)}
-                        className={`px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition ${
-                          activeTab === tab.id
-                            ? 'bg-indigo-500 text-white'
-                            : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'
-                        }`}
-                      >
-                        <Icon className="w-4 h-4" />
-                        {tab.label} ({tab.count})
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-              <div>
-                <label className="text-xs font-medium text-neutral-400 mb-2 block">
-                  Сортировка
-                </label>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  <button
-                    onClick={() => setSortBy('year-desc')}
-                    className={`px-3 py-2 rounded-lg text-sm font-medium transition flex items-center justify-center gap-1.5 ${
-                      sortBy === 'year-desc'
-                        ? 'bg-indigo-500 text-white'
-                        : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'
-                    }`}
-                  >
-                    <SortDesc className="w-3.5 h-3.5" />
-                    Сначала новые
-                  </button>
-                  <button
-                    onClick={() => setSortBy('year-asc')}
-                    className={`px-3 py-2 rounded-lg text-sm font-medium transition flex items-center justify-center gap-1.5 ${
-                      sortBy === 'year-asc'
-                        ? 'bg-indigo-500 text-white'
-                        : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'
-                    }`}
-                  >
-                    <SortAsc className="w-3.5 h-3.5" />
-                    Сначала старые
-                  </button>
-                  <button
-                    onClick={() => setSortBy('rating-desc')}
-                    className={`px-3 py-2 rounded-lg text-sm font-medium transition flex items-center justify-center gap-1.5 ${
-                      sortBy === 'rating-desc'
-                        ? 'bg-indigo-500 text-white'
-                        : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'
-                    }`}
-                  >
-                    <Star className="w-3.5 h-3.5" />
-                    Оценка ↓
-                  </button>
-                  <button
-                    onClick={() => setSortBy('rating-asc')}
-                    className={`px-3 py-2 rounded-lg text-sm font-medium transition flex items-center justify-center gap-1.5 ${
-                      sortBy === 'rating-asc'
-                        ? 'bg-indigo-500 text-white'
-                        : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'
-                    }`}
-                  >
-                    <Star className="w-3.5 h-3.5" />
-                    Оценка ↑
-                  </button>
-                  <button
-                    onClick={() => setSortBy('hours-desc')}
-                    className={`px-3 py-2 rounded-lg text-sm font-medium transition flex items-center justify-center gap-1.5 ${
-                      sortBy === 'hours-desc'
-                        ? 'bg-indigo-500 text-white'
-                        : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'
-                    }`}
-                  >
-                    <Clock className="w-3.5 h-3.5" />
-                    Часы ↓
-                  </button>
-                  <button
-                    onClick={() => setSortBy('hours-asc')}
-                    className={`px-3 py-2 rounded-lg text-sm font-medium transition flex items-center justify-center gap-1.5 ${
-                      sortBy === 'hours-asc'
-                        ? 'bg-indigo-500 text-white'
-                        : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'
-                    }`}
-                  >
-                    <Clock className="w-3.5 h-3.5" />
-                    Часы ↑
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Статистика */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-3 mb-6">
-          <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-4 text-center">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-2 md:gap-3 mb-6">
+          <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-3 md:p-4 text-center">
             <Trophy className="w-5 h-5 text-indigo-500 mx-auto mb-1" />
-            <div className="text-xl font-bold text-white">{stats.total}</div>
+            <div className="text-lg md:text-xl font-bold text-white">{stats.total}</div>
             <div className="text-xs text-neutral-400">Всего</div>
           </div>
-          <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-4 text-center">
+          <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-3 md:p-4 text-center">
             <Check className="w-5 h-5 text-emerald-500 mx-auto mb-1" />
-            <div className="text-xl font-bold text-white">{stats.completed}</div>
+            <div className="text-lg md:text-xl font-bold text-white">{stats.completed}</div>
             <div className="text-xs text-neutral-400">Прошёл</div>
           </div>
-          <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-4 text-center">
+          <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-3 md:p-4 text-center">
             <Gamepad className="w-5 h-5 text-blue-500 mx-auto mb-1" />
-            <div className="text-xl font-bold text-white">{stats.playing}</div>
+            <div className="text-lg md:text-xl font-bold text-white">{stats.playing}</div>
             <div className="text-xs text-neutral-400">Играю</div>
           </div>
-          <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-4 text-center">
+          <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-3 md:p-4 text-center">
             <Heart className="w-5 h-5 text-rose-500 mx-auto mb-1" />
-            <div className="text-xl font-bold text-white">{stats.want}</div>
+            <div className="text-lg md:text-xl font-bold text-white">{stats.want}</div>
             <div className="text-xs text-neutral-400">Хочу</div>
           </div>
-          <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-4 text-center">
+          <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-3 md:p-4 text-center">
             <XCircle className="w-5 h-5 text-neutral-500 mx-auto mb-1" />
-            <div className="text-xl font-bold text-white">{stats.dropped}</div>
+            <div className="text-lg md:text-xl font-bold text-white">{stats.dropped}</div>
             <div className="text-xs text-neutral-400">Заброшено</div>
           </div>
-          <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-4 text-center">
+          <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-3 md:p-4 text-center">
             <Clock className="w-5 h-5 text-purple-500 mx-auto mb-1" />
-            <div className="text-xl font-bold text-white">{stats.totalHours}h</div>
+            <div className="text-lg md:text-xl font-bold text-white">{stats.totalHours}h</div>
             <div className="text-xs text-neutral-400">Часов</div>
           </div>
-          <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-4 text-center">
+          <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-3 md:p-4 text-center">
             <Star className="w-5 h-5 text-yellow-500 mx-auto mb-1" />
-            <div className="text-xl font-bold text-white">
+            <div className="text-lg md:text-xl font-bold text-white">
               {stats.avgRating}
               <span className="text-sm text-neutral-500">/10</span>
             </div>
@@ -601,24 +453,77 @@ export default function MyGamesPage() {
           </div>
         </div>
 
-        {/* Список игр */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+          <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+            <Trophy className="w-5 h-5 text-indigo-500" />
+            {statusOptions.find((s) => s.id === activeTab)?.label}
+            <span className="text-sm font-normal text-neutral-500">
+              ({filteredGames.length})
+            </span>
+          </h2>
+
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1 sm:flex-none">
+              <Filter className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-500 pointer-events-none z-10" />
+              <select
+                value={activeTab}
+                onChange={(e) => setActiveTab(e.target.value as TabType)}
+                className="w-full sm:w-auto appearance-none bg-neutral-900 border border-neutral-800 hover:border-neutral-700 rounded-lg pl-8 pr-7 py-1.5 text-xs md:text-sm font-medium text-neutral-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 cursor-pointer transition"
+              >
+                {statusOptions.map((opt) => (
+                  <option key={opt.id} value={opt.id} className="bg-neutral-900">
+                    {opt.label} ({opt.count})
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-neutral-500 pointer-events-none" />
+            </div>
+
+            <div className="relative flex-1 sm:flex-none">
+              <ArrowUpDown className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-500 pointer-events-none z-10" />
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as SortType)}
+                className="w-full sm:w-auto appearance-none bg-neutral-900 border border-neutral-800 hover:border-neutral-700 rounded-lg pl-8 pr-7 py-1.5 text-xs md:text-sm font-medium text-neutral-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 cursor-pointer transition"
+              >
+                {sortOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value} className="bg-neutral-900">
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-neutral-500 pointer-events-none" />
+            </div>
+          </div>
+        </div>
+
         {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
-            <span className="ml-3 text-neutral-400">Загрузка...</span>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <GameCardSkeleton key={i} />
+            ))}
           </div>
         ) : filteredGames.length === 0 ? (
           <div className="text-center py-20 bg-neutral-900 border border-neutral-800 rounded-xl">
+            <Compass className="w-16 h-16 text-neutral-600 mx-auto mb-4" />
             <p className="text-neutral-400 mb-2">
-              {activeTab === 'all' ? 'Ты ещё не добавил ни одной игры' : 'Список пуст'}
+              {activeTab === 'all'
+                ? 'Ты ещё не добавил ни одной игры'
+                : 'В этой категории пока пусто'}
             </p>
-            <p className="text-sm text-neutral-500">
-              Вернись на главную и добавь игры в список
+            <p className="text-sm text-neutral-500 mb-6">
+              Найди что-нибудь интересное на главной
             </p>
+            <Link
+              href="/"
+              className="inline-block px-6 py-3 bg-indigo-500 hover:bg-indigo-600 text-white font-medium rounded-lg transition"
+            >
+              Найти игры
+            </Link>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {filteredGames.map((game) => {
+            {filteredGames.map((game, idx) => {
               const data = userGames.get(game.id);
               return (
                 <GameCard
@@ -626,7 +531,8 @@ export default function MyGamesPage() {
                   game={game}
                   onClick={() => openGame(game)}
                   userGameData={data}
-                  isAuthenticated={!!authUser}
+                  isAuthenticated={!!userId}
+                  index={idx}
                 />
               );
             })}
@@ -636,19 +542,21 @@ export default function MyGamesPage() {
 
       {/* Модалка игры */}
       {selectedGame && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-neutral-900 rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto relative shadow-2xl border border-neutral-800">
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-start md:items-center justify-center p-0 md:p-4 overflow-y-auto"
+          onClick={closeGame}
+        >
+          <div
+            className="bg-neutral-900 md:rounded-2xl w-full md:max-w-4xl max-h-screen md:max-h-[90vh] overflow-y-auto relative shadow-2xl border-0 md:border border-neutral-800"
+            onClick={(e) => e.stopPropagation()}
+          >
             <button
               onClick={closeGame}
-              className="absolute top-4 right-4 w-10 h-10 bg-neutral-800 hover:bg-neutral-700 rounded-full flex items-center justify-center transition z-10"
+              className="absolute top-3 right-3 w-10 h-10 bg-black/60 hover:bg-black/80 backdrop-blur-sm rounded-full flex items-center justify-center transition z-40"
             >
-              <X className="w-5 h-5 text-neutral-400" />
+              <X className="w-5 h-5 text-white" />
             </button>
-            {saved && (
-              <div className="fixed top-4 right-20 bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm font-medium z-50 shadow-lg">
-                Сохранено!
-              </div>
-            )}
+
             {modalLoading ? (
               <div className="flex items-center justify-center py-20">
                 <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
@@ -682,62 +590,65 @@ export default function MyGamesPage() {
                 </div>
               </div>
             ) : (
-              <div className="p-8">
-                {/* Обложка */}
-                <div className="mb-6">
-                  <div className="relative aspect-video rounded-xl overflow-hidden bg-neutral-800">
-                    <img
-                      src={selectedGame.cover}
-                      alt={selectedGame.title}
-                      className="w-full h-full object-cover"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
-                    {selectedGame.metacritic && selectedGame.metacritic > 0 && (
-                      <div
-                        className={`absolute top-4 right-4 ${getMetacriticColor(selectedGame.metacritic)} px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-lg`}
-                      >
-                        <span className="text-sm font-bold">{selectedGame.metacritic}</span>
-                        <span className="text-[10px] opacity-70">MC</span>
-                      </div>
-                    )}
-                    <div className="absolute bottom-4 left-4 right-4">
-                      <h1 className="text-3xl font-bold text-white drop-shadow-lg">
-                        {selectedGame.title}
-                      </h1>
-                      <div className="flex flex-wrap gap-2 mt-2">
-                        {selectedGame.genres?.map((g) => (
-                          <span
-                            key={g.id}
-                            className="px-2 py-1 bg-white/20 backdrop-blur-sm text-white rounded text-xs font-medium"
-                          >
-                            {g.name}
-                          </span>
-                        ))}
-                        <span className="px-2 py-1 bg-white/20 backdrop-blur-sm text-white rounded text-xs font-medium">
-                          {selectedGame.year}
-                        </span>
-                      </div>
-                    </div>
+              <div className="p-4 md:p-6 lg:p-8 space-y-4 md:space-y-6">
+                <GameMediaCarousel
+                  game={selectedGame}
+                  onScreenshotClick={setSelectedScreenshot}
+                  steamBadge={<SteamRating gameTitle={selectedGame.title} variant="badge" />}
+                />
+
+                <div className="bg-neutral-800/70 rounded-xl p-3 md:p-4">
+                  <div className="grid grid-cols-4 gap-1.5 md:gap-2">
+                    <button
+                      onClick={() => setModalStatus('want')}
+                      className={`px-2 py-2.5 md:py-3 rounded-lg text-xs md:text-sm font-medium transition flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 ${
+                        modalStatus === 'want'
+                          ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/20'
+                          : 'bg-neutral-900 border border-neutral-700 text-neutral-300 hover:bg-neutral-700'
+                      }`}
+                    >
+                      <Heart className="w-4 h-4" />
+                      <span>Хочу</span>
+                    </button>
+                    <button
+                      onClick={() => setModalStatus('playing')}
+                      className={`px-2 py-2.5 md:py-3 rounded-lg text-xs md:text-sm font-medium transition flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 ${
+                        modalStatus === 'playing'
+                          ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/20'
+                          : 'bg-neutral-900 border border-neutral-700 text-neutral-300 hover:bg-neutral-700'
+                      }`}
+                    >
+                      <Gamepad className="w-4 h-4" />
+                      <span>Играю</span>
+                    </button>
+                    <button
+                      onClick={() => setModalStatus('completed')}
+                      className={`px-2 py-2.5 md:py-3 rounded-lg text-xs md:text-sm font-medium transition flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 ${
+                        modalStatus === 'completed'
+                          ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20'
+                          : 'bg-neutral-900 border border-neutral-700 text-neutral-300 hover:bg-neutral-700'
+                      }`}
+                    >
+                      <Check className="w-4 h-4" />
+                      <span>Прошёл</span>
+                    </button>
+                    <button
+                      onClick={() => setModalStatus('dropped')}
+                      className={`px-2 py-2.5 md:py-3 rounded-lg text-xs md:text-sm font-medium transition flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 ${
+                        modalStatus === 'dropped'
+                          ? 'bg-neutral-500 text-white shadow-lg shadow-neutral-500/20'
+                          : 'bg-neutral-900 border border-neutral-700 text-neutral-300 hover:bg-neutral-700'
+                      }`}
+                    >
+                      <XCircle className="w-4 h-4" />
+                      <span>Брошено</span>
+                    </button>
                   </div>
                 </div>
 
-                {/* Оценки */}
-                <div className="flex flex-wrap gap-2 mb-6">
-                  {selectedGame.metacritic && selectedGame.metacritic > 0 && (
-                    <span
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium ${getMetacriticColor(selectedGame.metacritic)}`}
-                    >
-                      <Award className="w-4 h-4" />
-                      <span>{selectedGame.metacritic}</span>
-                      <span className="text-[10px] opacity-70">Metacritic</span>
-                    </span>
-                  )}
-                </div>
-
-                {/* Описание */}
-                <div className="mb-6">
+                <div>
                   {translating ? (
-                    <div className="flex items-center gap-3 p-4 bg-neutral-800 rounded-lg">
+                    <div className="flex items-center gap-3 p-3 md:p-4 bg-neutral-800 rounded-lg">
                       <Loader2 className="w-5 h-5 text-indigo-400 animate-spin" />
                       <div>
                         <div className="text-sm text-white font-medium">
@@ -750,7 +661,9 @@ export default function MyGamesPage() {
                     <div>
                       {descriptionExpanded ? (
                         <div>
-                          <p className="text-neutral-300 leading-relaxed">{descriptionRu}</p>
+                          <p className="text-neutral-300 leading-relaxed text-sm md:text-base">
+                            {descriptionRu}
+                          </p>
                           <button
                             onClick={() => setDescriptionExpanded(false)}
                             className="mt-2 text-sm text-indigo-400 hover:text-indigo-300 transition flex items-center gap-1"
@@ -761,7 +674,7 @@ export default function MyGamesPage() {
                         </div>
                       ) : (
                         <div>
-                          <p className="text-neutral-300 leading-relaxed line-clamp-4">
+                          <p className="text-neutral-300 leading-relaxed line-clamp-4 text-sm md:text-base">
                             {descriptionRu}
                           </p>
                           {descriptionRu.length > 300 && (
@@ -778,171 +691,82 @@ export default function MyGamesPage() {
                     </div>
                   ) : (
                     <div>
-                      <p className="text-neutral-400 leading-relaxed mb-4 line-clamp-3">
+                      <p className="text-neutral-400 leading-relaxed mb-3 line-clamp-3 text-sm md:text-base">
                         {selectedGame.description}
                       </p>
-                      <button
-                        onClick={() => {
-                          if (selectedGame?.descriptionRaw) {
-                            translateDescription(selectedGame.descriptionRaw, selectedGame.id);
+                      {selectedGame?.descriptionRaw && (
+                        <button
+                          onClick={() =>
+                            translateDescription(
+                              selectedGame.descriptionRaw!,
+                              selectedGame.id,
+                            )
                           }
-                        }}
-                        className="text-sm text-indigo-400 hover:text-indigo-300 transition flex items-center gap-2"
-                      >
-                        Перевести на русский
-                      </button>
+                          className="text-sm text-indigo-400 hover:text-indigo-300 transition"
+                        >
+                          Перевести на русский
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
 
-                {/* Платформы */}
-                <div className="mb-6">
-                  <h3 className="text-sm font-medium text-neutral-400 mb-2">Платформы:</h3>
-                  <div className="flex gap-2 flex-wrap">
-                    {selectedGame.platforms.map((platform) => (
-                      <div
-                        key={platform}
-                        className="px-3 py-1 bg-neutral-800 rounded-lg text-sm text-neutral-300"
-                      >
-                        {platform}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Скриншоты */}
-                {!screenshotsLoaded ? (
-                  <div className="mb-6">
-                    <h3 className="text-sm font-medium text-neutral-400 mb-3 flex items-center gap-2">
-                      <Monitor className="w-4 h-4 text-indigo-500" /> Скриншоты
+                {selectedGame.platforms.length > 0 && (
+                  <div>
+                    <h3 className="text-xs font-medium text-neutral-500 uppercase tracking-wider mb-2">
+                      Платформы
                     </h3>
-                    <div className="bg-neutral-800 rounded-lg p-8 flex flex-col items-center justify-center">
-                      <Loader2 className="w-8 h-8 text-indigo-400 animate-spin mb-3" />
-                      <div className="text-sm text-neutral-400">Загрузка скриншотов...</div>
-                    </div>
-                  </div>
-                ) : selectedGame.screenshots && selectedGame.screenshots.length > 0 ? (
-                  <div className="mb-6">
-                    <h3 className="text-sm font-medium text-neutral-400 mb-3 flex items-center gap-2">
-                      <Monitor className="w-4 h-4 text-indigo-500" /> Скриншоты (
-                      {selectedGame.screenshots.length})
-                    </h3>
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                      {selectedGame.screenshots.map((shot) => (
+                    <div className="flex gap-1.5 flex-wrap">
+                      {selectedGame.platforms.map((platform) => (
                         <div
-                          key={shot.id}
-                          className="aspect-video rounded-lg overflow-hidden bg-neutral-800 cursor-pointer group/shot"
-                          onClick={() => setSelectedScreenshot(shot.image)}
+                          key={platform}
+                          className="px-2.5 py-1 bg-neutral-800 rounded-lg text-xs text-neutral-300"
                         >
-                          <img
-                            src={shot.image}
-                            alt={`Screenshot ${shot.id}`}
-                            className="w-full h-full object-cover group-hover/shot:scale-110 transition-transform duration-300"
-                            loading="lazy"
-                          />
+                          {platform}
                         </div>
                       ))}
                     </div>
                   </div>
-                ) : (
-                  <div className="mb-6">
-                    <h3 className="text-sm font-medium text-neutral-400 mb-3 flex items-center gap-2">
-                      <Monitor className="w-4 h-4 text-indigo-500" /> Скриншоты
-                    </h3>
-                    <div className="bg-neutral-800 rounded-lg p-6 text-center text-neutral-500 text-sm">
-                      Скриншоты не найдены для этой игры
-                    </div>
-                  </div>
                 )}
 
-                {/* Статусы */}
-                <div className="bg-neutral-800 rounded-xl p-5 mb-6">
-                  <h2 className="font-semibold text-white mb-3">Статус</h2>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                    <button
-                      onClick={() => setModalStatus('want')}
-                      className={`px-4 py-2.5 rounded-lg text-sm font-medium transition flex items-center justify-center gap-2 ${
-                        modalStatus === 'want'
-                          ? 'bg-rose-500 text-white'
-                          : 'bg-neutral-900 border border-neutral-700 text-neutral-300 hover:bg-neutral-700'
-                      }`}
-                    >
-                      <Heart className="w-4 h-4" /> Хочу
-                    </button>
-                    <button
-                      onClick={() => setModalStatus('playing')}
-                      className={`px-4 py-2.5 rounded-lg text-sm font-medium transition flex items-center justify-center gap-2 ${
-                        modalStatus === 'playing'
-                          ? 'bg-blue-500 text-white'
-                          : 'bg-neutral-900 border border-neutral-700 text-neutral-300 hover:bg-neutral-700'
-                      }`}
-                    >
-                      <Gamepad className="w-4 h-4" /> Играю
-                    </button>
-                    <button
-                      onClick={() => setModalStatus('completed')}
-                      className={`px-4 py-2.5 rounded-lg text-sm font-medium transition flex items-center justify-center gap-2 ${
-                        modalStatus === 'completed'
-                          ? 'bg-emerald-500 text-white'
-                          : 'bg-neutral-900 border border-neutral-700 text-neutral-300 hover:bg-neutral-700'
-                      }`}
-                    >
-                      <Check className="w-4 h-4" /> Прошёл
-                    </button>
-                    <button
-                      onClick={() => setModalStatus('dropped')}
-                      className={`px-4 py-2.5 rounded-lg text-sm font-medium transition flex items-center justify-center gap-2 ${
-                        modalStatus === 'dropped'
-                          ? 'bg-neutral-500 text-white'
-                          : 'bg-neutral-900 border border-neutral-700 text-neutral-300 hover:bg-neutral-700'
-                      }`}
-                    >
-                      <XCircle className="w-4 h-4" /> Заброшено
-                    </button>
-                  </div>
-                </div>
-
-                {/* Оценка */}
-                <div className="bg-neutral-800 rounded-xl p-5 mb-6">
+                <div className="bg-neutral-800 rounded-xl p-4 md:p-5">
                   <div className="flex items-center justify-between mb-3">
-                    <h3 className="font-semibold text-white flex items-center gap-2">
-                      <Trophy className="w-4 h-4 text-indigo-500" /> Твоя оценка
+                    <h3 className="font-semibold text-white text-sm md:text-base flex items-center gap-2">
+                      <Trophy className="w-4 h-4 text-indigo-500" />
+                      Твоя оценка
                     </h3>
-                    <span className={`text-2xl font-bold ${getRatingColor(modalRating)}`}>
+                    <span className={`text-xl md:text-2xl font-bold ${getRatingColor(modalRating)}`}>
                       {modalRating > 0 ? `${modalRating}/10` : '—'}
                     </span>
                   </div>
-                  <div className="relative">
-                    <input
-                      type="range"
-                      min="0"
-                      max="10"
-                      step="1"
-                      value={modalRating}
-                      onChange={(e) => setModalRating(parseInt(e.target.value))}
-                      className="w-full h-2 rounded-full appearance-none cursor-pointer"
-                      style={{
-                        background: `linear-gradient(to right, ${getSliderColor(modalRating)} 0%, ${getSliderColor(modalRating)} ${modalRating * 10}%, #404040 ${modalRating * 10}%, #404040 100%)`,
-                      }}
-                    />
-                    <div className="flex justify-between text-xs text-neutral-500 mt-2">
-                      <span>0</span><span>1</span><span>2</span><span>3</span><span>4</span>
-                      <span>5</span><span>6</span><span>7</span><span>8</span><span>9</span>
-                      <span>10</span>
-                    </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="10"
+                    step="1"
+                    value={modalRating}
+                    onChange={(e) => setModalRating(parseInt(e.target.value))}
+                    className="w-full h-2 rounded-full appearance-none cursor-pointer"
+                    style={{
+                      background: `linear-gradient(to right, ${getSliderColor(modalRating)} 0%, ${getSliderColor(modalRating)} ${modalRating * 10}%, #404040 ${modalRating * 10}%, #404040 100%)`,
+                    }}
+                  />
+                  <div className="flex justify-between text-[10px] text-neutral-500 mt-2">
+                    <span>0</span><span>1</span><span>2</span><span>3</span><span>4</span>
+                    <span>5</span><span>6</span><span>7</span><span>8</span><span>9</span>
+                    <span>10</span>
                   </div>
                 </div>
 
-                {/* Часы */}
-                <div className="bg-neutral-800 rounded-xl p-5 mb-6">
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="font-semibold text-white flex items-center gap-2">
-                      <Clock className="w-4 h-4 text-indigo-500" /> Часов наиграно
+                <div className="bg-neutral-800 rounded-xl p-4 md:p-5">
+                  <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
+                    <h3 className="font-semibold text-white text-sm md:text-base flex items-center gap-2">
+                      <Clock className="w-4 h-4 text-indigo-500" />
+                      Часов наиграно
                     </h3>
                     {selectedGame.playtime && (
-                      <span className="text-xs text-neutral-400 bg-neutral-900/50 px-2.5 py-1 rounded-md border border-neutral-700 flex items-center gap-1.5">
-                        <span className="text-indigo-400">⏱</span>
-                        Среднее время игроков: ~{selectedGame.playtime} ч.
+                      <span className="text-[11px] text-neutral-400 bg-neutral-900/50 px-2 py-1 rounded-md border border-neutral-700">
+                        ⏱ ~{selectedGame.playtime} ч. среднее
                       </span>
                     )}
                   </div>
@@ -954,41 +778,51 @@ export default function MyGamesPage() {
                         const v = e.target.value === '' ? 0 : parseInt(e.target.value) || 0;
                         setModalHours(v);
                       }}
-                      className="w-24 px-3 py-2 bg-neutral-900 border border-neutral-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="w-24 px-3 py-2 bg-neutral-900 border border-neutral-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
                       placeholder="0"
                     />
                     <span className="text-sm text-neutral-400">часов</span>
                   </div>
                 </div>
 
-                {/* Рецензия */}
-                <div className="bg-neutral-800 rounded-xl p-5 mb-6">
-                  <h3 className="font-semibold text-white mb-3 flex items-center gap-2">
-                    <MessageSquare className="w-4 h-4 text-indigo-500" /> Твоя рецензия
+                <div className="bg-neutral-800 rounded-xl p-4 md:p-5">
+                  <h3 className="font-semibold text-white text-sm md:text-base mb-3 flex items-center gap-2">
+                    <MessageSquare className="w-4 h-4 text-indigo-500" />
+                    Твоя рецензия
                   </h3>
                   <textarea
                     value={modalReview}
                     onChange={(e) => setModalReview(e.target.value)}
                     placeholder="Напиши своё мнение об игре..."
-                    className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-3 text-white placeholder:text-neutral-500 min-h-[100px] resize-y focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-3 text-white placeholder:text-neutral-500 min-h-[80px] md:min-h-[100px] resize-y focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
                   />
                   {modalReview.length > 0 && (
-                    <div className="mt-2 text-right">
+                    <div className="mt-1.5 text-right">
                       <span className="text-xs text-neutral-500">
                         {modalReview.length} символов
                       </span>
                     </div>
                   )}
+                  <p className="text-[11px] text-neutral-500 mt-2">
+                    Рецензии от 20 символов публикуются для всех игроков
+                  </p>
+                  <button
+                    onClick={publishReview}
+                    disabled={modalReview.trim().length < 20}
+                    className="mt-3 w-full px-4 py-2 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/30 text-indigo-400 text-sm font-medium rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    <MessageSquare className="w-4 h-4" />
+                    Оставить рецензию
+                  </button>
                 </div>
 
-                {/* Кнопки */}
                 <div className="flex gap-2 pt-4 border-t border-neutral-800">
                   <button
                     onClick={async () => {
                       await saveModalData();
                       closeGame();
                     }}
-                    className="flex-1 bg-indigo-500 hover:bg-indigo-600 text-white font-medium py-3 rounded-lg transition flex items-center justify-center gap-2"
+                    className="flex-1 bg-indigo-500 hover:bg-indigo-600 text-white font-medium py-3 rounded-lg transition flex items-center justify-center gap-2 text-sm md:text-base"
                   >
                     <Check className="w-4 h-4" />
                     <span className="hidden sm:inline">Сохранить</span>
@@ -1010,13 +844,17 @@ export default function MyGamesPage() {
                     <span className="hidden sm:inline ml-2">Отмена</span>
                   </button>
                 </div>
+
+                {/* Публичные рецензии игроков */}
+                <div className="pt-4 border-t border-neutral-800">
+                  <ReviewsSection gameId={selectedGame.id} />
+                </div>
               </div>
             )}
           </div>
         </div>
       )}
 
-      {/* Модалка скриншота */}
       {selectedScreenshot && (
         <div
           className="fixed inset-0 bg-black/90 backdrop-blur-sm z-[60] flex items-center justify-center p-4 cursor-pointer"

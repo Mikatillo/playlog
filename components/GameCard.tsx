@@ -1,76 +1,73 @@
 'use client';
 
+import Image from 'next/image';
 import { Star, Clock, Heart, Gamepad, Check, XCircle } from 'lucide-react';
 import { Game, GameData } from '@/types/game';
+import { getMetacriticColor, getStatusColor } from '@/lib/utils';
+import SteamRating from './SteamRating';
 
 interface GameCardProps {
   game: Game;
   onClick: () => void;
   userGameData?: GameData;
   isAuthenticated?: boolean;
+  index?: number;
+  hideSteam?: boolean;
 }
 
-function getMetacriticColor(score: number): string {
-  if (score >= 75) return 'bg-emerald-500/90 text-white';
-  if (score >= 50) return 'bg-yellow-500/90 text-black';
-  if (score >= 25) return 'bg-orange-500/90 text-white';
-  return 'bg-red-500/90 text-white';
-}
+const statusIcon = {
+  want: <Heart className="w-3 h-3" />,
+  playing: <Gamepad className="w-3 h-3" />,
+  completed: <Check className="w-3 h-3" />,
+  dropped: <XCircle className="w-3 h-3" />,
+  none: null,
+};
 
 export default function GameCard({
   game,
   onClick,
   userGameData,
   isAuthenticated = false,
+  index = 0,
+  hideSteam = false,
 }: GameCardProps) {
-  const statusIcon = {
-    want: <Heart className="w-3 h-3" />,
-    playing: <Gamepad className="w-3 h-3" />,
-    completed: <Check className="w-3 h-3" />,
-    dropped: <XCircle className="w-3 h-3" />,
-    none: null,
-  };
-
-  const statusColor = {
-    want: 'bg-rose-500',
-    playing: 'bg-blue-500',
-    completed: 'bg-emerald-500',
-    dropped: 'bg-neutral-500',
-    none: '',
-  };
-
   const showUserData = isAuthenticated && userGameData;
+  const delay = Math.min(index * 40, 400);
 
   return (
     <div
       onClick={onClick}
-      className="group cursor-pointer bg-neutral-900 rounded-xl border border-neutral-800 overflow-hidden hover:shadow-lg hover:border-neutral-700 transition-all duration-200 hover:-translate-y-1"
+      className="group cursor-pointer bg-neutral-900 rounded-xl border border-neutral-800 overflow-hidden hover:shadow-lg hover:border-neutral-700 transition-all duration-200 hover:-translate-y-1 animate-fade-in-up"
+      style={{ animationDelay: `${delay}ms` }}
     >
       <div className="relative aspect-video bg-neutral-800 overflow-hidden">
-        <img
-          src={game.cover}
+        <Image
+          src={game.cover || 'https://via.placeholder.com/400x225/171717/525252?text=No+Image'}
           alt={game.title}
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-          onError={(e) => {
-            (e.target as HTMLImageElement).src =
-              'https://via.placeholder.com/400x225/171717/525252?text=No+Image';
-          }}
+          fill
+          sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, (max-width: 1280px) 33vw, 25vw"
+          className="object-cover group-hover:scale-105 transition-transform duration-300"
+          loading="lazy"
         />
 
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
 
-        {game.metacritic && game.metacritic > 0 && (
-          <div
-            className={`absolute top-2 right-2 ${getMetacriticColor(game.metacritic)} px-2 py-1 rounded-lg flex items-center gap-1 shadow-lg`}
-          >
-            <span className="text-xs font-bold">{game.metacritic}</span>
-            <span className="text-[9px] opacity-70">MC</span>
-          </div>
-        )}
+        {/* Рейтинги — MC и Steam рядом */}
+        <div className="absolute top-2 right-2 flex items-center gap-1.5">
+          {game.metacritic && game.metacritic > 0 && (
+            <div
+              className={`${getMetacriticColor(game.metacritic)} px-2 py-1 rounded-lg flex items-center gap-1 shadow-lg`}
+            >
+              <span className="text-xs font-bold">{game.metacritic}</span>
+              <span className="text-[9px] opacity-70">MC</span>
+            </div>
+          )}
+          {!hideSteam && <SteamRating gameTitle={game.title} variant="badge" />}
+        </div>
 
         {showUserData && showUserData.status !== 'none' && (
           <div
-            className={`absolute top-2 left-2 ${statusColor[showUserData.status]} rounded-full p-1.5 shadow-lg`}
+            className={`absolute top-2 left-2 ${getStatusColor(showUserData.status)} rounded-full p-1.5 shadow-lg`}
           >
             {statusIcon[showUserData.status]}
           </div>

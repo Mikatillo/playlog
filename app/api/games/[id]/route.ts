@@ -3,6 +3,23 @@ import { NextRequest, NextResponse } from 'next/server';
 const API_KEY = process.env.RAWG_API_KEY || 'demo';
 const BASE_URL = 'https://api.rawg.io/api';
 
+// Для полных данных (модалка) нужны description и movies
+const DETAIL_FIELDS = [
+  'id',
+  'name',
+  'background_image',
+  'released',
+  'rating',
+  'metacritic',
+  'genres',
+  'tags',
+  'platforms',
+  'playtime',
+  'description',
+  'description_raw',
+  'movies',
+].join(',');
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -12,9 +29,8 @@ export async function GET(
   const full = searchParams.get('full') === 'true';
 
   try {
-    // language=rus — данные сразу на русском
-    const url = `${BASE_URL}/games/${id}?key=${API_KEY}&language=rus`;
-    const response = await fetch(url, { cache: 'no-store' });
+    const url = `${BASE_URL}/games/${id}?key=${API_KEY}&language=rus&fields=${DETAIL_FIELDS}`;
+    const response = await fetch(url, { next: { revalidate: 3600 } });
 
     if (!response.ok) {
       return NextResponse.json({ error: 'Game not found' }, { status: 404 });
@@ -22,41 +38,40 @@ export async function GET(
 
     const data = await response.json();
 
-    if (full) {
-      const screenshotsUrl = `${BASE_URL}/games/${id}/screenshots?key=${API_KEY}`;
-      const moviesUrl = `${BASE_URL}/games/${id}/movies?key=${API_KEY}`;
-
-      let screenshots: any[] = [];
-      let movies: any[] = [];
-
-      try {
-        const ssResponse = await fetch(screenshotsUrl, { cache: 'no-store' });
-        if (ssResponse.ok) {
-          const ssData = await ssResponse.json();
-          screenshots = ssData.results || [];
-        }
-      } catch (e) {
-        console.error('Screenshots fetch error:', e);
-      }
-
-      try {
-        const mvResponse = await fetch(moviesUrl, { cache: 'no-store' });
-        if (mvResponse.ok) {
-          const mvData = await mvResponse.json();
-          movies = mvData.results || [];
-        }
-      } catch (e) {
-        console.error('Movies fetch error:', e);
-      }
-
-      return NextResponse.json({
-        ...data,
-        screenshots,
-        movies,
-      });
+    if (!full) {
+      return NextResponse.json(data);
     }
 
-    return NextResponse.json(data);
+    const [ssResponse, mvResponse] = await Promise.all([
+      fetch(`${BASE_URL}/games/${id}/screenshots?key=${API_KEY}`, {
+        next: { revalidate: 86400 },
+      }).catch(() => null),
+      fetch(`${BASE_URL}/games/${id}/movies?key=${API_KEY}`, {
+        next: { revalidate: 86400 },
+      }).catch(() => null),
+    ]);
+
+    let screenshots: any[] = [];
+    let movies: any[] = [];
+
+    if (ssResponse?.ok) {
+      try {
+        const ssData = await ssResponse.json();
+        screenshots = ssData.results || [];
+      } catch {}
+    }
+    if (mvResponse?.ok) {
+      try {
+        const mvData = await mvResponse.json();
+        movies = mvData.results || [];
+      } catch {}
+    }
+
+    return NextResponse.json({
+      ...data,
+      screenshots,
+      movies,
+    });
   } catch (error) {
     console.error('Error:', error);
     return NextResponse.json({ error: 'Failed to fetch' }, { status: 500 });

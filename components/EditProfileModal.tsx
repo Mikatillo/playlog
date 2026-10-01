@@ -1,134 +1,623 @@
 'use client';
 
-import { useState } from 'react';
-import { X, User, Save, Loader2 } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import {
+  X, User, Save, Loader2, Lock, Mail, Camera, Trash2,
+  MapPin, Link2, AtSign, Image as ImageIcon, Palette,
+} from 'lucide-react';
+import Image from 'next/image';
 import { supabase } from '@/lib/supabase';
+import { useToast } from '@/contexts/ToastContext';
+import { UserProfile } from '@/types/game';
+
+type Tab = 'profile' | 'security';
 
 interface EditProfileModalProps {
   isOpen: boolean;
   onClose: () => void;
-  currentNickname: string;
+  profile: UserProfile;
   userId: string;
-  onSaved: (newNickname: string) => void;
+  userEmail?: string;
+  onUpdate: (updated: Partial<UserProfile>) => void;
+}
+
+// Доступные градиенты для баннера
+const BANNER_GRADIENTS = [
+  { id: 'indigo',   label: 'Индиго',   class: 'from-indigo-600 via-purple-600 to-pink-600' },
+  { id: 'sunset',   label: 'Закат',    class: 'from-orange-500 via-red-500 to-pink-600' },
+  { id: 'ocean',    label: 'Океан',    class: 'from-cyan-500 via-blue-600 to-indigo-700' },
+  { id: 'forest',   label: 'Лес',      class: 'from-emerald-500 via-green-600 to-teal-700' },
+  { id: 'flame',    label: 'Пламя',    class: 'from-yellow-500 via-orange-600 to-red-600' },
+  { id: 'purple',   label: 'Пурпур',   class: 'from-purple-600 via-pink-600 to-rose-600' },
+  { id: 'midnight', label: 'Полночь',  class: 'from-blue-900 via-indigo-900 to-purple-900' },
+  { id: 'dark',     label: 'Тёмный',   class: 'from-neutral-700 via-neutral-800 to-neutral-900' },
+];
+
+export function getBannerGradientClass(id: string): string {
+  const g = BANNER_GRADIENTS.find((g) => g.id === id);
+  return g?.class || BANNER_GRADIENTS[0].class;
 }
 
 export default function EditProfileModal({
-  isOpen,
-  onClose,
-  currentNickname,
-  userId,
-  onSaved,
+  isOpen, onClose, profile, userId, userEmail, onUpdate,
 }: EditProfileModalProps) {
-  const [nickname, setNickname] = useState(currentNickname);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { showToast } = useToast();
+  const [tab, setTab] = useState<Tab>('profile');
+
+  const [nickname, setNickname] = useState(profile.nickname);
+  const [fullName, setFullName] = useState('');
+  const [region, setRegion] = useState('');
+  const [city, setCity] = useState('');
+  const [steamUrl, setSteamUrl] = useState('');
+  const [avatarUrl, setAvatarUrl] = useState<string | undefined>(profile.avatarUrl);
+  const [bannerUrl, setBannerUrl] = useState<string | null>(null);
+  const [bannerGradient, setBannerGradient] = useState<string>('indigo');
+  const [uploading, setUploading] = useState(false);
+  const [uploadingBanner, setUploadingBanner] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const bannerInputRef = useRef<HTMLInputElement>(null);
+
+  const [newEmail, setNewEmail] = useState(userEmail || '');
+  const [savingEmail, setSavingEmail] = useState(false);
+  const [emailError, setEmailError] = useState<string | null>(null);
+
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [savingPassword, setSavingPassword] = useState(false);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !uploading && !uploadingBanner && !savingProfile && !savingEmail && !savingPassword) onClose();
+    };
+    window.addEventListener('keydown', handleEsc);
+    return () => window.removeEventListener('keydown', handleEsc);
+  }, [isOpen, uploading, uploadingBanner, savingProfile, savingEmail, savingPassword, onClose]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setTab('profile');
+    setNickname(profile.nickname);
+    setAvatarUrl(profile.avatarUrl);
+    setNewEmail(userEmail || '');
+    setNewPassword('');
+    setConfirmPassword('');
+    setProfileError(null);
+    setEmailError(null);
+    setPasswordError(null);
+
+    supabase
+      .from('profiles')
+      .select('full_name, region, city, steam_url, banner_url, banner_gradient')
+      .eq('id', userId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) {
+          setFullName(data.full_name || '');
+          setRegion(data.region || '');
+          setCity(data.city || '');
+          setSteamUrl(data.steam_url || '');
+          setBannerUrl(data.banner_url || null);
+          setBannerGradient(data.banner_gradient || 'indigo');
+        }
+      });
+  }, [isOpen, profile.nickname, profile.avatarUrl, userEmail, userId]);
 
   if (!isOpen) return null;
 
-  const handleSave = async () => {
-    const trimmed = nickname.trim();
-    if (trimmed.length < 2) {
-      setError('Ник должен быть не короче 2 символов');
-      return;
-    }
-    if (trimmed.length > 30) {
-      setError('Ник должен быть не длиннее 30 символов');
-      return;
-    }
-    setSaving(true);
-    setError(null);
+  const isBusy = uploading || uploadingBanner || savingProfile || savingEmail || savingPassword;
 
-    const { error: supaError } = await supabase
+  // ========== АВАТАР ==========
+  const handleAvatarSelect = async (file: File) => {
+    if (!file.type.startsWith('image/')) return setProfileError('Только изображения');
+    if (file.size > 5 * 1024 * 1024) return setProfileError('Максимум 5 МБ');
+
+    setUploading(true);
+    setProfileError(null);
+    try {
+      const ext = file.name.split('.').pop()?.toLowerCase() || 'png';
+      const path = `${userId}/avatar.${ext}`;
+      const { error: upErr } = await supabase.storage
+        .from('avatars')
+        .upload(path, file, { upsert: true, cacheControl: '3600' });
+      if (upErr) throw upErr;
+
+      const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path);
+      const url = `${publicUrl}?t=${Date.now()}`;
+
+      await supabase.from('profiles').update({ avatar_url: url }).eq('id', userId);
+      setAvatarUrl(url);
+      onUpdate({ avatarUrl: url });
+      showToast('Аватар обновлён', 'success');
+    } catch (err: any) {
+      setProfileError(err.message || 'Ошибка загрузки');
+    }
+    setUploading(false);
+  };
+
+  const handleAvatarDelete = async () => {
+    if (!avatarUrl) return;
+    if (!confirm('Удалить аватар?')) return;
+    setUploading(true);
+    try {
+      const { data: files } = await supabase.storage.from('avatars').list(userId);
+      const avatarFiles = (files || []).filter((f) => f.name.startsWith('avatar.'));
+      if (avatarFiles.length) {
+        await supabase.storage.from('avatars').remove(avatarFiles.map((f) => `${userId}/${f.name}`));
+      }
+      await supabase.from('profiles').update({ avatar_url: null }).eq('id', userId);
+      setAvatarUrl(undefined);
+      onUpdate({ avatarUrl: undefined });
+      showToast('Аватар удалён', 'info');
+    } catch {}
+    setUploading(false);
+  };
+
+  // ========== БАННЕР ==========
+  const handleBannerSelect = async (file: File) => {
+    const isImage = file.type.startsWith('image/');
+    const isGif = file.type === 'image/gif';
+    if (!isImage) return setProfileError('Только изображения или GIF');
+    if (file.size > 10 * 1024 * 1024) return setProfileError('Максимум 10 МБ');
+
+    setUploadingBanner(true);
+    setProfileError(null);
+    try {
+      const ext = file.name.split('.').pop()?.toLowerCase() || (isGif ? 'gif' : 'jpg');
+      const path = `${userId}/banner.${ext}`;
+      const { error: upErr } = await supabase.storage
+        .from('avatars')
+        .upload(path, file, { upsert: true, cacheControl: '3600' });
+      if (upErr) throw upErr;
+
+      const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path);
+      const url = `${publicUrl}?t=${Date.now()}`;
+
+      await supabase.from('profiles').update({ banner_url: url }).eq('id', userId);
+      setBannerUrl(url);
+      showToast('Баннер обновлён', 'success');
+    } catch (err: any) {
+      setProfileError(err.message || 'Ошибка загрузки баннера');
+    }
+    setUploadingBanner(false);
+  };
+
+  const handleBannerDelete = async () => {
+    if (!bannerUrl) return;
+    if (!confirm('Удалить баннер?')) return;
+    setUploadingBanner(true);
+    try {
+      const { data: files } = await supabase.storage.from('avatars').list(userId);
+      const bannerFiles = (files || []).filter((f) => f.name.startsWith('banner.'));
+      if (bannerFiles.length) {
+        await supabase.storage.from('avatars').remove(bannerFiles.map((f) => `${userId}/${f.name}`));
+      }
+      await supabase.from('profiles').update({ banner_url: null }).eq('id', userId);
+      setBannerUrl(null);
+      showToast('Баннер удалён', 'info');
+    } catch {}
+    setUploadingBanner(false);
+  };
+
+  const handleGradientSelect = async (id: string) => {
+    setBannerGradient(id);
+    await supabase.from('profiles').update({ banner_gradient: id }).eq('id', userId);
+    showToast('Градиент обновлён', 'success');
+  };
+
+  // ========== ПРОФИЛЬ ==========
+  const handleSaveProfile = async () => {
+    const trimmed = nickname.trim();
+    if (trimmed.length < 2) return setProfileError('Ник минимум 2 символа');
+    if (trimmed.length > 30) return setProfileError('Ник максимум 30 символов');
+
+    let steamToSave = steamUrl.trim();
+    if (steamToSave && !steamToSave.startsWith('http')) {
+      steamToSave = `https://${steamToSave}`;
+    }
+    if (steamToSave && !steamToSave.includes('steamcommunity.com') && !steamToSave.includes('steampowered.com')) {
+      return setProfileError('Ссылка должна вести на steamcommunity.com');
+    }
+
+    setSavingProfile(true);
+    setProfileError(null);
+    const { error } = await supabase
       .from('profiles')
-      .update({ nickname: trimmed })
+      .update({
+        nickname: trimmed,
+        full_name: fullName.trim() || null,
+        region: region.trim() || null,
+        city: city.trim() || null,
+        steam_url: steamToSave || null,
+      })
       .eq('id', userId);
 
-    setSaving(false);
-    if (supaError) {
-      setError('Не удалось сохранить: ' + supaError.message);
+    setSavingProfile(false);
+    if (error) {
+      setProfileError(error.message);
+      showToast('Не удалось сохранить', 'error');
       return;
     }
-    onSaved(trimmed);
+    onUpdate({ nickname: trimmed });
+    showToast('Профиль обновлён', 'success');
     onClose();
   };
 
+  const handleSaveEmail = async () => {
+    const t = newEmail.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(t)) return setEmailError('Неверный email');
+    if (t === userEmail?.toLowerCase()) return setEmailError('Это твой текущий email');
+    setSavingEmail(true);
+    setEmailError(null);
+    const { error } = await supabase.auth.updateUser({ email: t });
+    setSavingEmail(false);
+    if (error) return setEmailError(error.message);
+    showToast('Проверь новый email', 'success');
+  };
+
+  const handleSavePassword = async () => {
+    if (newPassword.length < 6) return setPasswordError('Минимум 6 символов');
+    if (newPassword !== confirmPassword) return setPasswordError('Пароли не совпадают');
+    setSavingPassword(true);
+    setPasswordError(null);
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    setSavingPassword(false);
+    if (error) return setPasswordError(error.message);
+    setNewPassword('');
+    setConfirmPassword('');
+    showToast('Пароль изменён', 'success');
+  };
+
+  const initials = nickname ? nickname.substring(0, 2).toUpperCase() : '??';
+
   return (
     <div
-      className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[60] flex items-center justify-center p-4"
-      onClick={onClose}
+      className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[60] flex items-center justify-center p-4 overflow-y-auto"
+      onClick={() => !isBusy && onClose()}
     >
       <div
-        className="bg-neutral-900 rounded-2xl max-w-md w-full p-6 relative border border-neutral-800 shadow-2xl"
+        className="bg-neutral-900 rounded-2xl max-w-lg w-full my-8 relative border border-neutral-800 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 w-8 h-8 bg-neutral-800 hover:bg-neutral-700 rounded-full flex items-center justify-center transition"
+          disabled={isBusy}
+          className="absolute top-4 right-4 w-8 h-8 bg-neutral-800 hover:bg-neutral-700 rounded-full flex items-center justify-center transition disabled:opacity-50 z-10"
         >
           <X className="w-4 h-4 text-neutral-400" />
         </button>
 
-        <div className="flex items-center gap-3 mb-6">
-          <div className="w-12 h-12 bg-indigo-500 rounded-xl flex items-center justify-center">
-            <User className="w-6 h-6 text-white" />
+        <div className="px-6 pt-6 pb-4 border-b border-neutral-800">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 bg-indigo-500 rounded-xl flex items-center justify-center">
+              <User className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-white">Настройки профиля</h2>
+              <p className="text-xs text-neutral-400">Профиль и безопасность</p>
+            </div>
           </div>
-          <div>
-            <h2 className="text-xl font-bold text-white">Редактировать профиль</h2>
-            <p className="text-sm text-neutral-400">Измени своё отображаемое имя</p>
+
+          <div className="flex gap-2">
+            <button
+              onClick={() => setTab('profile')}
+              className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition ${
+                tab === 'profile' ? 'bg-indigo-500 text-white' : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'
+              }`}
+            >
+              Профиль
+            </button>
+            <button
+              onClick={() => setTab('security')}
+              className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition flex items-center justify-center gap-1.5 ${
+                tab === 'security' ? 'bg-indigo-500 text-white' : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'
+              }`}
+            >
+              <Lock className="w-3.5 h-3.5" />
+              Безопасность
+            </button>
           </div>
         </div>
 
-        <div className="space-y-4">
-          <div>
-            <label className="text-xs font-medium text-neutral-400 mb-2 block">
-              Никнейм
-            </label>
-            <input
-              type="text"
-              value={nickname}
-              onChange={(e) => setNickname(e.target.value)}
-              maxLength={30}
-              autoFocus
-              className="w-full px-4 py-3 bg-neutral-800 border border-neutral-700 rounded-lg text-white placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              placeholder="Твой ник"
-            />
-            <div className="mt-1 text-right">
-              <span className="text-xs text-neutral-500">{nickname.length} / 30</span>
-            </div>
-          </div>
+        <div className="p-6 space-y-5 max-h-[65vh] overflow-y-auto">
+          {tab === 'profile' && (
+            <>
+              {/* ==== БАННЕР ==== */}
+              <div>
+                <label className="text-xs font-medium text-neutral-400 mb-3 block flex items-center gap-1.5">
+                  <ImageIcon className="w-3 h-3" /> Баннер профиля
+                </label>
 
-          {error && (
-            <div className="px-3 py-2 bg-red-500/10 border border-red-500/30 rounded-lg text-sm text-red-400">
-              {error}
-            </div>
+                {/* Превью баннера */}
+                <div className="relative h-28 rounded-xl overflow-hidden mb-3">
+                  {bannerUrl ? (
+                    <>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={bannerUrl}
+                        alt="banner"
+                        className="w-full h-full object-cover"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                    </>
+                  ) : (
+                    <div className={`w-full h-full bg-gradient-to-br ${getBannerGradientClass(bannerGradient)}`} />
+                  )}
+                  {uploadingBanner && (
+                    <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
+                      <Loader2 className="w-6 h-6 text-white animate-spin" />
+                    </div>
+                  )}
+                </div>
+
+                {/* Кнопки баннера */}
+                <div className="flex gap-2 mb-3">
+                  <input
+                    ref={bannerInputRef}
+                    type="file"
+                    accept="image/*,image/gif"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) handleBannerSelect(f);
+                      e.target.value = '';
+                    }}
+                    className="hidden"
+                  />
+                  <button
+                    onClick={() => bannerInputRef.current?.click()}
+                    disabled={uploadingBanner}
+                    className="flex-1 px-3 py-2 bg-neutral-800 hover:bg-neutral-700 disabled:opacity-50 text-neutral-300 text-xs font-medium rounded-lg transition flex items-center justify-center gap-2"
+                  >
+                    <Camera className="w-3.5 h-3.5" />
+                    {bannerUrl ? 'Заменить' : 'Загрузить фото / GIF'}
+                  </button>
+                  {bannerUrl && (
+                    <button
+                      onClick={handleBannerDelete}
+                      disabled={uploadingBanner}
+                      className="px-3 py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 disabled:opacity-50 text-red-400 text-xs font-medium rounded-lg transition flex items-center justify-center gap-2"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      Удалить
+                    </button>
+                  )}
+                </div>
+
+                {/* Градиенты */}
+                <p className="text-[11px] text-neutral-500 mb-2 flex items-center gap-1.5">
+                  <Palette className="w-3 h-3" />
+                  Или выбери градиент {bannerUrl && '(будет скрыт за фото)'}
+                </p>
+                <div className="grid grid-cols-4 gap-2">
+                  {BANNER_GRADIENTS.map((g) => (
+                    <button
+                      key={g.id}
+                      onClick={() => handleGradientSelect(g.id)}
+                      className={`relative h-10 rounded-lg bg-gradient-to-br ${g.class} transition ${
+                        bannerGradient === g.id
+                          ? 'ring-2 ring-white ring-offset-2 ring-offset-neutral-900'
+                          : 'hover:opacity-80'
+                      }`}
+                      title={g.label}
+                    >
+                      {bannerGradient === g.id && (
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <div className="w-4 h-4 bg-white/30 backdrop-blur-sm rounded-full flex items-center justify-center">
+                            <div className="w-2 h-2 bg-white rounded-full" />
+                          </div>
+                        </div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* ==== АВАТАР ==== */}
+              <div>
+                <label className="text-xs font-medium text-neutral-400 mb-3 block">Аватар</label>
+                <div className="flex items-center gap-4">
+                  <div className="relative w-20 h-20 rounded-full overflow-hidden bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center flex-shrink-0">
+                    {avatarUrl ? (
+                      <Image src={avatarUrl} alt="avatar" fill sizes="80px" className="object-cover" unoptimized />
+                    ) : (
+                      <span className="text-2xl font-bold text-white">{initials}</span>
+                    )}
+                    {uploading && (
+                      <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
+                        <Loader2 className="w-6 h-6 text-white animate-spin" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex-1 space-y-2">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) handleAvatarSelect(f);
+                        e.target.value = '';
+                      }}
+                      className="hidden"
+                    />
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploading}
+                      className="w-full px-4 py-2 bg-neutral-800 hover:bg-neutral-700 disabled:opacity-50 text-neutral-300 text-sm font-medium rounded-lg transition flex items-center justify-center gap-2"
+                    >
+                      <Camera className="w-4 h-4" />
+                      {avatarUrl ? 'Заменить' : 'Загрузить'}
+                    </button>
+                    {avatarUrl && (
+                      <button
+                        onClick={handleAvatarDelete}
+                        disabled={uploading}
+                        className="w-full px-4 py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 disabled:opacity-50 text-red-400 text-sm font-medium rounded-lg transition flex items-center justify-center gap-2"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        Удалить
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-neutral-400 mb-2 block">Никнейм *</label>
+                <input
+                  type="text"
+                  value={nickname}
+                  onChange={(e) => setNickname(e.target.value)}
+                  maxLength={30}
+                  className="w-full px-4 py-2.5 bg-neutral-800 border border-neutral-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="Твой ник"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-neutral-400 mb-2 block flex items-center gap-1.5">
+                  <AtSign className="w-3 h-3" /> Настоящее имя
+                </label>
+                <input
+                  type="text"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  maxLength={50}
+                  className="w-full px-4 py-2.5 bg-neutral-800 border border-neutral-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="Как тебя зовут"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-neutral-400 mb-2 block flex items-center gap-1.5">
+                    <MapPin className="w-3 h-3" /> Регион
+                  </label>
+                  <input
+                    type="text"
+                    value={region}
+                    onChange={(e) => setRegion(e.target.value)}
+                    maxLength={50}
+                    className="w-full px-4 py-2.5 bg-neutral-800 border border-neutral-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="Московская область"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-neutral-400 mb-2 block flex items-center gap-1.5">
+                    <MapPin className="w-3 h-3" /> Город
+                  </label>
+                  <input
+                    type="text"
+                    value={city}
+                    onChange={(e) => setCity(e.target.value)}
+                    maxLength={50}
+                    className="w-full px-4 py-2.5 bg-neutral-800 border border-neutral-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="Москва"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-neutral-400 mb-2 block flex items-center gap-1.5">
+                  <Link2 className="w-3 h-3" /> Steam-профиль
+                </label>
+                <input
+                  type="text"
+                  value={steamUrl}
+                  onChange={(e) => setSteamUrl(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-neutral-800 border border-neutral-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="https://steamcommunity.com/id/username"
+                />
+              </div>
+
+              {profileError && (
+                <div className="px-3 py-2 bg-red-500/10 border border-red-500/30 rounded-lg text-sm text-red-400">
+                  {profileError}
+                </div>
+              )}
+
+              <button
+                onClick={handleSaveProfile}
+                disabled={savingProfile || uploading || uploadingBanner}
+                className="w-full bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 text-white font-medium py-3 rounded-lg transition flex items-center justify-center gap-2"
+              >
+                {savingProfile ? (
+                  <><Loader2 className="w-4 h-4 animate-spin" /> Сохраняем...</>
+                ) : (
+                  <><Save className="w-4 h-4" /> Сохранить</>
+                )}
+              </button>
+            </>
           )}
 
-          <div className="flex gap-3 pt-2">
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="flex-1 bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 text-white font-medium py-3 rounded-lg transition flex items-center justify-center gap-2"
-            >
-              {saving ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Сохраняем...
-                </>
-              ) : (
-                <>
-                  <Save className="w-4 h-4" />
-                  Сохранить
-                </>
-              )}
-            </button>
-            <button
-              onClick={onClose}
-              disabled={saving}
-              className="px-6 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 font-medium py-3 rounded-lg transition disabled:opacity-50"
-            >
-              Отмена
-            </button>
-          </div>
+          {tab === 'security' && (
+            <>
+              <div className="bg-neutral-800/50 rounded-xl p-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Mail className="w-4 h-4 text-indigo-500" />
+                  <h3 className="text-sm font-semibold text-white">Email</h3>
+                </div>
+                <p className="text-xs text-neutral-500">
+                  Текущий: <span className="text-neutral-300">{userEmail || '—'}</span>
+                </p>
+                <input
+                  type="email"
+                  value={newEmail}
+                  onChange={(e) => setNewEmail(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-neutral-900 border border-neutral-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="new@example.com"
+                />
+                {emailError && (
+                  <div className="px-3 py-2 bg-red-500/10 border border-red-500/30 rounded-lg text-xs text-red-400">
+                    {emailError}
+                  </div>
+                )}
+                <button
+                  onClick={handleSaveEmail}
+                  disabled={savingEmail}
+                  className="w-full px-4 py-2.5 bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition flex items-center justify-center gap-2"
+                >
+                  {savingEmail ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Изменить email'}
+                </button>
+              </div>
+
+              <div className="bg-neutral-800/50 rounded-xl p-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Lock className="w-4 h-4 text-indigo-500" />
+                  <h3 className="text-sm font-semibold text-white">Пароль</h3>
+                </div>
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-neutral-900 border border-neutral-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="Новый пароль"
+                />
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-neutral-900 border border-neutral-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="Повтори пароль"
+                />
+                {passwordError && (
+                  <div className="px-3 py-2 bg-red-500/10 border border-red-500/30 rounded-lg text-xs text-red-400">
+                    {passwordError}
+                  </div>
+                )}
+                <button
+                  onClick={handleSavePassword}
+                  disabled={savingPassword || !newPassword || !confirmPassword}
+                  className="w-full px-4 py-2.5 bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition flex items-center justify-center gap-2"
+                >
+                  {savingPassword ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Изменить пароль'}
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>
