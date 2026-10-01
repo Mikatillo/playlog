@@ -24,13 +24,28 @@ interface ReviewsSectionProps {
   title?: string;
   emptyText?: string;
   emptyHint?: string;
+  refreshKey?: number;
 }
+
+// Глобальный кеш — живёт до перезагрузки страницы
+const cache = new Map<
+  string,
+  {
+    reviews: Review[];
+    userVotes: Record<string, 'like' | 'dislike'>;
+    ts: number;
+  }
+>();
+
+const CACHE_TTL = 30_000; // 30 секунд
+const FRESH_TTL = 5_000; // 5 секунд — можно вообще не ходить на сервер
 
 export default function ReviewsSection({
   gameId,
   title = 'Рецензии игроков',
   emptyText = 'Пока никто не оставил рецензию на эту игру',
   emptyHint = 'Стань первым — напиши свою рецензию выше',
+  refreshKey = 0,
 }: ReviewsSectionProps) {
   const { userId } = useAuth();
   const [reviews, setReviews] = useState<Review[]>([]);
@@ -39,21 +54,46 @@ export default function ReviewsSection({
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
+    const cacheKey = `${gameId}:${userId || 'anon'}`;
+    const cached = cache.get(cacheKey);
 
+    // 1. Если есть кеш — показываем моментально
+    if (cached) {
+      setReviews(cached.reviews);
+      setUserVotes(cached.userVotes);
+      setLoading(false);
+
+      // Если кеш свежий (5 сек) и не форсим обновление — не дёргаем сервер
+      if (Date.now() - cached.ts < FRESH_TTL && refreshKey === 0) {
+        return;
+      }
+    } else {
+      setLoading(true);
+    }
+
+    // 2. Загружаем актуальные данные в фоне
     const load = async () => {
       try {
-        const res = await fetch(`/api/reviews?game_id=${gameId}`);
-        const data = await res.json();
-        if (cancelled) return;
-        setReviews(data.reviews || []);
+        const params = new URLSearchParams({ game_id: String(gameId) });
+        if (userId) params.set('user_id', userId);
 
-        if (userId && data.reviews?.length > 0) {
-          const ids = data.reviews.map((r: Review) => r.id).join(',');
-          const votesRes = await fetch(`/api/reviews/vote?user_id=${userId}&review_ids=${ids}`);
-          const votesData = await votesRes.json();
-          if (!cancelled) setUserVotes(votesData.votes || {});
-        }
+        const res = await fetch(`/api/reviews?${params.toString()}`, { cache: 'no-store' });
+        const data = await res.json();
+
+        if (cancelled) return;
+
+        const reviewsData = data.reviews || [];
+        const votesData = data.userVotes || {};
+
+        setReviews(reviewsData);
+        setUserVotes(votesData);
+
+        // Обновляем кеш
+        cache.set(cacheKey, {
+          reviews: reviewsData,
+          userVotes: votesData,
+          ts: Date.now(),
+        });
       } catch (err) {
         console.error('Reviews load error:', err);
       } finally {
@@ -65,7 +105,7 @@ export default function ReviewsSection({
     return () => {
       cancelled = true;
     };
-  }, [gameId, userId]);
+  }, [gameId, userId, refreshKey]);
 
   return (
     <div>

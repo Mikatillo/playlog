@@ -63,15 +63,20 @@ export default function Home() {
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
   const [translating, setTranslating] = useState(false);
   const [descriptionRu, setDescriptionRu] = useState<string | null>(null);
+  const [savedTick, setSavedTick] = useState(0);
+  const [saving, setSaving] = useState(false);
 
   const searchMode = searchQuery ? 'results' : 'browse';
 
+  // ====== Загрузка списка игр ======
   const loadGames = useCallback(
-    async (pageNum: number, append: boolean = false) => {
+    async (pageNum: number, append: boolean = false, genre?: string, sort?: string) => {
       setLoading(true);
       try {
-        let url = `/api/games?page=${pageNum}&pageSize=20&ordering=${sortBy}`;
-        if (selectedGenre) url += `&genres=${selectedGenre}`;
+        const g = genre !== undefined ? genre : selectedGenre;
+        const s = sort !== undefined ? sort : sortBy;
+        let url = `/api/games?page=${pageNum}&pageSize=20&ordering=${s}`;
+        if (g) url += `&genres=${g}`;
         const response = await fetch(url);
         const data = await response.json();
         if (data.results) {
@@ -85,9 +90,10 @@ export default function Home() {
       }
       setLoading(false);
     },
-    [sortBy, selectedGenre, showToast],
+    [selectedGenre, sortBy, showToast],
   );
 
+  // ====== Поиск ======
   const performSearch = useCallback(
     async (q: string) => {
       setLoading(true);
@@ -107,7 +113,67 @@ export default function Home() {
     [showToast],
   );
 
-  // Единый useEffect: обработка поиска + первая загрузка
+  // ====== Открытие модалки игры ======
+  const openGame = async (game: Game) => {
+    setSelectedGame(game);
+    setDescriptionExpanded(false);
+    setTranslating(false);
+    setDescriptionRu(null);
+    setSelectedScreenshot(null);
+    setSaving(false);
+
+    // 1. Мгновенный показ из кеша (может быть устаревшим, но UI отзывчивый)
+    const cached = userGames.get(game.id);
+    if (cached) {
+      setUserRating(cached.rating || 0);
+      setUserHours(cached.hours || 0);
+      setReview(cached.review || '');
+      setGameStatus(cached.status || 'none');
+    } else {
+      setUserRating(0);
+      setUserHours(0);
+      setReview('');
+      setGameStatus('none');
+    }
+
+    // 2. Параллельно подтягиваем СВЕЖИЕ данные из Supabase + полные данные игры
+    const userDataPromise = userId
+      ? supabase
+          .from('user_games')
+          .select('rating, hours, review, status')
+          .eq('user_id', userId)
+          .eq('game_id', game.id)
+          .maybeSingle()
+      : Promise.resolve({ data: null });
+
+    const fullGamePromise = fetch(`/api/games/${game.id}?full=true`)
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null);
+
+    const [userDataRes, fullGameRes] = await Promise.all([
+      userDataPromise,
+      fullGamePromise,
+    ]);
+
+    // 3. Применяем свежие данные пользователя (если есть)
+    if (userDataRes.data) {
+      setUserRating(userDataRes.data.rating || 0);
+      setUserHours(userDataRes.data.hours || 0);
+      setReview(userDataRes.data.review || '');
+      setGameStatus(userDataRes.data.status || 'none');
+    }
+
+    // 4. Применяем полные данные игры
+    if (fullGameRes) {
+      const fullGame = mapRawgGame(fullGameRes);
+      setSelectedGame(fullGame);
+      if (fullGame.descriptionRaw) {
+        translateDescription(fullGame.descriptionRaw, game.id);
+      }
+    }
+  };;
+
+  // ====== Главный useEffect (поиск + первая загрузка) ======
   useEffect(() => {
     const handler = (e: Event) => {
       const q = (e as CustomEvent).detail?.query || '';
@@ -118,34 +184,89 @@ export default function Home() {
       } else {
         setSearchQuery('');
         setPage(1);
-        loadGames(1);
+        loadGames(1, false, '', '-added');
       }
     };
     window.addEventListener('playlog:search', handler);
 
-    // Проверяем pendingSearch (переход с других страниц)
     const pending = sessionStorage.getItem('pendingSearch');
     if (pending) {
       sessionStorage.removeItem('pendingSearch');
       setSearchQuery(pending);
       performSearch(pending);
     } else {
-      // Первая загрузка — сразу же
-      loadGames(1);
+      loadGames(1, false, '', '-added');
     }
 
     return () => window.removeEventListener('playlog:search', handler);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Перезагрузка при смене жанра/сортировки (только в browse, пропускаем первый рендер)
+  // ====== Обработка ?open= и pendingOpenGame + подписка на playlog:openGame ======
+  useEffect(() => {
+    // Клик по подсказке в шапке, когда мы на главной
+    const openHandler = (e: Event) => {
+      const game = (e as CustomEvent).detail?.game;
+      if (game) openGame(game);
+    };
+    window.addEventListener('playlog:openGame', openHandler);
+
+    // ?open={id} в URL — переход из профиля и т.п.
+    const urlParams = new URLSearchParams(window.location.search);
+    const openId = urlParams.get('open');
+
+    if (openId) {
+      const gameId = Number(openId);
+      if (!isNaN(gameId)) {
+        window.history.replaceState({}, '', '/');
+        fetch(`/api/games/${gameId}?full=true`)
+          .then((r) => (r.ok ? r.json() : null))
+          .then((rawData) => {
+            if (!rawData) return;
+            const game = mapRawgGame(rawData);
+            setSelectedGame(game);
+
+            const data = userGames.get(gameId);
+            if (data) {
+              setUserRating(data.rating || 0);
+              setUserHours(data.hours || 0);
+              setReview(data.review || '');
+              setGameStatus(data.status || 'none');
+            }
+            if (game.descriptionRaw) {
+              translateDescription(game.descriptionRaw, gameId);
+            }
+          })
+          .catch((err) => console.error('Open from URL error:', err));
+      }
+    } else {
+      // pendingOpenGame — переход из подсказки в шапке с другой страницы
+      const pendingGame = sessionStorage.getItem('pendingOpenGame');
+      if (pendingGame) {
+        sessionStorage.removeItem('pendingOpenGame');
+        try {
+          const game: Game = JSON.parse(pendingGame);
+          // Небольшая задержка, чтобы страница успела отрендериться
+          setTimeout(() => openGame(game), 100);
+        } catch (err) {
+          console.error('Pending open game parse error:', err);
+        }
+      }
+    }
+
+    return () => window.removeEventListener('playlog:openGame', openHandler);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ====== Перезагрузка при смене жанра/сортировки ======
   useEffect(() => {
     if (searchMode === 'browse' && !searchQuery) {
-      loadGames(1);
+      loadGames(1, false, selectedGenre, sortBy);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedGenre, sortBy]);
 
+  // ====== Escape для модалки ======
   useEffect(() => {
     if (!selectedGame) return;
     const handleEsc = (e: KeyboardEvent) => {
@@ -213,46 +334,36 @@ export default function Home() {
     setTranslating(false);
   };
 
-  const openGame = async (game: Game) => {
-    setSelectedGame(game);
-    setDescriptionExpanded(false);
-    setTranslating(false);
-    setDescriptionRu(null);
-    setSelectedScreenshot(null);
-
-    const data = userGames.get(game.id);
-    if (data) {
-      setUserRating(data.rating || 0);
-      setUserHours(data.hours || 0);
-      setReview(data.review || '');
-      setGameStatus(data.status || 'none');
-    } else {
-      setUserRating(0);
-      setUserHours(0);
-      setReview('');
-      setGameStatus('none');
-    }
-
-    try {
-      const response = await fetch(`/api/games/${game.id}?full=true`);
-      if (response.ok) {
-        const rawData = await response.json();
-        const fullGame = mapRawgGame(rawData);
-        setSelectedGame(fullGame);
-        if (fullGame.descriptionRaw) {
-          translateDescription(fullGame.descriptionRaw, game.id);
-        }
-      }
-    } catch (error) {
-      console.error('Ошибка загрузки полных данных игры:', error);
-    }
-  };
-
   const closeGame = () => {
     setSelectedGame(null);
     setDescriptionExpanded(false);
     setDescriptionRu(null);
     setSelectedScreenshot(null);
+    setSaving(false);
+  };
+
+  const publishReviewInBackground = (
+    gameId: number,
+    gameTitle: string,
+    gameCover: string,
+    rating: number,
+    text: string,
+  ) => {
+    if (!userId || text.trim().length < 20) return;
+    fetch('/api/reviews', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId,
+        gameId,
+        gameTitle,
+        gameCover,
+        rating: rating > 0 ? rating : null,
+        text: text.trim(),
+      }),
+    })
+      .then(() => setSavedTick((v) => v + 1))
+      .catch((err) => console.error('Publish review error:', err));
   };
 
   const saveData = async (
@@ -282,26 +393,6 @@ export default function Home() {
       { onConflict: 'user_id,game_id' },
     );
 
-    // Публикуем рецензию, если текст достаточно длинный
-    if (newReview.trim().length >= 20) {
-      try {
-        await fetch('/api/reviews', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            userId,
-            gameId: selectedGame.id,
-            gameTitle: selectedGame.title,
-            gameCover: selectedGame.cover,
-            rating: newRating > 0 ? newRating : null,
-            text: newReview.trim(),
-          }),
-        });
-      } catch (err) {
-        console.error('Publish review error:', err);
-      }
-    }
-
     setUserGames((prev) => {
       const newMap = new Map(prev);
       newMap.set(selectedGame.id, newData);
@@ -312,15 +403,41 @@ export default function Home() {
   };
 
   const saveAndClose = async () => {
-    if (!selectedGame) return;
-    const oldData = userGames.get(selectedGame.id) || null;
-    const newData = await saveData(userRating, userHours, review, gameStatus);
+    if (!selectedGame || saving) return;
+    setSaving(true);
 
-    const { amount } = calculateXpGain(oldData, newData);
-    if (amount > 0) addXp(amount);
+    try {
+      const oldData = userGames.get(selectedGame.id) || null;
+      const newData = await saveData(userRating, userHours, review, gameStatus);
 
-    showToast('Сохранено', 'success');
-    closeGame();
+      const { amount } = calculateXpGain(oldData, newData);
+      if (amount > 0) addXp(amount);
+
+      const payload = {
+        gameId: selectedGame.id,
+        gameTitle: selectedGame.title,
+        gameCover: selectedGame.cover,
+        rating: userRating,
+        text: review,
+      };
+
+      showToast('Сохранено', 'success');
+      closeGame();
+
+      if (payload.text.trim().length >= 20) {
+        publishReviewInBackground(
+          payload.gameId,
+          payload.gameTitle,
+          payload.gameCover,
+          payload.rating,
+          payload.text,
+        );
+      }
+    } catch (err) {
+      console.error('Save error:', err);
+      showToast('Не удалось сохранить', 'error');
+      setSaving(false);
+    }
   };
 
   const publishReview = async () => {
@@ -342,6 +459,7 @@ export default function Home() {
           text: review.trim(),
         }),
       });
+      setSavedTick((v) => v + 1);
       showToast('Рецензия опубликована', 'success');
     } catch {
       showToast('Не удалось опубликовать', 'error');
@@ -351,7 +469,7 @@ export default function Home() {
   const loadMore = () => {
     const nextPage = page + 1;
     setPage(nextPage);
-    loadGames(nextPage, true);
+    loadGames(nextPage, true, selectedGenre, sortBy);
   };
 
   const handleReset = () => {
@@ -359,7 +477,7 @@ export default function Home() {
     setSelectedGenre('');
     setPage(1);
     window.dispatchEvent(new CustomEvent('playlog:search', { detail: { query: '' } }));
-    loadGames(1);
+    loadGames(1, false, '', '-added');
   };
 
   return (
@@ -373,7 +491,6 @@ export default function Home() {
         <main className="space-y-5 md:space-y-6">
           <ReleasesTicker />
 
-          {/* Рекомендации — грузятся независимо, не блокируют главную */}
           {searchMode === 'browse' && <ForYou onGameClick={openGame} />}
 
           <div>
@@ -473,7 +590,7 @@ export default function Home() {
         </main>
       </div>
 
-      {/* Модальное окно игры */}
+      {/* Модалка игры */}
       {selectedGame && (
         <div
           className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-start md:items-center justify-center p-0 md:p-4 overflow-y-auto"
@@ -542,7 +659,7 @@ export default function Home() {
                       }`}
                     >
                       <XCircle className="w-4 h-4" />
-                      <span>Брошено</span>
+                      <span>Заброшено</span>
                     </button>
                   </div>
                 </div>
@@ -732,14 +849,25 @@ export default function Home() {
                   <div className="flex gap-2 pt-2 border-t border-neutral-800">
                     <button
                       onClick={saveAndClose}
-                      className="flex-1 bg-indigo-500 hover:bg-indigo-600 text-white font-medium py-3 rounded-lg transition flex items-center justify-center gap-2 text-sm md:text-base"
+                      disabled={saving}
+                      className="flex-1 bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 text-white font-medium py-3 rounded-lg transition flex items-center justify-center gap-2 text-sm md:text-base"
                     >
-                      <Save className="w-4 h-4" />
-                      Сохранить
+                      {saving ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Сохраняем...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="w-4 h-4" />
+                          Сохранить
+                        </>
+                      )}
                     </button>
                     <button
                       onClick={closeGame}
-                      className="px-4 md:px-6 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 font-medium py-3 rounded-lg transition text-sm md:text-base"
+                      disabled={saving}
+                      className="px-4 md:px-6 bg-neutral-800 hover:bg-neutral-700 disabled:opacity-50 text-neutral-300 font-medium py-3 rounded-lg transition text-sm md:text-base"
                     >
                       Отмена
                     </button>
@@ -747,9 +875,8 @@ export default function Home() {
                 </>
               )}
 
-              {/* Публичные рецензии игроков */}
               <div className="pt-4 border-t border-neutral-800">
-                <ReviewsSection gameId={selectedGame.id} />
+                <ReviewsSection gameId={selectedGame.id} refreshKey={savedTick} />
               </div>
             </div>
           </div>

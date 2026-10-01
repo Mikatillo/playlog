@@ -58,6 +58,7 @@ export default function MyGamesPage() {
   const [sortBy, setSortBy] = useState<SortType>('year-desc');
   const [descriptionRu, setDescriptionRu] = useState<string | null>(null);
   const [translating, setTranslating] = useState(false);
+  const [savedTick, setSavedTick] = useState(0);
 
   useEffect(() => {
     if (authLoading) return;
@@ -307,7 +308,6 @@ export default function MyGamesPage() {
       { onConflict: 'user_id,game_id' },
     );
 
-    // Публикуем рецензию, если текст достаточно длинный
     if (modalReview.trim().length >= 20) {
       try {
         await fetch('/api/reviews', {
@@ -338,6 +338,7 @@ export default function MyGamesPage() {
       });
       return newMap;
     });
+    setSavedTick((v) => v + 1);
     showToast('Изменения сохранены', 'success');
   };
 
@@ -360,6 +361,7 @@ export default function MyGamesPage() {
           text: modalReview.trim(),
         }),
       });
+      setSavedTick((v) => v + 1);
       showToast('Рецензия опубликована', 'success');
     } catch {
       showToast('Не удалось опубликовать', 'error');
@@ -641,7 +643,7 @@ export default function MyGamesPage() {
                       }`}
                     >
                       <XCircle className="w-4 h-4" />
-                      <span>Брошено</span>
+                      <span>Заброшено</span>
                     </button>
                   </div>
                 </div>
@@ -845,9 +847,8 @@ export default function MyGamesPage() {
                   </button>
                 </div>
 
-                {/* Публичные рецензии игроков */}
                 <div className="pt-4 border-t border-neutral-800">
-                  <ReviewsSection gameId={selectedGame.id} />
+                  <ReviewsSection gameId={selectedGame.id} refreshKey={savedTick} />
                 </div>
               </div>
             )}

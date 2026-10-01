@@ -3,13 +3,14 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   Gamepad2, Menu, X, LogOut, Award, Pencil, AlertTriangle,
-  User as UserIcon, Home, Library, Search, UserCircle,
+  User as UserIcon, Home, Library, Search, Calendar, Loader2,
 } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { calculateLevel } from '@/types/game';
+import { calculateLevel, Game } from '@/types/game';
+import { mapRawgGame, RawgGame } from '@/lib/rawg';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import AchievementsModal from './AchievementsModal';
@@ -27,8 +28,17 @@ export default function Header() {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [logoutConfirm, setLogoutConfirm] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+
+  // === Поиск ===
   const [query, setQuery] = useState('');
+  const [suggestions, setSuggestions] = useState<Game[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [suggestLoading, setSuggestLoading] = useState(false);
+
   const userMenuRef = useRef<HTMLDivElement>(null);
+  const searchWrapRef = useRef<HTMLDivElement>(null);
+  const mobileSearchWrapRef = useRef<HTMLDivElement>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const levelInfo = calculateLevel(profile.xp);
   const isLoggedIn = !!userId;
@@ -45,10 +55,39 @@ export default function Header() {
     router.refresh();
   };
 
-  const submitSearch = (e: React.FormEvent) => {
-    e.preventDefault();
+  // ============ Поиск с подсказками ============
+  const fetchSuggestions = async (value: string) => {
+    if (value.length < 2) {
+      setSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+    setSuggestLoading(true);
+    try {
+      const res = await fetch(`/api/games/search?search=${encodeURIComponent(value)}`);
+      const data = await res.json();
+      const mapped = (data.results || []).slice(0, 6).map((g: RawgGame) => mapRawgGame(g));
+      setSuggestions(mapped);
+      setShowSuggestions(true);
+    } catch (err) {
+      console.error('Suggestions error:', err);
+    }
+    setSuggestLoading(false);
+  };
+
+  const handleInputChange = (value: string) => {
+    setQuery(value);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      fetchSuggestions(value);
+    }, 250);
+  };
+
+  const submitSearch = (e?: React.FormEvent) => {
+    e?.preventDefault();
     const q = query.trim();
     if (!q) return;
+    setShowSuggestions(false);
 
     if (pathname !== '/') {
       sessionStorage.setItem('pendingSearch', q);
@@ -59,17 +98,55 @@ export default function Header() {
     setSearchOpen(false);
   };
 
+  const handleSuggestionClick = (game: Game) => {
+    setShowSuggestions(false);
+    setQuery('');
+    setSearchOpen(false);
+
+    if (pathname === '/') {
+      window.dispatchEvent(new CustomEvent('playlog:openGame', { detail: { game } }));
+    } else {
+      // Сохраняем игру и переходим на главную
+      try {
+        sessionStorage.setItem('pendingOpenGame', JSON.stringify(game));
+      } catch {}
+      router.push('/');
+    }
+  };
+
   const clearSearch = () => {
     setQuery('');
+    setSuggestions([]);
+    setShowSuggestions(false);
     if (pathname === '/') {
       window.dispatchEvent(new CustomEvent('playlog:search', { detail: { query: '' } }));
     }
   };
 
+  // Закрытие подсказок по клику вне
+  useEffect(() => {
+    if (!showSuggestions) return;
+    const handler = (e: MouseEvent) => {
+      const target = e.target as Node;
+      const insideDesktop = searchWrapRef.current?.contains(target);
+      const insideMobile = mobileSearchWrapRef.current?.contains(target);
+      if (!insideDesktop && !insideMobile) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showSuggestions]);
+
+  // Синхронизация с событием playlog:search (сброс из page.tsx)
   useEffect(() => {
     const handler = (e: Event) => {
       const q = (e as CustomEvent).detail?.query || '';
       setQuery(q);
+      if (!q) {
+        setSuggestions([]);
+        setShowSuggestions(false);
+      }
     };
     window.addEventListener('playlog:search', handler);
     return () => window.removeEventListener('playlog:search', handler);
@@ -93,6 +170,7 @@ export default function Header() {
         setMenuOpen(false);
         setLogoutConfirm(false);
         setSearchOpen(false);
+        setShowSuggestions(false);
       }
     };
     window.addEventListener('keydown', handleEsc);
@@ -137,10 +215,74 @@ export default function Header() {
     }`;
   };
 
+  // ============ Компонент списка подсказок ============
+  const SuggestionsList = () => {
+    if (!showSuggestions) return null;
+
+    return (
+      <div className="absolute left-0 right-0 top-full mt-2 bg-neutral-900 rounded-xl border border-neutral-800 shadow-2xl z-50 overflow-hidden">
+        {suggestLoading ? (
+          <div className="flex items-center justify-center py-4">
+            <Loader2 className="w-4 h-4 text-indigo-400 animate-spin" />
+            <span className="ml-2 text-xs text-neutral-400">Ищем...</span>
+          </div>
+        ) : suggestions.length === 0 ? (
+          <div className="px-3 py-4 text-center text-xs text-neutral-500">
+            Ничего не найдено
+          </div>
+        ) : (
+          <div className="max-h-[400px] overflow-y-auto">
+            {suggestions.map((game) => (
+              <button
+                key={game.id}
+                onClick={() => handleSuggestionClick(game)}
+                className="w-full flex items-center gap-3 p-3 hover:bg-neutral-800 transition text-left border-b border-neutral-800 last:border-b-0"
+              >
+                <div className="relative w-10 h-14 rounded-lg overflow-hidden bg-neutral-800 flex-shrink-0">
+                  {game.cover ? (
+                    <Image
+                      src={game.cover}
+                      alt={game.title}
+                      fill
+                      sizes="40px"
+                      className="object-cover"
+                      unoptimized
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <Gamepad2 className="w-4 h-4 text-neutral-600" />
+                    </div>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-sm text-white truncate">
+                    {game.title}
+                  </div>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-xs text-neutral-400 truncate">
+                      {game.genre}
+                    </span>
+                    {game.year > 0 && (
+                      <>
+                        <span className="text-xs text-neutral-600">•</span>
+                        <span className="text-xs text-neutral-400">{game.year}</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <>
       <header className="bg-neutral-900 border-b border-neutral-800 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 md:px-6 py-3 flex items-center gap-3 md:gap-4">
+          {/* Логотип */}
           <Link
             href="/"
             className="flex items-center gap-2.5 flex-shrink-0 rounded-lg hover:opacity-80 transition"
@@ -152,6 +294,7 @@ export default function Header() {
             <span className="font-semibold text-lg text-white hidden sm:inline">PlayLog</span>
           </Link>
 
+          {/* Навигация */}
           <nav className="hidden lg:flex items-center gap-1 flex-shrink-0">
             <Link href="/" className={navLinkClass('/')}>
               <Home className="w-4 h-4" />
@@ -160,6 +303,10 @@ export default function Header() {
             <Link href="/my-games" className={navLinkClass('/my-games')}>
               <Library className="w-4 h-4" />
               Мои игры
+            </Link>
+            <Link href="/releases" className={navLinkClass('/releases')}>
+              <Calendar className="w-4 h-4" />
+              Релизы
             </Link>
             <button
               onClick={() => setAchievementsOpen(true)}
@@ -170,33 +317,39 @@ export default function Header() {
             </button>
           </nav>
 
-          <form
-            onSubmit={submitSearch}
-            className="hidden md:flex flex-1 max-w-[220px] lg:max-w-xs xl:max-w-sm mx-auto"
-          >
-            <div className="relative w-full">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500 pointer-events-none" />
-              <input
-                type="text"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Поиск игр..."
-                className="w-full bg-neutral-800/70 border border-neutral-700/50 rounded-lg pl-9 pr-8 py-2 text-sm text-white placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500/50 transition"
-              />
-              {query && (
-                <button
-                  type="button"
-                  onClick={clearSearch}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 hover:bg-neutral-700 rounded transition"
-                  aria-label="Очистить"
-                >
-                  <X className="w-3.5 h-3.5 text-neutral-400" />
-                </button>
-              )}
-            </div>
-          </form>
+          {/* Поиск (desktop) */}
+          <div ref={searchWrapRef} className="hidden md:block flex-1 max-w-[220px] lg:max-w-xs xl:max-w-sm mx-auto relative">
+            <form onSubmit={submitSearch}>
+              <div className="relative w-full">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500 pointer-events-none" />
+                <input
+                  type="text"
+                  value={query}
+                  onChange={(e) => handleInputChange(e.target.value)}
+                  onFocus={() => {
+                    if (suggestions.length > 0) setShowSuggestions(true);
+                  }}
+                  placeholder="Поиск игр..."
+                  className="w-full bg-neutral-800/70 border border-neutral-700/50 rounded-lg pl-9 pr-8 py-2 text-sm text-white placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500/50 transition"
+                />
+                {query && (
+                  <button
+                    type="button"
+                    onClick={clearSearch}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 hover:bg-neutral-700 rounded transition"
+                    aria-label="Очистить"
+                  >
+                    <X className="w-3.5 h-3.5 text-neutral-400" />
+                  </button>
+                )}
+              </div>
+            </form>
+            <SuggestionsList />
+          </div>
 
+          {/* Правый блок */}
           <div className="flex items-center gap-2 md:gap-3 flex-shrink-0 ml-auto lg:ml-0">
+            {/* Мобильный поиск */}
             <button
               onClick={() => setSearchOpen((v) => !v)}
               className="md:hidden p-2 text-neutral-400 hover:text-white transition"
@@ -245,7 +398,7 @@ export default function Header() {
                       onClick={() => setUserMenuOpen(false)}
                       className="w-full px-4 py-2.5 text-left text-sm text-neutral-300 hover:bg-neutral-800 hover:text-white transition flex items-center gap-2"
                     >
-                      <UserCircle className="w-4 h-4" />
+                      <UserIcon className="w-4 h-4" />
                       Мой профиль
                     </Link>
 
@@ -292,14 +445,18 @@ export default function Header() {
           </div>
         </div>
 
+        {/* Мобильный поиск */}
         {searchOpen && (
-          <div className="md:hidden border-t border-neutral-800 px-4 py-3">
+          <div ref={mobileSearchWrapRef} className="md:hidden border-t border-neutral-800 px-4 py-3 relative">
             <form onSubmit={submitSearch} className="relative w-full">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500 pointer-events-none" />
               <input
                 type="text"
                 value={query}
-                onChange={(e) => setQuery(e.target.value)}
+                onChange={(e) => handleInputChange(e.target.value)}
+                onFocus={() => {
+                  if (suggestions.length > 0) setShowSuggestions(true);
+                }}
                 placeholder="Поиск игр..."
                 autoFocus
                 className="w-full bg-neutral-800 border border-neutral-700 rounded-lg pl-9 pr-9 py-2.5 text-sm text-white placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -315,9 +472,11 @@ export default function Header() {
                 </button>
               )}
             </form>
+            <SuggestionsList />
           </div>
         )}
 
+        {/* Мобильное меню */}
         {menuOpen && (
           <div className="lg:hidden bg-neutral-900 border-t border-neutral-800 px-6 py-4 space-y-3">
             {isLoggedIn && (
@@ -356,6 +515,17 @@ export default function Header() {
             >
               Мои игры
             </Link>
+            <Link
+              href="/releases"
+              onClick={() => setMenuOpen(false)}
+              className={`block text-sm font-medium transition py-2.5 px-3 rounded-lg ${
+                isActive('/releases')
+                  ? 'bg-indigo-500/15 text-indigo-400 ring-1 ring-indigo-500/30'
+                  : 'text-neutral-300 hover:text-white hover:bg-neutral-800'
+              }`}
+            >
+              Релизы
+            </Link>
             <button
               onClick={() => {
                 setAchievementsOpen(true);
@@ -374,7 +544,7 @@ export default function Header() {
                   onClick={() => setMenuOpen(false)}
                   className="w-full text-left text-sm font-medium text-neutral-300 hover:text-white hover:bg-neutral-800 transition py-2.5 px-3 rounded-lg flex items-center gap-2"
                 >
-                  <UserCircle className="w-4 h-4" />
+                  <UserIcon className="w-4 h-4" />
                   Мой профиль
                 </Link>
                 <button

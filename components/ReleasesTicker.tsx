@@ -91,8 +91,8 @@ export default function ReleasesTicker() {
                       src={game.cover}
                       alt={game.title}
                       fill
-                      sizes="64px"
-                      quality={95}
+                      sizes="100px"
+                      quality={100}
                       className="object-cover"
                     />
                   ) : (

@@ -52,6 +52,7 @@ export default function ReleasesPage() {
   const [publishing, setPublishing] = useState(false);
   const [savingStatus, setSavingStatus] = useState(false);
   const [gameStatus, setGameStatus] = useState<'none' | 'want' | 'dropped'>('none');
+  const [savedTick, setSavedTick] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -238,6 +239,7 @@ export default function ReleasesPage() {
       });
       if (!res.ok) throw new Error();
       setComment('');
+      setSavedTick((v) => v + 1);
       showToast('Комментарий опубликован', 'success');
     } catch {
       showToast('Не удалось опубликовать', 'error');
@@ -534,13 +536,13 @@ export default function ReleasesPage() {
                   </div>
                 )}
 
-                {/* Публичные КОММЕНТАРИИ (не рецензии) */}
                 <div className="pt-4 border-t border-neutral-800">
                   <ReviewsSection
                     gameId={selectedGame.id}
                     title="Комментарии"
                     emptyText="Пока нет комментариев"
                     emptyHint="Стань первым — оставь комментарий выше"
+                    refreshKey={savedTick}
                   />
                 </div>
               </div>

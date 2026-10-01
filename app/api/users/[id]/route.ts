@@ -9,13 +9,7 @@ export async function GET(
   if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });
 
   try {
-    // Все запросы — ПАРАЛЛЕЛЬНО
-    const [
-      profileRes,
-      reviewsRes,
-      likesRes,
-      userGamesRes,
-    ] = await Promise.all([
+    const [profileRes, reviewsRes, likesRes, userGamesRes] = await Promise.all([
       supabase
         .from('profiles')
         .select('id, nickname, full_name, avatar_url, banner_url, banner_gradient, region, city, steam_url, xp, total_games, completed_games, total_hours')
@@ -33,18 +27,17 @@ export async function GET(
         .eq('to_user_id', id),
       supabase
         .from('user_games')
-        .select('game_id, status, hours, rating, review')
+        .select('game_id, status, hours, rating, review, updated_at')
         .eq('user_id', id),
     ]);
 
     const profile = profileRes.data;
     const reviews = reviewsRes.data;
     const likesCount = likesRes.count;
-    const userGames = userGamesRes.data;
+    const userGames = userGamesRes.data || [];
 
     if (!profile) return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
 
-    // Votes — отдельно, потому что зависит от reviews
     let reviewLikesSum = 0;
     if (reviews && reviews.length > 0) {
       const ids = reviews.map((r) => r.id);
@@ -76,15 +69,14 @@ export async function GET(
           likes: likesCount || 0,
           reviewsCount: reviews?.length || 0,
           reviewLikesSum,
-          gamesCount: userGames?.length || 0,
+          gamesCount: userGames.length,
         },
         reviews: reviews || [],
-        userGames: userGames || [],
+        userGames,
       },
       {
         headers: {
-          // Кеш браузера на 30 секунд, на сервере — 60 секунд
-          'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120',
+          'Cache-Control': 'no-store',
         },
       },
     );

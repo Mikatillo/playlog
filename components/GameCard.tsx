@@ -23,6 +23,9 @@ const statusIcon = {
   none: null,
 };
 
+// Сколько карточек в сетке грузить сразу (выше первого экрана)
+const EAGER_LIMIT = 4;
+
 export default function GameCard({
   game,
   onClick,
@@ -33,6 +36,7 @@ export default function GameCard({
 }: GameCardProps) {
   const showUserData = isAuthenticated && userGameData;
   const delay = Math.min(index * 40, 400);
+  const isPriority = index < EAGER_LIMIT;
 
   return (
     <div
@@ -47,12 +51,12 @@ export default function GameCard({
           fill
           sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, (max-width: 1280px) 33vw, 25vw"
           className="object-cover group-hover:scale-105 transition-transform duration-300"
-          loading="lazy"
+          loading={isPriority ? 'eager' : 'lazy'}
+          priority={isPriority}
         />
 
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
 
-        {/* Рейтинги — MC и Steam рядом */}
         <div className="absolute top-2 right-2 flex items-center gap-1.5">
           {game.metacritic && game.metacritic > 0 && (
             <div

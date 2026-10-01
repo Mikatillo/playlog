@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 type SteamVariant = 'badge' | 'inline' | 'compact';
 
@@ -15,6 +15,7 @@ interface SteamReviewData {
   description: string;
 }
 
+// Глобальный кеш в памяти браузера
 const reviewCache = new Map<string, SteamReviewData | null>();
 
 const STEAM_BLUE = '#66c0f4';
@@ -36,48 +37,23 @@ function SteamIcon({ className, color = 'ffffff' }: { className?: string; color?
 }
 
 export default function SteamRating({ gameTitle, variant = 'inline' }: SteamRatingProps) {
-  const containerRef = useRef<HTMLSpanElement>(null);
-  const [visible, setVisible] = useState(false);
   const [data, setData] = useState<SteamReviewData | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  // Ленивая загрузка — начинаем грузить только когда карточка видна
   useEffect(() => {
-    if (!containerRef.current || visible) return;
-
-    // Если нет IntersectionObserver (SSR), грузим сразу
-    if (typeof IntersectionObserver === 'undefined') {
-      setVisible(true);
-      return;
-    }
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setVisible(true);
-          observer.disconnect();
-        }
-      },
-      { rootMargin: '200px' }, // начинаем грузить за 200px до появления
-    );
-
-    observer.observe(containerRef.current);
-    return () => observer.disconnect();
-  }, [visible]);
-
-  // Загрузка данных когда стало видно
-  useEffect(() => {
-    if (!visible || !gameTitle) return;
+    if (!gameTitle) return;
 
     let cancelled = false;
 
     const load = async () => {
-      // Кеш в памяти
+      // Мгновенно из кеша
       if (reviewCache.has(gameTitle)) {
         const cached = reviewCache.get(gameTitle);
         if (cached && !cancelled) setData(cached);
         return;
       }
 
+      setLoading(true);
       try {
         const res = await fetch(`/api/steam/rating?name=${encodeURIComponent(gameTitle)}`);
         if (!res.ok) {
@@ -99,8 +75,10 @@ export default function SteamRating({ gameTitle, variant = 'inline' }: SteamRati
         } else {
           reviewCache.set(gameTitle, null);
         }
-      } catch (err) {
-        // Не кешируем ошибки — попробуем в следующий раз
+      } catch {
+        // Ошибку не кешируем — попробуем при следующем запросе
+      } finally {
+        if (!cancelled) setLoading(false);
       }
     };
 
@@ -108,12 +86,9 @@ export default function SteamRating({ gameTitle, variant = 'inline' }: SteamRati
     return () => {
       cancelled = true;
     };
-  }, [visible, gameTitle]);
+  }, [gameTitle]);
 
-  // Пока данных нет — рендерим только якорь для observer
-  if (!data) {
-    return <span ref={containerRef} className="inline-block w-0 h-0" aria-hidden="true" />;
-  }
+  if (loading || !data) return null;
 
   if (variant === 'badge') {
     return (

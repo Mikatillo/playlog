@@ -21,7 +21,6 @@ interface EditProfileModalProps {
   onUpdate: (updated: Partial<UserProfile>) => void;
 }
 
-// Доступные градиенты для баннера
 const BANNER_GRADIENTS = [
   { id: 'indigo',   label: 'Индиго',   class: 'from-indigo-600 via-purple-600 to-pink-600' },
   { id: 'sunset',   label: 'Закат',    class: 'from-orange-500 via-red-500 to-pink-600' },
@@ -36,6 +35,67 @@ const BANNER_GRADIENTS = [
 export function getBannerGradientClass(id: string): string {
   const g = BANNER_GRADIENTS.find((g) => g.id === id);
   return g?.class || BANNER_GRADIENTS[0].class;
+}
+
+// Определяем MIME по расширению — если браузер не отдал file.type
+function getMimeFromName(name: string): string {
+  const ext = name.split('.').pop()?.toLowerCase();
+  switch (ext) {
+    case 'jpg':
+    case 'jpeg':
+      return 'image/jpeg';
+    case 'png':
+      return 'image/png';
+    case 'gif':
+      return 'image/gif';
+    case 'webp':
+      return 'image/webp';
+    case 'avif':
+      return 'image/avif';
+    default:
+      return 'image/jpeg';
+  }
+}
+
+// Upload с retry — 3 попытки
+async function uploadWithRetry(
+  bucket: string,
+  path: string,
+  file: File,
+  retries = 3,
+): Promise<{ publicUrl: string; error: any }> {
+  let lastError: any = null;
+
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const { error } = await supabase.storage
+        .from(bucket)
+        .upload(path, file, {
+          upsert: true,
+          cacheControl: '3600',
+          contentType: file.type || getMimeFromName(file.name),
+        });
+
+      if (error) {
+        lastError = error;
+        console.warn(`Upload attempt ${attempt} failed:`, error.message);
+        if (attempt < retries) {
+          await new Promise((r) => setTimeout(r, 500 * attempt));
+          continue;
+        }
+      } else {
+        const { data: { publicUrl } } = supabase.storage.from(bucket).getPublicUrl(path);
+        return { publicUrl, error: null };
+      }
+    } catch (err: any) {
+      lastError = err;
+      console.warn(`Upload attempt ${attempt} threw:`, err.message);
+      if (attempt < retries) {
+        await new Promise((r) => setTimeout(r, 500 * attempt));
+      }
+    }
+  }
+  return { publicUrl: '', error: lastError };
 }
 
 export default function EditProfileModal({
@@ -112,7 +172,9 @@ export default function EditProfileModal({
 
   // ========== АВАТАР ==========
   const handleAvatarSelect = async (file: File) => {
-    if (!file.type.startsWith('image/')) return setProfileError('Только изображения');
+    if (!file.type.startsWith('image/') && !getMimeFromName(file.name).startsWith('image/')) {
+      return setProfileError('Только изображения');
+    }
     if (file.size > 5 * 1024 * 1024) return setProfileError('Максимум 5 МБ');
 
     setUploading(true);
@@ -120,20 +182,26 @@ export default function EditProfileModal({
     try {
       const ext = file.name.split('.').pop()?.toLowerCase() || 'png';
       const path = `${userId}/avatar.${ext}`;
-      const { error: upErr } = await supabase.storage
-        .from('avatars')
-        .upload(path, file, { upsert: true, cacheControl: '3600' });
-      if (upErr) throw upErr;
 
-      const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path);
+      const { publicUrl, error: upErr } = await uploadWithRetry('avatars', path, file);
+
+      if (upErr) {
+        console.error('Avatar upload error:', upErr);
+        throw new Error(upErr.message || 'Не удалось загрузить');
+      }
+
       const url = `${publicUrl}?t=${Date.now()}`;
 
-      await supabase.from('profiles').update({ avatar_url: url }).eq('id', userId);
+      const { error: dbErr } = await supabase.from('profiles').update({ avatar_url: url }).eq('id', userId);
+      if (dbErr) throw dbErr;
+
       setAvatarUrl(url);
       onUpdate({ avatarUrl: url });
       showToast('Аватар обновлён', 'success');
     } catch (err: any) {
+      console.error('handleAvatarSelect error:', err);
       setProfileError(err.message || 'Ошибка загрузки');
+      showToast('Ошибка загрузки аватара', 'error');
     }
     setUploading(false);
   };
@@ -158,29 +226,35 @@ export default function EditProfileModal({
 
   // ========== БАННЕР ==========
   const handleBannerSelect = async (file: File) => {
-    const isImage = file.type.startsWith('image/');
-    const isGif = file.type === 'image/gif';
+    const mime = file.type || getMimeFromName(file.name);
+    const isImage = mime.startsWith('image/');
     if (!isImage) return setProfileError('Только изображения или GIF');
     if (file.size > 10 * 1024 * 1024) return setProfileError('Максимум 10 МБ');
 
     setUploadingBanner(true);
     setProfileError(null);
     try {
-      const ext = file.name.split('.').pop()?.toLowerCase() || (isGif ? 'gif' : 'jpg');
+      const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
       const path = `${userId}/banner.${ext}`;
-      const { error: upErr } = await supabase.storage
-        .from('avatars')
-        .upload(path, file, { upsert: true, cacheControl: '3600' });
-      if (upErr) throw upErr;
 
-      const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path);
+      const { publicUrl, error: upErr } = await uploadWithRetry('avatars', path, file);
+
+      if (upErr) {
+        console.error('Banner upload error:', upErr);
+        throw new Error(upErr.message || 'Не удалось загрузить баннер');
+      }
+
       const url = `${publicUrl}?t=${Date.now()}`;
 
-      await supabase.from('profiles').update({ banner_url: url }).eq('id', userId);
+      const { error: dbErr } = await supabase.from('profiles').update({ banner_url: url }).eq('id', userId);
+      if (dbErr) throw dbErr;
+
       setBannerUrl(url);
       showToast('Баннер обновлён', 'success');
     } catch (err: any) {
+      console.error('handleBannerSelect error:', err);
       setProfileError(err.message || 'Ошибка загрузки баннера');
+      showToast('Ошибка загрузки баннера', 'error');
     }
     setUploadingBanner(false);
   };
@@ -325,13 +399,11 @@ export default function EditProfileModal({
         <div className="p-6 space-y-5 max-h-[65vh] overflow-y-auto">
           {tab === 'profile' && (
             <>
-              {/* ==== БАННЕР ==== */}
               <div>
-                <label className="text-xs font-medium text-neutral-400 mb-3 block flex items-center gap-1.5">
+                <label className="text-xs font-medium text-neutral-400 mb-3 flex items-center gap-1.5">
                   <ImageIcon className="w-3 h-3" /> Баннер профиля
                 </label>
 
-                {/* Превью баннера */}
                 <div className="relative h-28 rounded-xl overflow-hidden mb-3">
                   {bannerUrl ? (
                     <>
@@ -340,6 +412,10 @@ export default function EditProfileModal({
                         src={bannerUrl}
                         alt="banner"
                         className="w-full h-full object-cover"
+                        onError={(e) => {
+                          console.error('Banner load failed:', bannerUrl);
+                          (e.target as HTMLImageElement).style.display = 'none';
+                        }}
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
                     </>
@@ -353,7 +429,6 @@ export default function EditProfileModal({
                   )}
                 </div>
 
-                {/* Кнопки баннера */}
                 <div className="flex gap-2 mb-3">
                   <input
                     ref={bannerInputRef}
@@ -386,10 +461,9 @@ export default function EditProfileModal({
                   )}
                 </div>
 
-                {/* Градиенты */}
                 <p className="text-[11px] text-neutral-500 mb-2 flex items-center gap-1.5">
                   <Palette className="w-3 h-3" />
-                  Или выбери градиент {bannerUrl && '(будет скрыт за фото)'}
+                  Или градиент {bannerUrl && '(скрыт за фото)'}
                 </p>
                 <div className="grid grid-cols-4 gap-2">
                   {BANNER_GRADIENTS.map((g) => (
@@ -402,20 +476,11 @@ export default function EditProfileModal({
                           : 'hover:opacity-80'
                       }`}
                       title={g.label}
-                    >
-                      {bannerGradient === g.id && (
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <div className="w-4 h-4 bg-white/30 backdrop-blur-sm rounded-full flex items-center justify-center">
-                            <div className="w-2 h-2 bg-white rounded-full" />
-                          </div>
-                        </div>
-                      )}
-                    </button>
+                    />
                   ))}
                 </div>
               </div>
 
-              {/* ==== АВАТАР ==== */}
               <div>
                 <label className="text-xs font-medium text-neutral-400 mb-3 block">Аватар</label>
                 <div className="flex items-center gap-4">
@@ -478,7 +543,7 @@ export default function EditProfileModal({
               </div>
 
               <div>
-                <label className="text-xs font-medium text-neutral-400 mb-2 block flex items-center gap-1.5">
+                <label className="text-xs font-medium text-neutral-400 mb-2 flex items-center gap-1.5">
                   <AtSign className="w-3 h-3" /> Настоящее имя
                 </label>
                 <input
@@ -493,7 +558,7 @@ export default function EditProfileModal({
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs font-medium text-neutral-400 mb-2 block flex items-center gap-1.5">
+                  <label className="text-xs font-medium text-neutral-400 mb-2 flex items-center gap-1.5">
                     <MapPin className="w-3 h-3" /> Регион
                   </label>
                   <input
@@ -502,11 +567,11 @@ export default function EditProfileModal({
                     onChange={(e) => setRegion(e.target.value)}
                     maxLength={50}
                     className="w-full px-4 py-2.5 bg-neutral-800 border border-neutral-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    placeholder="Московская область"
+                    placeholder="Область"
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-neutral-400 mb-2 block flex items-center gap-1.5">
+                  <label className="text-xs font-medium text-neutral-400 mb-2 flex items-center gap-1.5">
                     <MapPin className="w-3 h-3" /> Город
                   </label>
                   <input
@@ -515,13 +580,13 @@ export default function EditProfileModal({
                     onChange={(e) => setCity(e.target.value)}
                     maxLength={50}
                     className="w-full px-4 py-2.5 bg-neutral-800 border border-neutral-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    placeholder="Москва"
+                    placeholder="Город"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="text-xs font-medium text-neutral-400 mb-2 block flex items-center gap-1.5">
+                <label className="text-xs font-medium text-neutral-400 mb-2 flex items-center gap-1.5">
                   <Link2 className="w-3 h-3" /> Steam-профиль
                 </label>
                 <input
