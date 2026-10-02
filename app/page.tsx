@@ -149,22 +149,26 @@ export default function Home() {
       setGameStatus('none');
     }
 
+    // Свежие данные пользователя — async IIFE, чтобы типобезопасно
     if (userId) {
-      supabase
-        .from('user_games')
-        .select('rating, hours, review, status')
-        .eq('user_id', userId)
-        .eq('game_id', game.id)
-        .maybeSingle()
-        .then(({ data }) => {
+      (async () => {
+        try {
+          const { data } = await supabase
+            .from('user_games')
+            .select('rating, hours, review, status')
+            .eq('user_id', userId)
+            .eq('game_id', game.id)
+            .maybeSingle();
           if (data) {
             setUserRating(data.rating || 0);
             setUserHours(data.hours || 0);
             setReview(data.review || '');
             setGameStatus(data.status || 'none');
           }
-        })
-        .catch(() => {});
+        } catch {
+          // молча
+        }
+      })();
     }
 
     fetch(`/api/games/${game.id}?full=true`)
@@ -281,7 +285,7 @@ export default function Home() {
     return () => window.removeEventListener('keydown', handleEsc);
   }, [selectedGame, selectedScreenshot]);
 
-  // === Начисление XP + монет ===
+  // Начисление XP + монет
   const addRewards = async (xpAmount: number, coinsAmount: number) => {
     if (xpAmount > 0) {
       setProfile((prev) => ({ ...prev, xp: prev.xp + xpAmount }));
