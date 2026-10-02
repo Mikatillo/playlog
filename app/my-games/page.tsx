@@ -18,21 +18,15 @@ import GameCardSkeleton from '@/components/GameCardSkeleton';
 import GameMediaCarousel from '@/components/GameMediaCarousel';
 import SteamRating from '@/components/SteamRating';
 import ReviewsSection from '@/components/ReviewsSection';
+import SteamImportModal from '@/components/SteamImportModal';
 
 type TabType = 'all' | 'want' | 'playing' | 'completed' | 'dropped';
-type SortType =
-  | 'rating-asc'
-  | 'rating-desc'
-  | 'hours-asc'
-  | 'hours-desc'
-  | 'year-asc'
-  | 'year-desc';
+type SortType = 'newest' | 'oldest' | 'no-rating' | 'hours-desc' | 'hours-asc';
 
 const sortOptions: { value: SortType; label: string }[] = [
-  { value: 'year-desc', label: 'Новые' },
-  { value: 'year-asc', label: 'Старые' },
-  { value: 'rating-desc', label: 'Оценка ↓' },
-  { value: 'rating-asc', label: 'Оценка ↑' },
+  { value: 'newest', label: 'Новое' },
+  { value: 'oldest', label: 'Старое' },
+  { value: 'no-rating', label: 'Без оценки' },
   { value: 'hours-desc', label: 'Часы ↓' },
   { value: 'hours-asc', label: 'Часы ↑' },
 ];
@@ -55,10 +49,11 @@ export default function MyGamesPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [selectedScreenshot, setSelectedScreenshot] = useState<string | null>(null);
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
-  const [sortBy, setSortBy] = useState<SortType>('year-desc');
+  const [sortBy, setSortBy] = useState<SortType>('newest');
   const [descriptionRu, setDescriptionRu] = useState<string | null>(null);
   const [translating, setTranslating] = useState(false);
   const [savedTick, setSavedTick] = useState(0);
+  const [steamImportOpen, setSteamImportOpen] = useState(false);
 
   useEffect(() => {
     if (authLoading) return;
@@ -103,17 +98,22 @@ export default function MyGamesPage() {
     const completedGames = values.filter((d) => d.status === 'completed').length;
     const totalHours = values.reduce((s, d) => s + (d.hours || 0), 0);
 
-    supabase
-      .from('profiles')
-      .update({
-        total_games: totalGames,
-        completed_games: completedGames,
-        total_hours: totalHours,
-      })
-      .eq('id', userId)
-      .then(({ error }) => {
-        if (error) console.error('Profile sync error:', error);
-      });
+    // Дебаунс — не спамим на каждый чих
+    const timer = setTimeout(() => {
+      supabase
+        .from('profiles')
+        .update({
+          total_games: totalGames,
+          completed_games: completedGames,
+          total_hours: totalHours,
+        })
+        .eq('id', userId)
+        .then(({ error }) => {
+          if (error) console.warn('Profile sync skipped:', error.message || error.code || 'no permission');
+        });
+    }, 1500);
+
+    return () => clearTimeout(timer);
   }, [userGames, userId, authLoading]);
 
   useEffect(() => {
@@ -193,30 +193,39 @@ export default function MyGamesPage() {
     } else {
       filtered = getGameList(activeTab);
     }
-    filtered.sort((a, b) => {
+
+    // Фильтр "Без оценки"
+    if (sortBy === 'no-rating') {
+      filtered = filtered.filter((game) => {
+        const data = userGames.get(game.id);
+        return (data?.rating || 0) === 0;
+      });
+    }
+
+    // Сортировка
+    filtered = [...filtered].sort((a, b) => {
       const dataA = userGames.get(a.id);
       const dataB = userGames.get(b.id);
-      const ratingA = dataA?.rating || 0;
-      const ratingB = dataB?.rating || 0;
       const hoursA = dataA?.hours || 0;
       const hoursB = dataB?.hours || 0;
+      const updatedA = dataA?.updatedAt ? new Date(dataA.updatedAt).getTime() : 0;
+      const updatedB = dataB?.updatedAt ? new Date(dataB.updatedAt).getTime() : 0;
+
       switch (sortBy) {
-        case 'rating-asc':
-          return ratingA - ratingB;
-        case 'rating-desc':
-          return ratingB - ratingA;
-        case 'hours-asc':
-          return hoursA - hoursB;
+        case 'newest':
+        case 'no-rating':
+          return updatedB - updatedA;
+        case 'oldest':
+          return updatedA - updatedB;
         case 'hours-desc':
           return hoursB - hoursA;
-        case 'year-asc':
-          return a.year - b.year;
-        case 'year-desc':
-          return b.year - a.year;
+        case 'hours-asc':
+          return hoursA - hoursB;
         default:
-          return 0;
+          return updatedB - updatedA;
       }
     });
+
     return filtered;
   }, [activeTab, games, userGames, sortBy]);
 
@@ -296,6 +305,8 @@ export default function MyGamesPage() {
 
   const saveModalData = async () => {
     if (!selectedGame || !userId) return;
+
+    // 1. Сохраняем в user_games — это быстро
     await supabase.from('user_games').upsert(
       {
         user_id: userId,
@@ -308,25 +319,6 @@ export default function MyGamesPage() {
       { onConflict: 'user_id,game_id' },
     );
 
-    if (modalReview.trim().length >= 20) {
-      try {
-        await fetch('/api/reviews', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            userId,
-            gameId: selectedGame.id,
-            gameTitle: selectedGame.title,
-            gameCover: selectedGame.cover,
-            rating: modalRating > 0 ? modalRating : null,
-            text: modalReview.trim(),
-          }),
-        });
-      } catch (err) {
-        console.error('Publish review error:', err);
-      }
-    }
-
     setUserGames((prev) => {
       const newMap = new Map(prev);
       newMap.set(selectedGame.id, {
@@ -335,10 +327,30 @@ export default function MyGamesPage() {
         review: modalReview,
         status: modalStatus,
         xp: 0,
+        updatedAt: new Date().toISOString(),
       });
       return newMap;
     });
-    setSavedTick((v) => v + 1);
+
+    // 2. Публикуем рецензию в ФОНЕ, не блокируя UI
+    if (modalReview.trim().length >= 20) {
+      const payload = {
+        userId,
+        gameId: selectedGame.id,
+        gameTitle: selectedGame.title,
+        gameCover: selectedGame.cover,
+        rating: modalRating > 0 ? modalRating : null,
+        text: modalReview.trim(),
+      };
+      fetch('/api/reviews', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+        .then(() => setSavedTick((v) => v + 1))
+        .catch((err) => console.error('Publish review error:', err));
+    }
+
     showToast('Изменения сохранены', 'success');
   };
 
@@ -409,9 +421,23 @@ export default function MyGamesPage() {
   return (
     <div className="min-h-screen bg-[#0a0a0a]">
       <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-8">
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-white mb-2">Мои игры</h1>
-          <p className="text-neutral-400">Твоя личная коллекция</p>
+        {/* Заголовок + кнопка Steam-импорта */}
+        <div className="mb-6 flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h1 className="text-2xl font-bold text-white mb-2">Мои игры</h1>
+            <p className="text-neutral-400">Твоя личная коллекция</p>
+          </div>
+          <button
+            onClick={() => setSteamImportOpen(true)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-[#1b6ca8] hover:bg-[#155a8a] text-white font-medium rounded-lg transition text-sm"
+          >
+            <img
+              src="https://cdn.simpleicons.org/steam/ffffff"
+              alt="Steam"
+              className="w-4 h-4"
+            />
+            Импорт из Steam
+          </button>
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-2 md:gap-3 mb-6">
@@ -514,14 +540,27 @@ export default function MyGamesPage() {
                 : 'В этой категории пока пусто'}
             </p>
             <p className="text-sm text-neutral-500 mb-6">
-              Найди что-нибудь интересное на главной
+              Найди что-нибудь интересное на главной или импортируй из Steam
             </p>
-            <Link
-              href="/"
-              className="inline-block px-6 py-3 bg-indigo-500 hover:bg-indigo-600 text-white font-medium rounded-lg transition"
-            >
-              Найти игры
-            </Link>
+            <div className="flex flex-wrap gap-3 justify-center">
+              <Link
+                href="/"
+                className="inline-block px-6 py-3 bg-indigo-500 hover:bg-indigo-600 text-white font-medium rounded-lg transition"
+              >
+                Найти игры
+              </Link>
+              <button
+                onClick={() => setSteamImportOpen(true)}
+                className="inline-flex items-center gap-2 px-6 py-3 bg-[#1b6ca8] hover:bg-[#155a8a] text-white font-medium rounded-lg transition"
+              >
+                <img
+                  src="https://cdn.simpleicons.org/steam/ffffff"
+                  alt="Steam"
+                  className="w-4 h-4"
+                />
+                Импорт из Steam
+              </button>
+            </div>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -643,7 +682,7 @@ export default function MyGamesPage() {
                       }`}
                     >
                       <XCircle className="w-4 h-4" />
-                      <span>Заброшено</span>
+                      <span>Брошено</span>
                     </button>
                   </div>
                 </div>
@@ -820,8 +859,8 @@ export default function MyGamesPage() {
 
                 <div className="flex gap-2 pt-4 border-t border-neutral-800">
                   <button
-                    onClick={async () => {
-                      await saveModalData();
+                    onClick={() => {
+                      saveModalData();
                       closeGame();
                     }}
                     className="flex-1 bg-indigo-500 hover:bg-indigo-600 text-white font-medium py-3 rounded-lg transition flex items-center justify-center gap-2 text-sm md:text-base"
@@ -874,6 +913,18 @@ export default function MyGamesPage() {
             onClick={(e) => e.stopPropagation()}
           />
         </div>
+      )}
+
+      {/* Steam Import Modal */}
+      {userId && (
+        <SteamImportModal
+          isOpen={steamImportOpen}
+          onClose={() => setSteamImportOpen(false)}
+          userId={userId}
+          onComplete={(n) => {
+            if (n > 0) window.location.reload();
+          }}
+        />
       )}
     </div>
   );

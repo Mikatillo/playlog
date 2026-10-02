@@ -24,6 +24,7 @@ export interface GameData {
   review: string;
   status: 'none' | 'want' | 'playing' | 'completed' | 'dropped';
   xp: number;
+  updatedAt?: string;
 }
 
 export interface UserProfile {
@@ -33,6 +34,9 @@ export interface UserProfile {
   totalGames: number;
   completedGames: number;
   totalHours: number;
+  coins?: number;
+  activeStatusId?: string | null;
+  activeBackgroundId?: string | null;
 }
 
 export interface LevelInfo {
@@ -47,6 +51,14 @@ export const XP_RULES = {
   REVIEW: 20,
   COMPLETE: 50,
   DROP: 5,
+} as const;
+
+export const COIN_RULES = {
+  ADD_GAME: 5,
+  RATE: 3,
+  REVIEW: 10,
+  COMPLETE: 10,
+  DROP: 0,
 } as const;
 
 export function calculateLevel(xp: number): LevelInfo {

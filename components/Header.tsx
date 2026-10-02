@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   Gamepad2, Menu, X, LogOut, Award, Pencil, AlertTriangle,
-  User as UserIcon, Home, Library, Search, Calendar, Loader2,
+  User as UserIcon, Home, Library, Search, Calendar, Loader2, ShoppingBag,
 } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -106,7 +106,6 @@ export default function Header() {
     if (pathname === '/') {
       window.dispatchEvent(new CustomEvent('playlog:openGame', { detail: { game } }));
     } else {
-      // Сохраняем игру и переходим на главную
       try {
         sessionStorage.setItem('pendingOpenGame', JSON.stringify(game));
       } catch {}
@@ -123,7 +122,6 @@ export default function Header() {
     }
   };
 
-  // Закрытие подсказок по клику вне
   useEffect(() => {
     if (!showSuggestions) return;
     const handler = (e: MouseEvent) => {
@@ -138,7 +136,6 @@ export default function Header() {
     return () => document.removeEventListener('mousedown', handler);
   }, [showSuggestions]);
 
-  // Синхронизация с событием playlog:search (сброс из page.tsx)
   useEffect(() => {
     const handler = (e: Event) => {
       const q = (e as CustomEvent).detail?.query || '';
@@ -215,7 +212,6 @@ export default function Header() {
     }`;
   };
 
-  // ============ Компонент списка подсказок ============
   const SuggestionsList = () => {
     if (!showSuggestions) return null;
 
@@ -315,6 +311,13 @@ export default function Header() {
               <Award className="w-4 h-4" />
               Достижения
             </button>
+            <Link
+              href="/shop"
+              className={navLinkClass('/shop')}
+            >
+              <ShoppingBag className="w-4 h-4" />
+              Магазин
+            </Link>
           </nav>
 
           {/* Поиск (desktop) */}
@@ -349,7 +352,6 @@ export default function Header() {
 
           {/* Правый блок */}
           <div className="flex items-center gap-2 md:gap-3 flex-shrink-0 ml-auto lg:ml-0">
-            {/* Мобильный поиск */}
             <button
               onClick={() => setSearchOpen((v) => !v)}
               className="md:hidden p-2 text-neutral-400 hover:text-white transition"
@@ -402,6 +404,15 @@ export default function Header() {
                       Мой профиль
                     </Link>
 
+                    <Link
+                      href="/shop"
+                      onClick={() => setUserMenuOpen(false)}
+                      className="w-full px-4 py-2.5 text-left text-sm text-neutral-300 hover:bg-neutral-800 hover:text-white transition flex items-center gap-2"
+                    >
+                      <ShoppingBag className="w-4 h-4" />
+                      Магазин
+                    </Link>
+
                     <button
                       onClick={() => {
                         setUserMenuOpen(false);
@@ -445,7 +456,6 @@ export default function Header() {
           </div>
         </div>
 
-        {/* Мобильный поиск */}
         {searchOpen && (
           <div ref={mobileSearchWrapRef} className="md:hidden border-t border-neutral-800 px-4 py-3 relative">
             <form onSubmit={submitSearch} className="relative w-full">
@@ -536,6 +546,19 @@ export default function Header() {
               <Award className="w-4 h-4" />
               Достижения
             </button>
+
+            <Link
+              href="/shop"
+              onClick={() => setMenuOpen(false)}
+              className={`w-full text-left text-sm font-medium transition py-2.5 px-3 rounded-lg flex items-center gap-2 ${
+                isActive('/shop')
+                  ? 'bg-indigo-500/15 text-indigo-400 ring-1 ring-indigo-500/30'
+                  : 'text-neutral-300 hover:text-white hover:bg-neutral-800'
+              }`}
+            >
+              <ShoppingBag className="w-4 h-4" />
+              Магазин
+            </Link>
 
             {isLoggedIn && (
               <>

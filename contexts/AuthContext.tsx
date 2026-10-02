@@ -34,6 +34,9 @@ const defaultProfile: UserProfile = {
   totalGames: 0,
   completedGames: 0,
   totalHours: 0,
+  coins: 0,
+  activeStatusId: null,
+  activeBackgroundId: null,
 };
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -101,6 +104,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         totalGames: p?.total_games || 0,
         completedGames: p?.completed_games || 0,
         totalHours: p?.total_hours || 0,
+        coins: p?.coins || 0,
+        activeStatusId: p?.active_status_id || null,
+        activeBackgroundId: p?.active_background_id || null,
       };
       setProfile(newProfile);
       saveCache(u.id, newProfile);
@@ -113,6 +119,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           total_games: 0,
           completed_games: 0,
           total_hours: 0,
+          coins: 100,
         });
       }
 
@@ -125,6 +132,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             review: g.review || '',
             status: g.status || 'none',
             xp: 0,
+            updatedAt: g.updated_at || undefined,
           });
         });
         setUserGames(map);

@@ -27,7 +27,6 @@ interface ReviewsSectionProps {
   refreshKey?: number;
 }
 
-// Глобальный кеш — живёт до перезагрузки страницы
 const cache = new Map<
   string,
   {
@@ -37,8 +36,8 @@ const cache = new Map<
   }
 >();
 
-const CACHE_TTL = 30_000; // 30 секунд
-const FRESH_TTL = 5_000; // 5 секунд — можно вообще не ходить на сервер
+const CACHE_TTL = 30_000;
+const FRESH_TTL = 5_000;
 
 export default function ReviewsSection({
   gameId,
@@ -57,13 +56,11 @@ export default function ReviewsSection({
     const cacheKey = `${gameId}:${userId || 'anon'}`;
     const cached = cache.get(cacheKey);
 
-    // 1. Если есть кеш — показываем моментально
     if (cached) {
       setReviews(cached.reviews);
       setUserVotes(cached.userVotes);
       setLoading(false);
 
-      // Если кеш свежий (5 сек) и не форсим обновление — не дёргаем сервер
       if (Date.now() - cached.ts < FRESH_TTL && refreshKey === 0) {
         return;
       }
@@ -71,7 +68,6 @@ export default function ReviewsSection({
       setLoading(true);
     }
 
-    // 2. Загружаем актуальные данные в фоне
     const load = async () => {
       try {
         const params = new URLSearchParams({ game_id: String(gameId) });
@@ -88,7 +84,6 @@ export default function ReviewsSection({
         setReviews(reviewsData);
         setUserVotes(votesData);
 
-        // Обновляем кеш
         cache.set(cacheKey, {
           reviews: reviewsData,
           userVotes: votesData,

@@ -2,27 +2,36 @@
 
 import { useEffect, useState, use, useMemo, useCallback } from 'react';
 import {
-  Loader2, ThumbsUp, Trophy, Clock, Star, Check,
-  Gamepad, XCircle, MessageSquare, ArrowLeft,
-  MapPin, ExternalLink, Pencil, Heart, ChevronDown, ChevronUp,
-  X,
+  Loader2, Star, Check, Gamepad, XCircle, MessageSquare, ArrowLeft,
+  Heart, ChevronDown, ChevronUp, ArrowUpDown, Pencil, X, Clock,
 } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
-import { calculateLevel, Game, GameData } from '@/types/game';
+import { Game, GameData } from '@/types/game';
 import { mapRawgGame, RawgGame } from '@/lib/rawg';
 import GameCard from '@/components/GameCard';
 import GameCardSkeleton from '@/components/GameCardSkeleton';
 import GameMediaCarousel from '@/components/GameMediaCarousel';
 import SteamRating from '@/components/SteamRating';
 import ReviewsSection from '@/components/ReviewsSection';
-import EditProfileModal, { getBannerGradientClass } from '@/components/EditProfileModal';
+import EditProfileModal from '@/components/EditProfileModal';
+import ProfileHeader from '@/components/ProfileHeader';
+import ActivityFeed from '@/components/ActivityFeed';
 
 type TopTab = 'games' | 'wishlist' | 'reviews';
 type GameTab = 'all' | 'playing' | 'completed' | 'dropped';
+type SortType = 'newest' | 'oldest' | 'no-rating' | 'hours-desc' | 'hours-asc';
+
+const sortOptions: { value: SortType; label: string }[] = [
+  { value: 'newest', label: 'Новое' },
+  { value: 'oldest', label: 'Старое' },
+  { value: 'no-rating', label: 'Без оценки' },
+  { value: 'hours-desc', label: 'Часы ↓' },
+  { value: 'hours-asc', label: 'Часы ↑' },
+];
 
 interface PublicProfile {
   id: string;
@@ -38,6 +47,9 @@ interface PublicProfile {
   totalGames: number;
   completedGames: number;
   totalHours: number;
+  coins?: number;
+  activeStatusId?: string | null;
+  activeBackgroundId?: string | null;
 }
 
 interface ProfileStats {
@@ -64,6 +76,7 @@ interface UserGameRow {
   rating: number;
   review: string;
   updated_at?: string;
+  favorite_order?: number | null;
 }
 
 interface ProfileCache {
@@ -74,7 +87,7 @@ interface ProfileCache {
   ts: number;
 }
 
-const CACHE_TTL = 60 * 1000; // 1 минута
+const CACHE_TTL = 60 * 1000;
 
 function loadProfileCache(id: string): ProfileCache | null {
   if (typeof window === 'undefined') return null;
@@ -136,26 +149,28 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
   const [userGames, setUserGames] = useState<UserGameRow[]>([]);
   const [games, setGames] = useState<Game[]>([]);
   const [gamesLoading, setGamesLoading] = useState(false);
-  const [liked, setLiked] = useState(false);
-  const [likesCount, setLikesCount] = useState(0);
-  const [likeLoading, setLikeLoading] = useState(false);
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [followersCount, setFollowersCount] = useState(0);
+  const [followLoading, setFollowLoading] = useState(false);
   const [notFound, setNotFound] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<TopTab>('games');
   const [gameTab, setGameTab] = useState<GameTab>('all');
+  const [sortBy, setSortBy] = useState<SortType>('newest');
 
-  // === Модалка игры ===
   const [selectedGame, setSelectedGame] = useState<Game | null>(null);
   const [gameModalLoading, setGameModalLoading] = useState(false);
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
   const [descriptionRu, setDescriptionRu] = useState<string | null>(null);
   const [translating, setTranslating] = useState(false);
   const [selectedScreenshot, setSelectedScreenshot] = useState<string | null>(null);
-  const [savedTick, setSavedTick] = useState(0);
+  const [savedTick] = useState(0);
+
+  // Фон страницы из магазина
+  const [pageBackground, setPageBackground] = useState<string | null>(null);
 
   const isOwnProfile = userId === id;
 
-  // ============= Загрузка игр по IDs =============
   const loadGamesByIds = useCallback(async (ids: number[]) => {
     if (ids.length === 0) {
       setGames([]);
@@ -176,7 +191,6 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
     }
   }, []);
 
-  // ============= Рефреш профиля =============
   const refreshProfile = useCallback(
     async (showLoader = false) => {
       if (showLoader) setLoading(true);
@@ -189,7 +203,6 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
 
         setPublicProfile(data.profile);
         setStats(data.stats);
-        setLikesCount(data.stats?.likes || 0);
         setReviews(data.reviews || []);
         setUserGames(data.userGames || []);
 
@@ -223,7 +236,6 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
     [id, userId, setMyProfile, loadGamesByIds],
   );
 
-  // ============= Первая загрузка =============
   useEffect(() => {
     let cancelled = false;
 
@@ -234,7 +246,6 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
         setStats(cached.stats);
         setReviews(cached.reviews);
         setUserGames(cached.userGames);
-        setLikesCount(cached.stats?.likes || 0);
         setLoading(false);
         loadGamesByIds(cached.userGames.map((g) => g.game_id));
       } else {
@@ -253,7 +264,6 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
 
         setPublicProfile(data.profile);
         setStats(data.stats);
-        setLikesCount(data.stats?.likes || 0);
         setReviews(data.reviews || []);
         setUserGames(data.userGames || []);
         setLoading(false);
@@ -265,20 +275,28 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
           userGames: data.userGames || [],
         });
 
-        const likePromise =
+        const followPromise =
           userId && userId !== id
-            ? fetch(`/api/users/like?user_id=${userId}&target_id=${id}`)
+            ? fetch(`/api/follows?user_id=${userId}&target_id=${id}`)
                 .then((r) => r.json())
-                .catch(() => ({ liked: false }))
-            : Promise.resolve({ liked: false });
+                .catch(() => ({ following: false, count: 0 }))
+            : fetch(`/api/follows?user_id=none&target_id=${id}`)
+                .then((r) => r.json())
+                .catch(() => ({ following: false, count: 0 }));
 
         if (data.userGames?.length > 0) {
           const ids = data.userGames.map((g: UserGameRow) => g.game_id);
-          const [, likeData] = await Promise.all([loadGamesByIds(ids), likePromise]);
-          if (!cancelled && likeData) setLiked(likeData.liked);
+          const [, followData] = await Promise.all([loadGamesByIds(ids), followPromise]);
+          if (!cancelled && followData) {
+            setIsFollowing(followData.following || false);
+            setFollowersCount(followData.count || 0);
+          }
         } else {
-          const likeData = await likePromise;
-          if (!cancelled) setLiked(likeData.liked);
+          const followData = await followPromise;
+          if (!cancelled && followData) {
+            setIsFollowing(followData.following || false);
+            setFollowersCount(followData.count || 0);
+          }
         }
       } catch (err) {
         console.error('Profile load error:', err);
@@ -293,7 +311,26 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, userId]);
 
-  // ============= Escape для модалки =============
+  // Загрузка фона страницы из магазина
+  useEffect(() => {
+    if (!publicProfile?.activeBackgroundId) {
+      setPageBackground(null);
+      return;
+    }
+    let cancelled = false;
+    fetch(`/api/shop?ids=${publicProfile.activeBackgroundId}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelled) return;
+        const item = (data.items || [])[0];
+        if (item?.value) setPageBackground(item.value);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [publicProfile?.activeBackgroundId]);
+
   useEffect(() => {
     if (!selectedGame) return;
     const handleEsc = (e: KeyboardEvent) => {
@@ -309,33 +346,74 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
     return () => window.removeEventListener('keydown', handleEsc);
   }, [selectedGame, selectedScreenshot]);
 
-  // ============= Лайк профиля =============
-  const handleLike = async () => {
-    if (!userId) return showToast('Войди, чтобы ставить лайки', 'info');
+  const handleToggleFollow = async () => {
+    if (!userId) {
+      showToast('Войди, чтобы подписаться', 'info');
+      return;
+    }
     if (isOwnProfile) return;
 
-    setLikeLoading(true);
-    const oldLiked = liked;
-    const oldCount = likesCount;
-    setLiked(!liked);
-    setLikesCount(liked ? likesCount - 1 : likesCount + 1);
+    setFollowLoading(true);
+    const oldFollowing = isFollowing;
+    const oldCount = followersCount;
+    const newFollowing = !isFollowing;
+
+    setIsFollowing(newFollowing);
+    setFollowersCount(newFollowing ? followersCount + 1 : Math.max(0, followersCount - 1));
 
     try {
-      const res = await fetch('/api/users/like', {
+      const res = await fetch('/api/follows', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, targetId: id }),
       });
       if (!res.ok) throw new Error();
     } catch {
-      setLiked(oldLiked);
-      setLikesCount(oldCount);
-      showToast('Не удалось поставить лайк', 'error');
+      setIsFollowing(oldFollowing);
+      setFollowersCount(oldCount);
+      showToast('Не удалось подписаться', 'error');
     }
-    setLikeLoading(false);
+    setFollowLoading(false);
   };
 
-  // ============= Открытие модалки игры =============
+  const handleSetFavorite = async (gameId: number, order: number | null) => {
+    if (!userId) return;
+
+    setUserGames((prev) => {
+      const cleaned = prev.map((ug) =>
+        order !== null && ug.favorite_order === order
+          ? { ...ug, favorite_order: null }
+          : ug,
+      );
+      const idx = cleaned.findIndex((ug) => ug.game_id === gameId);
+      if (idx === -1) return prev;
+      const next = [...cleaned];
+      next[idx] = { ...next[idx], favorite_order: order };
+      return next;
+    });
+
+    try {
+      if (order === null) {
+        const res = await fetch(
+          `/api/users/favorites?userId=${userId}&gameId=${gameId}`,
+          { method: 'DELETE' },
+        );
+        if (!res.ok) throw new Error();
+      } else {
+        const res = await fetch('/api/users/favorites', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId, gameId, order }),
+        });
+        if (!res.ok) throw new Error();
+      }
+      clearProfileCache(id);
+    } catch {
+      showToast('Не удалось обновить избранное', 'error');
+      refreshProfile(false);
+    }
+  };
+
   const openGameModal = async (game: Game) => {
     setSelectedGame(game);
     setGameModalLoading(true);
@@ -389,8 +467,7 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
       if (data.translatedText) {
         setDescriptionRu(data.translatedText);
         localStorage.setItem(`translation_${gameId}`, data.translatedText);
-      } else if (data.error) {
-        console.error('Translation error:', data.error);
+      } else {
         setDescriptionRu(text);
       }
     } catch (error) {
@@ -400,7 +477,6 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
     setTranslating(false);
   };
 
-  // ============= Сохранение профиля =============
   const handleProfileSaved = async (updated: {
     nickname?: string;
     avatarUrl?: string;
@@ -438,7 +514,6 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
     clearProfileCache(id);
   };
 
-  // ============= useMemo =============
   const userGamesData = useMemo(() => {
     const map = new Map<number, GameData>();
     userGames.forEach((ug) => {
@@ -448,12 +523,12 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
         review: ug.review || '',
         status: ug.status || 'none',
         xp: 0,
+        updatedAt: ug.updated_at,
       });
     });
     return map;
   }, [userGames]);
 
-  // Карта "когда последний раз меняли запись"
   const updatedAtMap = useMemo(() => {
     const map = new Map<number, number>();
     userGames.forEach((ug) => {
@@ -474,30 +549,99 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
     [userGames],
   );
 
-  // Коллекция — все кроме want, отсортированные по updated_at DESC
   const collectionGames = useMemo(() => {
-    const filtered = games.filter((g) => userGamesData.get(g.id)?.status !== 'want');
-    return [...filtered].sort((a, b) => {
-      const tA = updatedAtMap.get(a.id) || 0;
-      const tB = updatedAtMap.get(b.id) || 0;
-      return tB - tA;
-    });
-  }, [games, userGamesData, updatedAtMap]);
+    let filtered = games.filter((g) => userGamesData.get(g.id)?.status !== 'want');
 
-  // Лист ожидания — тоже по updated_at DESC
-  const wishlistGames = useMemo(() => {
-    const filtered = games.filter((g) => userGamesData.get(g.id)?.status === 'want');
+    if (sortBy === 'no-rating') {
+      filtered = filtered.filter((g) => (userGamesData.get(g.id)?.rating || 0) === 0);
+    }
+
     return [...filtered].sort((a, b) => {
       const tA = updatedAtMap.get(a.id) || 0;
       const tB = updatedAtMap.get(b.id) || 0;
-      return tB - tA;
+      const hoursA = userGamesData.get(a.id)?.hours || 0;
+      const hoursB = userGamesData.get(b.id)?.hours || 0;
+
+      switch (sortBy) {
+        case 'newest':
+        case 'no-rating':
+          return tB - tA;
+        case 'oldest':
+          return tA - tB;
+        case 'hours-desc':
+          return hoursB - hoursA;
+        case 'hours-asc':
+          return hoursA - hoursB;
+        default:
+          return tB - tA;
+      }
     });
-  }, [games, userGamesData, updatedAtMap]);
+  }, [games, userGamesData, updatedAtMap, sortBy]);
+
+  const wishlistGames = useMemo(() => {
+    let filtered = games.filter((g) => userGamesData.get(g.id)?.status === 'want');
+
+    if (sortBy === 'no-rating') {
+      filtered = filtered.filter((g) => (userGamesData.get(g.id)?.rating || 0) === 0);
+    }
+
+    return [...filtered].sort((a, b) => {
+      const tA = updatedAtMap.get(a.id) || 0;
+      const tB = updatedAtMap.get(b.id) || 0;
+      const hoursA = userGamesData.get(a.id)?.hours || 0;
+      const hoursB = userGamesData.get(b.id)?.hours || 0;
+
+      switch (sortBy) {
+        case 'newest':
+        case 'no-rating':
+          return tB - tA;
+        case 'oldest':
+          return tA - tB;
+        case 'hours-desc':
+          return hoursB - hoursA;
+        case 'hours-asc':
+          return hoursA - hoursB;
+        default:
+          return tB - tA;
+      }
+    });
+  }, [games, userGamesData, updatedAtMap, sortBy]);
 
   const filteredCollectionGames = useMemo(() => {
     if (gameTab === 'all') return collectionGames;
     return collectionGames.filter((g) => userGamesData.get(g.id)?.status === gameTab);
   }, [collectionGames, gameTab, userGamesData]);
+
+  const favoriteOrderMap = useMemo(() => {
+    const map = new Map<number, number>();
+    userGames.forEach((ug) => {
+      if (ug.favorite_order && ug.favorite_order >= 1 && ug.favorite_order <= 3) {
+        map.set(ug.game_id, ug.favorite_order);
+      }
+    });
+    return map;
+  }, [userGames]);
+
+  const favoriteGames = useMemo(() => {
+    return [...games]
+      .filter((g) => favoriteOrderMap.has(g.id))
+      .sort((a, b) => (favoriteOrderMap.get(a.id) || 0) - (favoriteOrderMap.get(b.id) || 0))
+      .slice(0, 3);
+  }, [games, favoriteOrderMap]);
+
+  const topGenres = useMemo(() => {
+    const counter = new Map<string, number>();
+    collectionGames.forEach((g) => {
+      const genres = g.genres;
+      if (!genres) return;
+      genres.forEach((genre) => {
+        counter.set(genre.name, (counter.get(genre.name) || 0) + 1);
+      });
+    });
+    return Array.from(counter.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5);
+  }, [collectionGames]);
 
   const gameTabOptions: { id: GameTab; label: string; count: number; color: string }[] = [
     { id: 'all', label: 'Все', count: collectionGames.length, color: 'text-indigo-400' },
@@ -506,7 +650,6 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
     { id: 'dropped', label: 'Заброшено', count: statusCounts.dropped, color: 'text-neutral-400' },
   ];
 
-  // ============= Заглушки =============
   if (loading && !publicProfile) {
     return (
       <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
@@ -533,375 +676,409 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
     );
   }
 
-  const levelInfo = calculateLevel(publicProfile.xp);
-  const initials = publicProfile.nickname.substring(0, 2).toUpperCase();
-  const xpPercent = Math.min((levelInfo.xpInLevel / levelInfo.xpToNext) * 100, 100);
-
   const modalGameData = selectedGame ? userGamesData.get(selectedGame.id) : null;
 
+  // Стиль фона страницы (градиент или картинка из магазина)
+  const isImageBg = pageBackground?.startsWith('http');
+  const pageBgStyle: React.CSSProperties = pageBackground
+    ? isImageBg
+      ? {
+          backgroundImage: `url(${pageBackground})`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundAttachment: 'fixed',
+        }
+      : {
+          backgroundImage: pageBackground,
+          backgroundAttachment: 'fixed',
+        }
+    : {};
+
   return (
-    <div className="min-h-screen bg-[#0a0a0a]">
-      <div className="max-w-5xl mx-auto px-4 md:px-6 py-6 md:py-8 space-y-6">
+    <div className="min-h-screen bg-[#0a0a0a]" style={pageBgStyle}>
+      <div className="max-w-6xl mx-auto px-4 md:px-6 py-6 md:py-8 space-y-6">
         <button
           onClick={() => router.back()}
-          className="inline-flex items-center gap-2 text-sm text-neutral-400 hover:text-white transition"
+          className="inline-flex items-center gap-2 text-sm text-neutral-400 hover:text-white transition bg-neutral-900/80 backdrop-blur-md px-3 py-1.5 rounded-lg"
         >
           <ArrowLeft className="w-4 h-4" />
           Назад
         </button>
 
-        {/* Профиль */}
-        <div className="bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden">
-          <div
-            className={`relative h-40 md:h-56 bg-gradient-to-br ${getBannerGradientClass(publicProfile.banner_gradient)}`}
-          >
-            {publicProfile.banner_url && (
-              <>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={publicProfile.banner_url}
-                  alt={publicProfile.nickname}
-                  className="absolute inset-0 w-full h-full object-cover"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-              </>
-            )}
-          </div>
+        <ProfileHeader
+          profile={{
+            id: publicProfile.id,
+            nickname: publicProfile.nickname,
+            full_name: publicProfile.full_name,
+            avatar_url: publicProfile.avatar_url,
+            banner_url: publicProfile.banner_url,
+            banner_gradient: publicProfile.banner_gradient,
+            region: publicProfile.region,
+            city: publicProfile.city,
+            steam_url: publicProfile.steam_url,
+            xp: publicProfile.xp,
+            totalGames: publicProfile.totalGames,
+            completedGames: publicProfile.completedGames,
+            totalHours: publicProfile.totalHours,
+            activeStatusId: publicProfile.activeStatusId,
+            activeBackgroundId: publicProfile.activeBackgroundId,
+          }}
+          isOwnProfile={isOwnProfile}
+          isFollowing={isFollowing}
+          followersCount={followersCount}
+          followLoading={followLoading}
+          onToggleFollow={handleToggleFollow}
+          onEdit={() => setEditOpen(true)}
+          reviewsCount={stats?.reviewsCount || 0}
+        />
 
-          <div className="p-6 md:p-8 -mt-16 md:-mt-20 relative">
-            <div className="flex flex-col sm:flex-row sm:items-end gap-4 mb-4">
-              <div className="relative w-24 h-24 md:w-32 md:h-32 rounded-full overflow-hidden bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center flex-shrink-0 ring-4 ring-neutral-900">
-                {publicProfile.avatar_url ? (
-                  <Image
-                    src={publicProfile.avatar_url}
-                    alt={publicProfile.nickname}
-                    fill
-                    sizes="128px"
-                    className="object-cover"
-                    unoptimized
-                  />
-                ) : (
-                  <span className="text-3xl md:text-4xl font-bold text-white">{initials}</span>
-                )}
+        {/* 3 колонки: любимые игры / лента / интересы */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {/* Любимые игры */}
+          <div className="bg-neutral-900/80 backdrop-blur-md border border-neutral-800 rounded-2xl p-5">
+            <h3 className="font-semibold text-white mb-4 flex items-center gap-2">
+              <Star className="w-4 h-4 text-yellow-500" />
+              Мои любимые игры
+            </h3>
+            {favoriteGames.length === 0 ? (
+              <div className="text-sm text-neutral-500 py-4">
+                {isOwnProfile
+                  ? 'Открой любую игру в коллекции и добавь её в слот 1, 2 или 3'
+                  : 'Пользователь ещё не выбрал любимые игры'}
               </div>
-
-              <div className="flex-1 min-w-0 pb-2">
-                <div className="flex items-center gap-2 flex-wrap mb-1">
-                  <h1 className="text-2xl md:text-3xl font-bold text-white truncate drop-shadow-lg">
-                    {publicProfile.full_name || publicProfile.nickname}
-                  </h1>
-                  {isOwnProfile && (
-                    <span className="text-xs bg-indigo-500/20 text-indigo-400 px-2 py-0.5 rounded-full font-medium">
-                      Это ты
-                    </span>
-                  )}
-                </div>
-                <div className="text-sm text-neutral-300 flex items-center gap-3 flex-wrap drop-shadow">
-                  <span>@{publicProfile.nickname}</span>
-                  {(publicProfile.city || publicProfile.region) && (
-                    <span className="flex items-center gap-1">
-                      <MapPin className="w-3.5 h-3.5" />
-                      {[publicProfile.city, publicProfile.region].filter(Boolean).join(', ')}
-                    </span>
-                  )}
-                </div>
-                <div className="text-sm text-neutral-300 mt-1 drop-shadow">
-                  Уровень {levelInfo.level} • {publicProfile.xp} XP
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2 flex-shrink-0">
-                {isOwnProfile ? (
-                  <button
-                    onClick={() => setEditOpen(true)}
-                    className="flex items-center gap-2 px-4 py-2.5 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg font-medium text-sm transition shadow-lg"
-                  >
-                    <Pencil className="w-4 h-4" />
-                    Редактировать
-                  </button>
-                ) : (
-                  <button
-                    onClick={handleLike}
-                    disabled={likeLoading}
-                    className={`flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm transition disabled:opacity-50 shadow-lg ${
-                      liked
-                        ? 'bg-indigo-500 text-white hover:bg-indigo-600'
-                        : 'bg-neutral-800/90 backdrop-blur-sm text-neutral-200 hover:bg-neutral-700 border border-neutral-700'
-                    }`}
-                  >
-                    <ThumbsUp className={`w-4 h-4 ${liked ? 'fill-current' : ''}`} />
-                    {likesCount > 0 ? likesCount : ''}
-                    <span>{liked ? 'В избранном' : 'Лайкнуть'}</span>
-                  </button>
-                )}
-              </div>
-            </div>
-
-                        {isOwnProfile && likesCount > 0 && (
-              <div className="mb-4 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 text-xs font-medium">
-                <ThumbsUp className="w-3.5 h-3.5 fill-current" />
-                {likesCount} {likesCount === 1 ? 'лайк' : 'лайков'} от других игроков
-              </div>
-            )}
-
-            {publicProfile.steam_url && (
-              <a
-                href={publicProfile.steam_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mb-4 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-xs font-medium transition"
-              >
-                <img
-                  src="https://cdn.simpleicons.org/steam/66c0f4"
-                  alt="Steam"
-                  className="w-4 h-4"
-                />
-                Steam-профиль
-                <ExternalLink className="w-3 h-3" />
-              </a>
-            )}
-
-            <div className="mt-2 w-full h-2 bg-neutral-800 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full transition-all"
-                style={{ width: `${xpPercent}%` }}
-              />
-            </div>
-            <div className="text-xs text-neutral-500 mt-1">
-              {levelInfo.xpInLevel} / {levelInfo.xpToNext} XP
-            </div>
-
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-6 pt-6 border-t border-neutral-800">
-              <div className="text-center">
-                <Trophy className="w-5 h-5 text-indigo-500 mx-auto mb-1" />
-                <div className="text-lg md:text-xl font-bold text-white">
-                  {publicProfile.totalGames}
-                </div>
-                <div className="text-xs text-neutral-400">Всего игр</div>
-              </div>
-              <div className="text-center">
-                <Check className="w-5 h-5 text-emerald-500 mx-auto mb-1" />
-                <div className="text-lg md:text-xl font-bold text-white">
-                  {publicProfile.completedGames}
-                </div>
-                <div className="text-xs text-neutral-400">Пройдено</div>
-              </div>
-              <div className="text-center">
-                <Clock className="w-5 h-5 text-purple-500 mx-auto mb-1" />
-                <div className="text-lg md:text-xl font-bold text-white">
-                  {publicProfile.totalHours}h
-                </div>
-                <div className="text-xs text-neutral-400">Часов</div>
-              </div>
-              <div className="text-center">
-                <MessageSquare className="w-5 h-5 text-yellow-500 mx-auto mb-1" />
-                <div className="text-lg md:text-xl font-bold text-white">
-                  {stats?.reviewsCount || 0}
-                </div>
-                <div className="text-xs text-neutral-400">Рецензий</div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Табы */}
-        <div className="flex items-center gap-2 border-b border-neutral-800 overflow-x-auto scrollbar-hide">
-          <button
-            onClick={() => setActiveTab('games')}
-            className={`px-4 py-2.5 text-sm font-medium transition border-b-2 -mb-px whitespace-nowrap ${
-              activeTab === 'games'
-                ? 'text-indigo-400 border-indigo-500'
-                : 'text-neutral-400 border-transparent hover:text-white'
-            }`}
-          >
-            Коллекция игр ({collectionGames.length})
-          </button>
-          {statusCounts.want > 0 && (
-            <button
-              onClick={() => setActiveTab('wishlist')}
-              className={`px-4 py-2.5 text-sm font-medium transition border-b-2 -mb-px whitespace-nowrap flex items-center gap-1.5 ${
-                activeTab === 'wishlist'
-                  ? 'text-blue-400 border-blue-500'
-                  : 'text-neutral-400 border-transparent hover:text-white'
-              }`}
-            >
-              <Heart className="w-3.5 h-3.5" />
-              Лист ожидания ({statusCounts.want})
-            </button>
-          )}
-          <button
-            onClick={() => setActiveTab('reviews')}
-            className={`px-4 py-2.5 text-sm font-medium transition border-b-2 -mb-px whitespace-nowrap ${
-              activeTab === 'reviews'
-                ? 'text-indigo-400 border-indigo-500'
-                : 'text-neutral-400 border-transparent hover:text-white'
-            }`}
-          >
-            Рецензии ({reviews.length})
-          </button>
-        </div>
-
-        {/* Коллекция игр */}
-        {activeTab === 'games' && (
-          <div className="space-y-4">
-            {collectionGames.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {gameTabOptions.map((opt) => {
-                  const active = gameTab === opt.id;
+            ) : (
+              <div className="space-y-3">
+                {favoriteGames.map((game) => {
+                  const data = userGamesData.get(game.id);
+                  const slot = favoriteOrderMap.get(game.id);
                   return (
                     <button
-                      key={opt.id}
-                      onClick={() => setGameTab(opt.id)}
-                      className={`px-3.5 py-1.5 rounded-full text-xs md:text-sm font-medium transition flex items-center gap-1.5 ${
-                        active
-                          ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/20'
-                          : 'bg-neutral-900 border border-neutral-800 text-neutral-300 hover:bg-neutral-800'
-                      }`}
+                      key={game.id}
+                      onClick={() => openGameModal(game)}
+                      className="w-full flex items-center gap-3 p-2 rounded-xl hover:bg-neutral-800/60 transition text-left"
                     >
-                      {opt.label}
-                      <span className={active ? 'text-white/80' : opt.color}>
-                        {opt.count}
-                      </span>
+                      <div className="relative w-12 h-16 rounded-lg overflow-hidden bg-neutral-800 flex-shrink-0">
+                        {game.cover && (
+                          <Image
+                            src={game.cover}
+                            alt={game.title}
+                            fill
+                            sizes="48px"
+                            className="object-cover"
+                            unoptimized
+                          />
+                        )}
+                        {slot && (
+                          <div className="absolute top-1 left-1 w-5 h-5 rounded-full bg-yellow-500 text-black text-[10px] font-bold flex items-center justify-center">
+                            {slot}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium text-white truncate">
+                          {game.title}
+                        </div>
+                        <div className="flex items-center gap-2 mt-0.5 text-xs">
+                          {data?.rating ? (
+                            <span className="flex items-center gap-1 text-yellow-400 font-semibold">
+                              <Star className="w-3 h-3 fill-yellow-400" />
+                              {data.rating}/10
+                            </span>
+                          ) : null}
+                          {data?.hours ? (
+                            <span className="text-neutral-500">{data.hours}h</span>
+                          ) : null}
+                        </div>
+                      </div>
                     </button>
                   );
                 })}
               </div>
             )}
-
-            {gamesLoading ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {Array.from({ length: 8 }).map((_, i) => (
-                  <GameCardSkeleton key={i} />
-                ))}
-              </div>
-            ) : filteredCollectionGames.length === 0 ? (
-              <div className="text-center py-12 bg-neutral-900 border border-neutral-800 rounded-xl">
-                <Gamepad className="w-12 h-12 text-neutral-600 mx-auto mb-3" />
-                <p className="text-sm text-neutral-400">
-                  {collectionGames.length === 0
-                    ? isOwnProfile
-                      ? 'Ты ещё не добавил ни одной игры'
-                      : 'Пользователь ещё не добавил игр'
-                    : 'В этой категории пусто'}
-                </p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {filteredCollectionGames.map((game, idx) => (
-                  <GameCard
-                    key={game.id}
-                    game={game}
-                    onClick={() => openGameModal(game)}
-                    userGameData={userGamesData.get(game.id)}
-                    isAuthenticated={true}
-                    index={idx}
-                  />
-                ))}
-              </div>
-            )}
           </div>
-        )}
 
-        {/* Лист ожидания */}
-        {activeTab === 'wishlist' && (
-          <div className="space-y-4">
-            {gamesLoading ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {Array.from({ length: 8 }).map((_, i) => (
-                  <GameCardSkeleton key={i} />
-                ))}
-              </div>
-            ) : wishlistGames.length === 0 ? (
-              <div className="text-center py-12 bg-neutral-900 border border-neutral-800 rounded-xl">
-                <Heart className="w-12 h-12 text-neutral-600 mx-auto mb-3" />
-                <p className="text-sm text-neutral-400">Лист ожидания пуст</p>
-                {isOwnProfile && (
-                  <Link
-                    href="/releases"
-                    className="inline-block mt-4 px-5 py-2.5 bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium rounded-lg transition"
-                  >
-                    Посмотреть релизы
-                  </Link>
-                )}
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {wishlistGames.map((game, idx) => (
-                  <GameCard
-                    key={game.id}
-                    game={game}
-                    onClick={() => openGameModal(game)}
-                    userGameData={userGamesData.get(game.id)}
-                    isAuthenticated={true}
-                    index={idx}
-                  />
-                ))}
-              </div>
-            )}
+          {/* Лента активности */}
+          <div className="bg-neutral-900/80 backdrop-blur-md border border-neutral-800 rounded-2xl p-5">
+            <h3 className="font-semibold text-white mb-4 flex items-center gap-2">
+              <MessageSquare className="w-4 h-4 text-indigo-500" />
+              Лента активности
+            </h3>
+            <ActivityFeed
+              userId={id}
+              scope="user"
+              showAvatars={false}
+              limit={5}
+              emptyText="Пока нет активности"
+            />
           </div>
-        )}
 
-        {/* Рецензии */}
-        {activeTab === 'reviews' && (
-          <div>
-            {reviews.length === 0 ? (
-              <div className="text-center py-12 bg-neutral-900 border border-neutral-800 rounded-xl">
-                <MessageSquare className="w-12 h-12 text-neutral-600 mx-auto mb-3" />
-                <p className="text-sm text-neutral-400">
-                  {isOwnProfile
-                    ? 'Ты ещё не оставил ни одной рецензии'
-                    : 'Пользователь ещё не написал рецензий'}
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {reviews.map((review) => (
-                  <div
-                    key={review.id}
-                    className="bg-neutral-900 border border-neutral-800 rounded-xl p-4"
+          {/* Интересы и статистика — горизонтальные полосы */}
+          <div className="bg-neutral-900/80 backdrop-blur-md border border-neutral-800 rounded-2xl p-5 flex flex-col">
+            <h3 className="font-semibold text-white mb-4">Интересы и статистика</h3>
+
+            {/* Жанры */}
+            <div className="flex flex-wrap gap-1.5 mb-5">
+              {topGenres.length === 0 ? (
+                <span className="text-sm text-neutral-500">Нет данных</span>
+              ) : (
+                topGenres.map(([genre, count]) => (
+                  <span
+                    key={genre}
+                    className="px-2.5 py-1 rounded-full bg-neutral-800 text-neutral-300 text-xs"
                   >
-                    <div className="flex gap-3">
-                      {review.game_cover && (
-                        <div className="relative w-16 h-16 md:w-20 md:h-20 rounded-lg overflow-hidden bg-neutral-800 flex-shrink-0">
-                          <Image
-                            src={review.game_cover}
-                            alt={review.game_title}
-                            fill
-                            sizes="80px"
-                            className="object-cover"
-                            unoptimized
-                          />
-                        </div>
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap mb-1">
-                          <h3 className="text-sm font-medium text-white truncate">
-                            {review.game_title}
-                          </h3>
-                          {review.rating !== null && review.rating > 0 && (
-                            <span className="flex items-center gap-0.5 text-xs text-yellow-400 font-bold flex-shrink-0">
-                              <Star className="w-3 h-3 fill-yellow-400" />
-                              {review.rating}
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-xs text-neutral-300 line-clamp-3 leading-relaxed">
-                          {review.text}
-                        </p>
-                        <div className="text-[11px] text-neutral-500 mt-2">
-                          {timeAgo(review.created_at)}
+                    {genre} · {count}
+                  </span>
+                ))
+              )}
+            </div>
+
+            {/* Статусы — горизонтальные полосы */}
+            <div className="space-y-3 mt-auto">
+              {[
+                { label: 'Играю', count: statusCounts.playing, color: 'bg-indigo-500' },
+                { label: 'Пройдено', count: statusCounts.completed, color: 'bg-emerald-500' },
+                { label: 'Заброшено', count: statusCounts.dropped, color: 'bg-rose-500' },
+              ].map(({ label, count, color }) => {
+                const total =
+                  statusCounts.playing + statusCounts.completed + statusCounts.dropped;
+                const percent = total > 0 ? Math.round((count / total) * 100) : 0;
+                const w = Math.max((count / Math.max(total, 1)) * 100, count > 0 ? 4 : 0);
+
+                return (
+                  <div key={label}>
+                    <div className="flex items-center justify-between text-xs mb-1.5">
+                      <span className="text-neutral-400">{label}</span>
+                      <span className="text-neutral-300 font-medium">
+                        {count}
+                        <span className="text-neutral-500 ml-1.5">({percent}%)</span>
+                      </span>
+                    </div>
+                    <div className="w-full h-2 bg-neutral-800 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${color} transition-all`}
+                        style={{ width: `${w}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* Табы + коллекция */}
+        <div className="space-y-6 min-w-0">
+          <div className="flex items-center gap-2 border-b border-neutral-800 overflow-x-auto scrollbar-hide bg-neutral-900/70 backdrop-blur-md rounded-t-xl px-2">
+            <button
+              onClick={() => setActiveTab('games')}
+              className={`px-4 py-2.5 text-sm font-medium transition border-b-2 -mb-px whitespace-nowrap ${
+                activeTab === 'games'
+                  ? 'text-indigo-400 border-indigo-500'
+                  : 'text-neutral-400 border-transparent hover:text-white'
+              }`}
+            >
+              Коллекция игр ({collectionGames.length})
+            </button>
+            {statusCounts.want > 0 && (
+              <button
+                onClick={() => setActiveTab('wishlist')}
+                className={`px-4 py-2.5 text-sm font-medium transition border-b-2 -mb-px whitespace-nowrap flex items-center gap-1.5 ${
+                  activeTab === 'wishlist'
+                    ? 'text-blue-400 border-blue-500'
+                    : 'text-neutral-400 border-transparent hover:text-white'
+                }`}
+              >
+                <Heart className="w-3.5 h-3.5" />
+                Лист ожидания ({statusCounts.want})
+              </button>
+            )}
+            <button
+              onClick={() => setActiveTab('reviews')}
+              className={`px-4 py-2.5 text-sm font-medium transition border-b-2 -mb-px whitespace-nowrap ${
+                activeTab === 'reviews'
+                  ? 'text-indigo-400 border-indigo-500'
+                  : 'text-neutral-400 border-transparent hover:text-white'
+              }`}
+            >
+              Рецензии ({reviews.length})
+            </button>
+          </div>
+
+          {activeTab === 'games' && (
+            <div className="space-y-4">
+              {collectionGames.length > 0 && (
+                <div className="flex flex-wrap items-center gap-3 bg-neutral-900/70 backdrop-blur-md p-3 rounded-xl border border-neutral-800">
+                  <div className="flex flex-wrap gap-2">
+                    {gameTabOptions.map((opt) => {
+                      const active = gameTab === opt.id;
+                      return (
+                        <button
+                          key={opt.id}
+                          onClick={() => setGameTab(opt.id)}
+                          className={`px-3.5 py-1.5 rounded-full text-xs md:text-sm font-medium transition flex items-center gap-1.5 ${
+                            active
+                              ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/20'
+                              : 'bg-neutral-900 border border-neutral-800 text-neutral-300 hover:bg-neutral-800'
+                          }`}
+                        >
+                          {opt.label}
+                          <span className={active ? 'text-white/80' : opt.color}>
+                            {opt.count}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="relative flex-shrink-0 ml-auto">
+                    <ArrowUpDown className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-500 pointer-events-none z-10" />
+                    <select
+                      value={sortBy}
+                      onChange={(e) => setSortBy(e.target.value as SortType)}
+                      className="appearance-none bg-neutral-900 border border-neutral-800 hover:border-neutral-700 rounded-lg pl-8 pr-7 py-1.5 text-xs md:text-sm font-medium text-neutral-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 cursor-pointer transition"
+                    >
+                      {sortOptions.map((opt) => (
+                        <option key={opt.value} value={opt.value} className="bg-neutral-900">
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-neutral-500 pointer-events-none" />
+                  </div>
+                </div>
+              )}
+
+              {gamesLoading ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <GameCardSkeleton key={i} />
+                  ))}
+                </div>
+              ) : filteredCollectionGames.length === 0 ? (
+                <div className="text-center py-12 bg-neutral-900/80 backdrop-blur-md border border-neutral-800 rounded-xl">
+                  <Gamepad className="w-12 h-12 text-neutral-600 mx-auto mb-3" />
+                  <p className="text-sm text-neutral-400">
+                    {collectionGames.length === 0
+                      ? isOwnProfile
+                        ? 'Ты ещё не добавил ни одной игры'
+                        : 'Пользователь ещё не добавил игр'
+                      : 'В этой категории пусто'}
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+                  {filteredCollectionGames.map((game, idx) => (
+                    <GameCard
+                      key={game.id}
+                      game={game}
+                      onClick={() => openGameModal(game)}
+                      userGameData={userGamesData.get(game.id)}
+                      isAuthenticated={true}
+                      index={idx}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'wishlist' && (
+            <div className="space-y-4">
+              {gamesLoading ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <GameCardSkeleton key={i} />
+                  ))}
+                </div>
+              ) : wishlistGames.length === 0 ? (
+                <div className="text-center py-12 bg-neutral-900/80 backdrop-blur-md border border-neutral-800 rounded-xl">
+                  <Heart className="w-12 h-12 text-neutral-600 mx-auto mb-3" />
+                  <p className="text-sm text-neutral-400">Лист ожидания пуст</p>
+                  {isOwnProfile && (
+                    <Link
+                      href="/releases"
+                      className="inline-block mt-4 px-5 py-2.5 bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium rounded-lg transition"
+                    >
+                      Посмотреть релизы
+                    </Link>
+                  )}
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+                  {wishlistGames.map((game, idx) => (
+                    <GameCard
+                      key={game.id}
+                      game={game}
+                      onClick={() => openGameModal(game)}
+                      userGameData={userGamesData.get(game.id)}
+                      isAuthenticated={true}
+                      index={idx}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'reviews' && (
+            <div>
+              {reviews.length === 0 ? (
+                <div className="text-center py-12 bg-neutral-900/80 backdrop-blur-md border border-neutral-800 rounded-xl">
+                  <MessageSquare className="w-12 h-12 text-neutral-600 mx-auto mb-3" />
+                  <p className="text-sm text-neutral-400">
+                    {isOwnProfile
+                      ? 'Ты ещё не оставил ни одной рецензии'
+                      : 'Пользователь ещё не написал рецензий'}
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {reviews.map((review) => (
+                    <div
+                      key={review.id}
+                      className="bg-neutral-900/80 backdrop-blur-md border border-neutral-800 rounded-xl p-4"
+                    >
+                      <div className="flex gap-3">
+                        {review.game_cover && (
+                          <div className="relative w-16 h-16 md:w-20 md:h-20 rounded-lg overflow-hidden bg-neutral-800 flex-shrink-0">
+                            <Image
+                              src={review.game_cover}
+                              alt={review.game_title}
+                              fill
+                              sizes="80px"
+                              className="object-cover"
+                              unoptimized
+                            />
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap mb-1">
+                            <h3 className="text-sm font-medium text-white truncate">
+                              {review.game_title}
+                            </h3>
+                            {review.rating !== null && review.rating > 0 && (
+                              <span className="flex items-center gap-0.5 text-xs text-yellow-400 font-bold flex-shrink-0">
+                                <Star className="w-3 h-3 fill-yellow-400" />
+                                {review.rating}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-neutral-300 line-clamp-3 leading-relaxed">
+                            {review.text}
+                          </p>
+                          <div className="text-[11px] text-neutral-500 mt-2">
+                            {timeAgo(review.created_at)}
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Модалка редактирования профиля */}
       {isOwnProfile && myProfile && userId && (
         <EditProfileModal
           isOpen={editOpen}
@@ -920,7 +1097,6 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
         />
       )}
 
-      {/* Модалка игры */}
       {selectedGame && (
         <div
           className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-start md:items-center justify-center p-0 md:p-4 overflow-y-auto"
@@ -1067,6 +1243,55 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
                   </div>
                 )}
 
+                {isOwnProfile && userGamesData.get(selectedGame.id) && (
+                  <div>
+                    <h3 className="text-xs font-medium text-neutral-500 uppercase tracking-wider mb-2">
+                      Любимая игра
+                    </h3>
+                    <div className="flex gap-2 flex-wrap">
+                      {[1, 2, 3].map((slot) => {
+                        const currentSlot =
+                          userGames.find((ug) => ug.game_id === selectedGame.id)
+                            ?.favorite_order || null;
+                        const isThis = currentSlot === slot;
+                        const occupier = userGames.find((ug) => ug.favorite_order === slot);
+                        const occupierGame = occupier
+                          ? games.find((g) => g.id === occupier.game_id)
+                          : null;
+                        return (
+                          <button
+                            key={slot}
+                            onClick={() => handleSetFavorite(selectedGame.id, slot)}
+                            title={
+                              occupierGame
+                                ? `Сейчас в слоте: ${occupierGame.title}`
+                                : 'Слот свободен'
+                            }
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+                              isThis
+                                ? 'bg-yellow-500/20 border border-yellow-500/50 text-yellow-300'
+                                : 'bg-neutral-800 border border-neutral-700 text-neutral-300 hover:bg-neutral-700'
+                            }`}
+                          >
+                            <Star
+                              className={`w-3.5 h-3.5 ${isThis ? 'fill-yellow-300' : ''}`}
+                            />
+                            {isThis ? `Слот ${slot}` : `В слот ${slot}`}
+                          </button>
+                        );
+                      })}
+                      {userGames.find((ug) => ug.game_id === selectedGame.id)?.favorite_order && (
+                        <button
+                          onClick={() => handleSetFavorite(selectedGame.id, null)}
+                          className="px-3 py-1.5 rounded-lg text-xs font-medium bg-rose-500/15 border border-rose-500/30 text-rose-400 hover:bg-rose-500/25 transition"
+                        >
+                          Убрать
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {isOwnProfile && (
                   <div className="pt-2">
                     <Link
@@ -1088,7 +1313,6 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
         </div>
       )}
 
-      {/* Модалка скриншота */}
       {selectedScreenshot && (
         <div
           className="fixed inset-0 bg-black/90 backdrop-blur-sm z-[60] flex items-center justify-center p-4 cursor-pointer"
@@ -1098,7 +1322,7 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
             onClick={() => setSelectedScreenshot(null)}
             className="absolute top-4 right-4 w-12 h-12 bg-neutral-800 hover:bg-neutral-700 rounded-full flex items-center justify-center transition z-10"
           >
-            <XCircle className="w-6 h-6 text-white" />
+            <X className="w-6 h-6 text-white" />
           </button>
           <img
             src={selectedScreenshot}

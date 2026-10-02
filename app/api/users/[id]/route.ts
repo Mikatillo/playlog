@@ -12,7 +12,7 @@ export async function GET(
     const [profileRes, reviewsRes, likesRes, userGamesRes] = await Promise.all([
       supabase
         .from('profiles')
-        .select('id, nickname, full_name, avatar_url, banner_url, banner_gradient, region, city, steam_url, xp, total_games, completed_games, total_hours')
+        .select('id, nickname, full_name, avatar_url, banner_url, banner_gradient, region, city, steam_url, xp, total_games, completed_games, total_hours, coins, active_status_id, active_background_id')
         .eq('id', id)
         .maybeSingle(),
       supabase
@@ -27,7 +27,7 @@ export async function GET(
         .eq('to_user_id', id),
       supabase
         .from('user_games')
-        .select('game_id, status, hours, rating, review, updated_at')
+        .select('game_id, status, hours, rating, review, updated_at, favorite_order')
         .eq('user_id', id),
     ]);
 
@@ -64,6 +64,9 @@ export async function GET(
           totalGames: profile.total_games || 0,
           completedGames: profile.completed_games || 0,
           totalHours: profile.total_hours || 0,
+          coins: profile.coins || 0,
+          activeStatusId: profile.active_status_id || null,
+          activeBackgroundId: profile.active_background_id || null,
         },
         stats: {
           likes: likesCount || 0,
@@ -75,9 +78,7 @@ export async function GET(
         userGames,
       },
       {
-        headers: {
-          'Cache-Control': 'no-store',
-        },
+        headers: { 'Cache-Control': 'no-store' },
       },
     );
   } catch (error: any) {
