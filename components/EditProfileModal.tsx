@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   X, User, Save, Loader2, Lock, Mail, Camera, Trash2,
-  MapPin, Link2, AtSign, Image as ImageIcon, Palette,
+  MapPin, Link2, AtSign,
 } from 'lucide-react';
 import Image from 'next/image';
 import { supabase } from '@/lib/supabase';
@@ -19,22 +19,6 @@ interface EditProfileModalProps {
   userId: string;
   userEmail?: string;
   onUpdate: (updated: Partial<UserProfile>) => void;
-}
-
-const BANNER_GRADIENTS = [
-  { id: 'indigo',   label: 'Индиго',   class: 'from-indigo-600 via-purple-600 to-pink-600' },
-  { id: 'sunset',   label: 'Закат',    class: 'from-orange-500 via-red-500 to-pink-600' },
-  { id: 'ocean',    label: 'Океан',    class: 'from-cyan-500 via-blue-600 to-indigo-700' },
-  { id: 'forest',   label: 'Лес',      class: 'from-emerald-500 via-green-600 to-teal-700' },
-  { id: 'flame',    label: 'Пламя',    class: 'from-yellow-500 via-orange-600 to-red-600' },
-  { id: 'purple',   label: 'Пурпур',   class: 'from-purple-600 via-pink-600 to-rose-600' },
-  { id: 'midnight', label: 'Полночь',  class: 'from-blue-900 via-indigo-900 to-purple-900' },
-  { id: 'dark',     label: 'Тёмный',   class: 'from-neutral-700 via-neutral-800 to-neutral-900' },
-];
-
-export function getBannerGradientClass(id: string): string {
-  const g = BANNER_GRADIENTS.find((g) => g.id === id);
-  return g?.class || BANNER_GRADIENTS[0].class;
 }
 
 // Определяем MIME по расширению — если браузер не отдал file.type
@@ -110,14 +94,10 @@ export default function EditProfileModal({
   const [city, setCity] = useState('');
   const [steamUrl, setSteamUrl] = useState('');
   const [avatarUrl, setAvatarUrl] = useState<string | undefined>(profile.avatarUrl);
-  const [bannerUrl, setBannerUrl] = useState<string | null>(null);
-  const [bannerGradient, setBannerGradient] = useState<string>('indigo');
   const [uploading, setUploading] = useState(false);
-  const [uploadingBanner, setUploadingBanner] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const bannerInputRef = useRef<HTMLInputElement>(null);
 
   const [newEmail, setNewEmail] = useState(userEmail || '');
   const [savingEmail, setSavingEmail] = useState(false);
@@ -131,11 +111,11 @@ export default function EditProfileModal({
   useEffect(() => {
     if (!isOpen) return;
     const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !uploading && !uploadingBanner && !savingProfile && !savingEmail && !savingPassword) onClose();
+      if (e.key === 'Escape' && !uploading && !savingProfile && !savingEmail && !savingPassword) onClose();
     };
     window.addEventListener('keydown', handleEsc);
     return () => window.removeEventListener('keydown', handleEsc);
-  }, [isOpen, uploading, uploadingBanner, savingProfile, savingEmail, savingPassword, onClose]);
+  }, [isOpen, uploading, savingProfile, savingEmail, savingPassword, onClose]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -151,7 +131,7 @@ export default function EditProfileModal({
 
     supabase
       .from('profiles')
-      .select('full_name, region, city, steam_url, banner_url, banner_gradient')
+      .select('full_name, region, city, steam_url')
       .eq('id', userId)
       .maybeSingle()
       .then(({ data }) => {
@@ -160,15 +140,13 @@ export default function EditProfileModal({
           setRegion(data.region || '');
           setCity(data.city || '');
           setSteamUrl(data.steam_url || '');
-          setBannerUrl(data.banner_url || null);
-          setBannerGradient(data.banner_gradient || 'indigo');
         }
       });
   }, [isOpen, profile.nickname, profile.avatarUrl, userEmail, userId]);
 
   if (!isOpen) return null;
 
-  const isBusy = uploading || uploadingBanner || savingProfile || savingEmail || savingPassword;
+  const isBusy = uploading || savingProfile || savingEmail || savingPassword;
 
   // ========== АВАТАР ==========
   const handleAvatarSelect = async (file: File) => {
@@ -222,64 +200,6 @@ export default function EditProfileModal({
       showToast('Аватар удалён', 'info');
     } catch {}
     setUploading(false);
-  };
-
-  // ========== БАННЕР ==========
-  const handleBannerSelect = async (file: File) => {
-    const mime = file.type || getMimeFromName(file.name);
-    const isImage = mime.startsWith('image/');
-    if (!isImage) return setProfileError('Только изображения или GIF');
-    if (file.size > 10 * 1024 * 1024) return setProfileError('Максимум 10 МБ');
-
-    setUploadingBanner(true);
-    setProfileError(null);
-    try {
-      const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
-      const path = `${userId}/banner.${ext}`;
-
-      const { publicUrl, error: upErr } = await uploadWithRetry('avatars', path, file);
-
-      if (upErr) {
-        console.error('Banner upload error:', upErr);
-        throw new Error(upErr.message || 'Не удалось загрузить баннер');
-      }
-
-      const url = `${publicUrl}?t=${Date.now()}`;
-
-      const { error: dbErr } = await supabase.from('profiles').update({ banner_url: url }).eq('id', userId);
-      if (dbErr) throw dbErr;
-
-      setBannerUrl(url);
-      showToast('Баннер обновлён', 'success');
-    } catch (err: any) {
-      console.error('handleBannerSelect error:', err);
-      setProfileError(err.message || 'Ошибка загрузки баннера');
-      showToast('Ошибка загрузки баннера', 'error');
-    }
-    setUploadingBanner(false);
-  };
-
-  const handleBannerDelete = async () => {
-    if (!bannerUrl) return;
-    if (!confirm('Удалить баннер?')) return;
-    setUploadingBanner(true);
-    try {
-      const { data: files } = await supabase.storage.from('avatars').list(userId);
-      const bannerFiles = (files || []).filter((f) => f.name.startsWith('banner.'));
-      if (bannerFiles.length) {
-        await supabase.storage.from('avatars').remove(bannerFiles.map((f) => `${userId}/${f.name}`));
-      }
-      await supabase.from('profiles').update({ banner_url: null }).eq('id', userId);
-      setBannerUrl(null);
-      showToast('Баннер удалён', 'info');
-    } catch {}
-    setUploadingBanner(false);
-  };
-
-  const handleGradientSelect = async (id: string) => {
-    setBannerGradient(id);
-    await supabase.from('profiles').update({ banner_gradient: id }).eq('id', userId);
-    showToast('Градиент обновлён', 'success');
   };
 
   // ========== ПРОФИЛЬ ==========
@@ -399,88 +319,6 @@ export default function EditProfileModal({
         <div className="p-6 space-y-5 max-h-[65vh] overflow-y-auto">
           {tab === 'profile' && (
             <>
-              <div>
-                <label className="text-xs font-medium text-neutral-400 mb-3 flex items-center gap-1.5">
-                  <ImageIcon className="w-3 h-3" /> Баннер профиля
-                </label>
-
-                <div className="relative h-28 rounded-xl overflow-hidden mb-3">
-                  {bannerUrl ? (
-                    <>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={bannerUrl}
-                        alt="banner"
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                          console.error('Banner load failed:', bannerUrl);
-                          (e.target as HTMLImageElement).style.display = 'none';
-                        }}
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-                    </>
-                  ) : (
-                    <div className={`w-full h-full bg-gradient-to-br ${getBannerGradientClass(bannerGradient)}`} />
-                  )}
-                  {uploadingBanner && (
-                    <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
-                      <Loader2 className="w-6 h-6 text-white animate-spin" />
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex gap-2 mb-3">
-                  <input
-                    ref={bannerInputRef}
-                    type="file"
-                    accept="image/*,image/gif"
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (f) handleBannerSelect(f);
-                      e.target.value = '';
-                    }}
-                    className="hidden"
-                  />
-                  <button
-                    onClick={() => bannerInputRef.current?.click()}
-                    disabled={uploadingBanner}
-                    className="flex-1 px-3 py-2 bg-neutral-800 hover:bg-neutral-700 disabled:opacity-50 text-neutral-300 text-xs font-medium rounded-lg transition flex items-center justify-center gap-2"
-                  >
-                    <Camera className="w-3.5 h-3.5" />
-                    {bannerUrl ? 'Заменить' : 'Загрузить фото / GIF'}
-                  </button>
-                  {bannerUrl && (
-                    <button
-                      onClick={handleBannerDelete}
-                      disabled={uploadingBanner}
-                      className="px-3 py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 disabled:opacity-50 text-red-400 text-xs font-medium rounded-lg transition flex items-center justify-center gap-2"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                      Удалить
-                    </button>
-                  )}
-                </div>
-
-                <p className="text-[11px] text-neutral-500 mb-2 flex items-center gap-1.5">
-                  <Palette className="w-3 h-3" />
-                  Или градиент {bannerUrl && '(скрыт за фото)'}
-                </p>
-                <div className="grid grid-cols-4 gap-2">
-                  {BANNER_GRADIENTS.map((g) => (
-                    <button
-                      key={g.id}
-                      onClick={() => handleGradientSelect(g.id)}
-                      className={`relative h-10 rounded-lg bg-gradient-to-br ${g.class} transition ${
-                        bannerGradient === g.id
-                          ? 'ring-2 ring-white ring-offset-2 ring-offset-neutral-900'
-                          : 'hover:opacity-80'
-                      }`}
-                      title={g.label}
-                    />
-                  ))}
-                </div>
-              </div>
-
               <div>
                 <label className="text-xs font-medium text-neutral-400 mb-3 block">Аватар</label>
                 <div className="flex items-center gap-4">
@@ -606,7 +444,7 @@ export default function EditProfileModal({
 
               <button
                 onClick={handleSaveProfile}
-                disabled={savingProfile || uploading || uploadingBanner}
+                disabled={savingProfile || uploading}
                 className="w-full bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 text-white font-medium py-3 rounded-lg transition flex items-center justify-center gap-2"
               >
                 {savingProfile ? (

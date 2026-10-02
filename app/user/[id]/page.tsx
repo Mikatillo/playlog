@@ -798,18 +798,20 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
           </div>
 
           {/* Лента активности */}
-          <div className="bg-neutral-900/80 backdrop-blur-md border border-neutral-800 rounded-2xl p-5">
+          <div className="bg-neutral-900/80 backdrop-blur-md border border-neutral-800 rounded-2xl p-5 flex flex-col">
             <h3 className="font-semibold text-white mb-4 flex items-center gap-2">
               <MessageSquare className="w-4 h-4 text-indigo-500" />
               Лента активности
             </h3>
-            <ActivityFeed
-              userId={id}
-              scope="user"
-              showAvatars={false}
-              limit={5}
-              emptyText="Пока нет активности"
-            />
+            <div className="overflow-y-auto pr-1 max-h-[280px] activity-scroll">
+              <ActivityFeed
+                userId={id}
+                scope="user"
+                showAvatars={false}
+                limit={20}
+                emptyText="Пока нет активности"
+              />
+            </div>
           </div>
 
           {/* Интересы и статистика — горизонтальные полосы */}

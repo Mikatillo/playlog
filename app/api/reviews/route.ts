@@ -18,8 +18,6 @@ export async function GET(request: NextRequest) {
       .limit(50);
 
     if (gameId) query = query.eq('game_id', Number(gameId));
-    if (userId) query = query.eq('user_id', userId);
-
     const { data: reviews, error } = await query;
     if (error) {
       console.error('Reviews query error:', error);
