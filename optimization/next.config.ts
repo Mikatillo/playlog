@@ -16,6 +16,10 @@ const nextConfig: NextConfig = {
         hostname: "cdn.simpleicons.org",
       },
     ],
+    formats: ['image/avif', 'image/webp'],
+  },
+  experimental: {
+    optimizePackageImports: ['lucide-react'],
   },
 };
 

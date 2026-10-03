@@ -5,13 +5,33 @@ const BASE_URL = 'https://api.rawg.io/api';
 
 const FIELDS = [
   'id', 'name', 'background_image', 'released', 'rating',
-  'metacritic', 'genres', 'tags', 'platforms', 'playtime',
-  'ratings_count', 'added',
+  'metacritic', 'genres', 'platforms', 'playtime', 'ratings_count',
 ].join(',');
+
+// In-memory кеш на сервере (живёт между запросами в рамках процесса)
+const memCache = new Map<string, { data: any; expiresAt: number }>();
+const CACHE_TTL = 30 * 60 * 1000; // 30 минут
 
 const TOO_MAINSTREAM = new Set<number>([
   3498, 4200, 3328, 13536, 4291, 12020, 5286, 5679, 3439, 278, 1942,
 ]);
+
+function hashSeed(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return h;
+}
+
+function shuffle<T>(arr: T[], seed: string): T[] {
+  let s = hashSeed(seed);
+  const r = [...arr];
+  for (let i = r.length - 1; i > 0; i--) {
+    s = (s * 1103515245 + 12345) & 0x7fffffff;
+    const j = s % (i + 1);
+    [r[i], r[j]] = [r[j], r[i]];
+  }
+  return r;
+}
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -19,91 +39,79 @@ export async function GET(request: NextRequest) {
   const topIds = (searchParams.get('top') || '').split(',').filter(Boolean);
   const seedParam = searchParams.get('seed') || String(Date.now());
 
-  // Seed превращаем в число для ротации
-  const seedNum = hashSeed(seedParam);
-
   try {
     const excludeSet = new Set(allIds.map(Number));
 
-    // 1. Собираем жанры и теги из топовых игр
-    const genreCount: Record<string, { count: number }> = {};
-    const tagCount: Record<string, { count: number }> = {};
+    // Ключ кеша — только от topIds (жанры/теги не зависят от seed)
+    const topKey = topIds.slice(0, 8).sort().join('-');
+    const cacheKey = `pool:${topKey}`;
+    const cached = memCache.get(cacheKey);
 
-    if (topIds.length > 0) {
-      const sample = topIds.slice(0, 8);
-      await Promise.all(
-        sample.map(async (id) => {
-          try {
-            const r = await fetch(
-              `${BASE_URL}/games/${id}?key=${API_KEY}&fields=genres,tags`,
-              { next: { revalidate: 86400 } },
-            );
-            if (!r.ok) return;
-            const d = await r.json();
-            d?.genres?.forEach((g: any) => {
-              const key = String(g.id);
-              if (!genreCount[key]) genreCount[key] = { count: 0 };
-              genreCount[key].count += 1;
-            });
-            d?.tags?.slice(0, 12).forEach((t: any) => {
-              const key = String(t.id);
-              if (!tagCount[key]) tagCount[key] = { count: 0 };
-              tagCount[key].count += 1;
-            });
-          } catch {}
-        }),
-      );
-    }
+    let pool: any[] = [];
 
-    const allGenres = Object.entries(genreCount)
-      .sort((a, b) => b[1].count - a[1].count)
-      .map(([id]) => id);
-    const allTags = Object.entries(tagCount)
-      .filter(([, v]) => v.count >= 2)
-      .sort((a, b) => b[1].count - a[1].count)
-      .map(([id]) => id);
+    if (cached && Date.now() < cached.expiresAt) {
+      pool = cached.data;
+    } else {
+      // 1. Жанры — ОДИН параллельный запрос для всех топ-игр
+      let topGenres: string[] = [];
 
-    // Ротация: каждый раз берём "сдвинутое окно" жанров и тегов
-    // Например, если всего 5 жанров — берём 3, но со сдвигом
-    const rotate = <T>(arr: T[], size: number, offset: number): T[] => {
-      if (arr.length === 0) return [];
-      const start = offset % arr.length;
-      const result: T[] = [];
-      for (let i = 0; i < size && i < arr.length; i++) {
-        result.push(arr[(start + i) % arr.length]);
-      }
-      return result;
-    };
-
-    const topGenres = rotate(allGenres, 3, seedNum);
-    const topTags = rotate(allTags, 4, seedNum + 1);
-
-    // 2. Собираем кандидатов из РАЗНЫХ источников, каждый со своей сортировкой
-    const candidateMap = new Map<number, any>();
-    const fetches: Promise<void>[] = [];
-
-    // Источник A: жанры, топ по рейтингу
-    if (topGenres.length > 0) {
-      fetches.push(
-        (async () => {
-          const url = `${BASE_URL}/games?key=${API_KEY}&genres=${topGenres.join(',')}&ordering=-rating&page_size=40&language=rus&fields=${FIELDS}`;
-          const res = await fetch(url, { next: { revalidate: 1800 } });
-          if (!res.ok) return;
-          const data = await res.json();
-          (data.results || []).forEach((g: any) => {
-            if (!excludeSet.has(g.id) && !TOO_MAINSTREAM.has(g.id)) {
-              candidateMap.set(g.id, g);
+      if (topIds.length > 0) {
+        const sample = topIds.slice(0, 8).join(',');
+        // RAWG позволяет через запятую НЕ передавать, поэтому берём по одной, но параллельно
+        const genreResults = await Promise.all(
+          topIds.slice(0, 6).map(async (id) => {
+            try {
+              const r = await fetch(
+                `${BASE_URL}/games/${id}?key=${API_KEY}&fields=genres`,
+                { next: { revalidate: 86400 } },
+              );
+              if (!r.ok) return null;
+              return await r.json();
+            } catch {
+              return null;
             }
-          });
-        })(),
-      );
-    }
+          }),
+        );
 
-    // Источник B: жанры, сортировка по metacritic
-    if (topGenres.length > 0) {
+        const genreCount: Record<string, number> = {};
+        genreResults.forEach((g) => {
+          g?.genres?.forEach((genre: any) => {
+            const key = String(genre.id);
+            genreCount[key] = (genreCount[key] || 0) + 1;
+          });
+        });
+
+        topGenres = Object.entries(genreCount)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 3)
+          .map(([id]) => id);
+      }
+
+      // 2. Пул игр — 2 источника параллельно (вместо 6)
+      const candidateMap = new Map<number, any>();
+      const fetches: Promise<void>[] = [];
+
+      // Источник A: по жанрам, топ по рейтингу
+      if (topGenres.length > 0) {
+        fetches.push(
+          (async () => {
+            const url = `${BASE_URL}/games?key=${API_KEY}&genres=${topGenres.join(',')}&ordering=-rating&page_size=40&language=rus&fields=${FIELDS}`;
+            const res = await fetch(url, { next: { revalidate: 1800 } });
+            if (!res.ok) return;
+            const data = await res.json();
+            (data.results || []).forEach((g: any) => {
+              if (!excludeSet.has(g.id) && !TOO_MAINSTREAM.has(g.id)) {
+                candidateMap.set(g.id, g);
+              }
+            });
+          })(),
+        );
+      }
+
+      // Источник B: топ по метакритике глобально (fallback + разнообразие)
       fetches.push(
         (async () => {
-          const url = `${BASE_URL}/games?key=${API_KEY}&genres=${topGenres.join(',')}&ordering=-metacritic&page_size=40&language=rus&fields=${FIELDS}`;
+          const url = `${BASE_URL}/games?key=${API_KEY}&ordering=-metacritic&page_size=40&language=rus&fields=${FIELDS}`;
           const res = await fetch(url, { next: { revalidate: 1800 } });
           if (!res.ok) return;
           const data = await res.json();
@@ -114,133 +122,33 @@ export async function GET(request: NextRequest) {
           });
         })(),
       );
+
+      await Promise.all(fetches);
+
+      const now = new Date().getFullYear();
+      pool = Array.from(candidateMap.values()).sort((a, b) => {
+        const scoreA = (a.metacritic || 0) * 0.5 + (a.rating || 0) * 10 + Math.max(0, 30 - (now - (Number(a.released?.split('-')[0]) || now)) * 2);
+        const scoreB = (b.metacritic || 0) * 0.5 + (b.rating || 0) * 10 + Math.max(0, 30 - (now - (Number(b.released?.split('-')[0]) || now)) * 2);
+        return scoreB - scoreA;
+      }).slice(0, 50);
+
+      memCache.set(cacheKey, { data: pool, expiresAt: Date.now() + CACHE_TTL });
     }
 
-    // Источник C: теги (если есть)
-    if (topTags.length > 0) {
-      fetches.push(
-        (async () => {
-          const url = `${BASE_URL}/games?key=${API_KEY}&tags=${topTags.join(',')}&ordering=-rating&page_size=40&language=rus&fields=${FIELDS}`;
-          const res = await fetch(url, { next: { revalidate: 1800 } });
-          if (!res.ok) return;
-          const data = await res.json();
-          (data.results || []).forEach((g: any) => {
-            if (!excludeSet.has(g.id) && !TOO_MAINSTREAM.has(g.id)) {
-              candidateMap.set(g.id, g);
-            }
-          });
-        })(),
-      );
-    }
+    // Shuffle только на выдаче (пул кешируется без seed)
+    const shuffled = shuffle(pool, seedParam);
+    const results = shuffled.slice(0, 8);
 
-    // Источник D: жанры, свежие игры
-    if (topGenres.length > 0) {
-      fetches.push(
-        (async () => {
-          const url = `${BASE_URL}/games?key=${API_KEY}&genres=${topGenres.join(',')}&ordering=-released&page_size=30&language=rus&fields=${FIELDS}`;
-          const res = await fetch(url, { next: { revalidate: 1800 } });
-          if (!res.ok) return;
-          const data = await res.json();
-          const now = new Date().getFullYear();
-          (data.results || []).forEach((g: any) => {
-            const year = Number(g.released?.split('-')[0]) || 0;
-            if (
-              !excludeSet.has(g.id) &&
-              !TOO_MAINSTREAM.has(g.id) &&
-              year >= now - 10
-            ) {
-              candidateMap.set(g.id, g);
-            }
-          });
-        })(),
-      );
-    }
-
-    // Источник E: одна случайная страница из популярного (для разнообразия)
-    fetches.push(
-      (async () => {
-        const page = (seedNum % 5) + 1;
-        const url = `${BASE_URL}/games?key=${API_KEY}&ordering=-added&page_size=40&page=${page}&language=rus&fields=${FIELDS}`;
-        const res = await fetch(url, { next: { revalidate: 1800 } });
-        if (!res.ok) return;
-        const data = await res.json();
-        (data.results || []).forEach((g: any) => {
-          if (!excludeSet.has(g.id) && !TOO_MAINSTREAM.has(g.id)) {
-            candidateMap.set(g.id, g);
-          }
-        });
-      })(),
+    return NextResponse.json(
+      { results, poolSize: pool.length },
+      {
+        headers: {
+          'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600',
+        },
+      },
     );
-
-    // Источник F: глобальный топ по метакритике (для случая "нет истории")
-    fetches.push(
-      (async () => {
-        const url = `${BASE_URL}/games?key=${API_KEY}&ordering=-metacritic&page_size=40&language=rus&fields=${FIELDS}`;
-        const res = await fetch(url, { next: { revalidate: 1800 } });
-        if (!res.ok) return;
-        const data = await res.json();
-        (data.results || []).forEach((g: any) => {
-          if (!excludeSet.has(g.id) && !TOO_MAINSTREAM.has(g.id) && g.metacritic) {
-            candidateMap.set(g.id, g);
-          }
-        });
-      })(),
-    );
-
-    await Promise.all(fetches);
-
-    let candidates = Array.from(candidateMap.values());
-
-    // Сортируем по "интересности"
-    const now = new Date().getFullYear();
-    candidates.sort((a, b) => score(b, now) - score(a, now));
-
-    // Берём топ-60 (не 25 — больше пул для shuffle)
-    const topCandidates = candidates.slice(0, 60);
-    const shuffled = shuffle(topCandidates, seedParam);
-
-    return NextResponse.json({
-      results: shuffled.slice(0, 8),
-      genres: topGenres,
-      tags: topTags,
-      poolSize: candidates.length,
-    });
   } catch (error) {
     console.error('For You error:', error);
     return NextResponse.json({ results: [] });
   }
-}
-
-function score(game: any, currentYear: number): number {
-  let s = 0;
-  if (game.metacritic) s += game.metacritic * 0.5;
-  if (game.rating) s += game.rating * 10;
-  const year = Number(game.released?.split('-')[0]) || 0;
-  if (year) {
-    const age = currentYear - year;
-    s += Math.max(0, 30 - age * 2);
-  }
-  if (game.ratings_count && game.ratings_count > 3000) {
-    s -= 20;
-  }
-  return s;
-}
-
-function hashSeed(seed: string): number {
-  let s = 0;
-  for (let i = 0; i < seed.length; i++) {
-    s = (s * 31 + seed.charCodeAt(i)) >>> 0;
-  }
-  return s;
-}
-
-function shuffle<T>(arr: T[], seed: string): T[] {
-  let s = hashSeed(seed);
-  const result = [...arr];
-  for (let i = result.length - 1; i > 0; i--) {
-    s = (s * 1103515245 + 12345) & 0x7fffffff;
-    const j = s % (i + 1);
-    [result[i], result[j]] = [result[j], result[i]];
-  }
-  return result;
 }

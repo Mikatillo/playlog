@@ -16,6 +16,80 @@ import { useToast } from '@/contexts/ToastContext';
 import AchievementsModal from './AchievementsModal';
 import EditProfileModal from './EditProfileModal';
 
+// ===== ИСПРАВЛЕНО: SuggestionsList вынесен за пределы компонента =====
+// Теперь React не будет пересоздавать компонент при каждом рендере Header
+function SuggestionsList({
+  show,
+  loading,
+  suggestions,
+  onClick,
+}: {
+  show: boolean;
+  loading: boolean;
+  suggestions: Game[];
+  onClick: (game: Game) => void;
+}) {
+  if (!show) return null;
+
+  return (
+    <div className="absolute left-0 right-0 top-full mt-2 bg-neutral-900 rounded-xl border border-neutral-800 shadow-2xl z-50 overflow-hidden animate-fade-in">
+      {loading ? (
+        <div className="flex items-center justify-center py-4">
+          <Loader2 className="w-4 h-4 text-indigo-400 animate-spin" />
+          <span className="ml-2 text-xs text-neutral-400">Ищем...</span>
+        </div>
+      ) : suggestions.length === 0 ? (
+        <div className="px-3 py-4 text-center text-xs text-neutral-500">
+          Ничего не найдено
+        </div>
+      ) : (
+        <div className="max-h-[400px] overflow-y-auto">
+          {suggestions.map((game) => (
+            <button
+              key={game.id}
+              onClick={() => onClick(game)}
+              className="w-full flex items-center gap-3 p-3 hover:bg-neutral-800 transition text-left border-b border-neutral-800 last:border-b-0"
+            >
+              <div className="relative w-10 h-14 rounded-lg overflow-hidden bg-neutral-800 flex-shrink-0">
+                {game.cover ? (
+                  <Image
+                    src={game.cover}
+                    alt={game.title}
+                    fill
+                    sizes="40px"
+                    className="object-cover"
+                    /* ИСПРАВЛЕНО: убран unoptimized — Next.js сам оптимизирует */
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <Gamepad2 className="w-4 h-4 text-neutral-600" />
+                  </div>
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="font-medium text-sm text-white truncate">
+                  {game.title}
+                </div>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-xs text-neutral-400 truncate">
+                    {game.genre}
+                  </span>
+                  {game.year > 0 && (
+                    <>
+                      <span className="text-xs text-neutral-600">•</span>
+                      <span className="text-xs text-neutral-400">{game.year}</span>
+                    </>
+                  )}
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Header() {
   const { profile, userId, userEmail, loading, setProfile, achievementsStats } = useAuth();
   const { showToast } = useToast();
@@ -187,7 +261,7 @@ export default function Header() {
             fill
             sizes={size === 'sm' ? '32px' : '40px'}
             className="object-cover"
-            unoptimized
+            /* ИСПРАВЛЕНО: убран unoptimized */
           />
         ) : hasNickname ? (
           initials
@@ -212,71 +286,9 @@ export default function Header() {
     }`;
   };
 
-  const SuggestionsList = () => {
-    if (!showSuggestions) return null;
-
-    return (
-      <div className="absolute left-0 right-0 top-full mt-2 bg-neutral-900 rounded-xl border border-neutral-800 shadow-2xl z-50 overflow-hidden">
-        {suggestLoading ? (
-          <div className="flex items-center justify-center py-4">
-            <Loader2 className="w-4 h-4 text-indigo-400 animate-spin" />
-            <span className="ml-2 text-xs text-neutral-400">Ищем...</span>
-          </div>
-        ) : suggestions.length === 0 ? (
-          <div className="px-3 py-4 text-center text-xs text-neutral-500">
-            Ничего не найдено
-          </div>
-        ) : (
-          <div className="max-h-[400px] overflow-y-auto">
-            {suggestions.map((game) => (
-              <button
-                key={game.id}
-                onClick={() => handleSuggestionClick(game)}
-                className="w-full flex items-center gap-3 p-3 hover:bg-neutral-800 transition text-left border-b border-neutral-800 last:border-b-0"
-              >
-                <div className="relative w-10 h-14 rounded-lg overflow-hidden bg-neutral-800 flex-shrink-0">
-                  {game.cover ? (
-                    <Image
-                      src={game.cover}
-                      alt={game.title}
-                      fill
-                      sizes="40px"
-                      className="object-cover"
-                      unoptimized
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center">
-                      <Gamepad2 className="w-4 h-4 text-neutral-600" />
-                    </div>
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-sm text-white truncate">
-                    {game.title}
-                  </div>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className="text-xs text-neutral-400 truncate">
-                      {game.genre}
-                    </span>
-                    {game.year > 0 && (
-                      <>
-                        <span className="text-xs text-neutral-600">•</span>
-                        <span className="text-xs text-neutral-400">{game.year}</span>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-    );
-  };
-
   return (
     <>
-      <header className="bg-neutral-900 border-b border-neutral-800 sticky top-0 z-40">
+      <header className="bg-neutral-900/95 backdrop-blur-md border-b border-neutral-800 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 md:px-6 py-3 flex items-center gap-3 md:gap-4">
           {/* Логотип */}
           <Link
@@ -347,7 +359,12 @@ export default function Header() {
                 )}
               </div>
             </form>
-            <SuggestionsList />
+            <SuggestionsList
+              show={showSuggestions}
+              loading={suggestLoading}
+              suggestions={suggestions}
+              onClick={handleSuggestionClick}
+            />
           </div>
 
           {/* Правый блок */}
@@ -384,7 +401,7 @@ export default function Header() {
                 {userMenuOpen && (
                   <div
                     role="menu"
-                    className="absolute right-0 top-full mt-2 w-56 bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl overflow-hidden z-50"
+                    className="absolute right-0 top-full mt-2 w-56 bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl overflow-hidden z-50 animate-fade-in"
                   >
                     <div className="px-4 py-3 border-b border-neutral-800">
                       <div className="text-sm font-medium text-white truncate">
@@ -482,13 +499,18 @@ export default function Header() {
                 </button>
               )}
             </form>
-            <SuggestionsList />
+            <SuggestionsList
+              show={showSuggestions}
+              loading={suggestLoading}
+              suggestions={suggestions}
+              onClick={handleSuggestionClick}
+            />
           </div>
         )}
 
         {/* Мобильное меню */}
         {menuOpen && (
-          <div className="lg:hidden bg-neutral-900 border-t border-neutral-800 px-6 py-4 space-y-3">
+          <div className="lg:hidden bg-neutral-900 border-t border-neutral-800 px-6 py-4 space-y-3 animate-fade-in">
             {isLoggedIn && (
               <div className="flex items-center gap-3 pb-3 border-b border-neutral-800">
                 <AvatarBlock size="md" />
@@ -628,11 +650,11 @@ export default function Header() {
 
       {logoutConfirm && (
         <div
-          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[70] flex items-center justify-center p-4"
+          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[70] flex items-center justify-center p-4 animate-fade-in"
           onClick={() => setLogoutConfirm(false)}
         >
           <div
-            className="bg-neutral-900 rounded-2xl max-w-sm w-full p-6 border border-neutral-800 shadow-2xl"
+            className="bg-neutral-900 rounded-2xl max-w-sm w-full p-6 border border-neutral-800 shadow-2xl animate-scale-in"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="text-center">

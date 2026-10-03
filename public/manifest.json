@@ -1,0 +1,39 @@
+{
+  "name": "PlayLog — Твоя игровая библиотека",
+  "short_name": "PlayLog",
+  "description": "Отслеживай пройденные игры, ставь оценки и делись мнением",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0a0a0a",
+  "theme_color": "#6366f1",
+  "categories": ["games", "entertainment"],
+  "lang": "ru",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Мои игры",
+      "url": "/my-games",
+      "description": "Твоя библиотека игр"
+    },
+    {
+      "name": "Релизы",
+      "url": "/releases",
+      "description": "Предстоящие релизы"
+    }
+  ]
+}

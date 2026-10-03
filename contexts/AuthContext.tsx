@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useState, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { GameData, UserProfile } from '@/types/game';
 
@@ -204,18 +204,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [profile, user?.id]);
 
-  const achievementsStats: AchievementsStats = {
-    total: userGames.size,
-    completed: Array.from(userGames.values()).filter((d) => d.status === 'completed').length,
-    playing: Array.from(userGames.values()).filter((d) => d.status === 'playing').length,
-    want: Array.from(userGames.values()).filter((d) => d.status === 'want').length,
-    dropped: Array.from(userGames.values()).filter((d) => d.status === 'dropped').length,
-    totalHours: Array.from(userGames.values()).reduce((s, d) => s + (d.hours || 0), 0),
-    ratedGames: Array.from(userGames.values()).filter((d) => d.rating > 0).length,
-    reviewsCount: Array.from(userGames.values()).filter(
-      (d) => d.review && d.review.length > 0,
-    ).length,
-  };
+  // ===== ИСПРАВЛЕНО: useMemo для предотвращения лишних ререндеров =====
+  const achievementsStats = useMemo<AchievementsStats>(() => {
+    const values = Array.from(userGames.values());
+    return {
+      total: userGames.size,
+      completed: values.filter((d) => d.status === 'completed').length,
+      playing: values.filter((d) => d.status === 'playing').length,
+      want: values.filter((d) => d.status === 'want').length,
+      dropped: values.filter((d) => d.status === 'dropped').length,
+      totalHours: values.reduce((sum, d) => sum + (d.hours || 0), 0),
+      ratedGames: values.filter((d) => d.rating > 0).length,
+      reviewsCount: values.filter(
+        (d) => d.review && d.review.length > 0,
+      ).length,
+    };
+  }, [userGames]);
 
   return (
     <AuthContext.Provider

@@ -32,12 +32,32 @@
   }
 }
 
-* {
-  transition-property: color, background-color, border-color, text-decoration-color, fill, stroke, opacity, box-shadow, transform, filter, backdrop-filter;
+/* ===== ИСПРАВЛЕНО: Убран глобальный transition на * ===== */
+/* Точечные transitions только для интерактивных элементов */
+button,
+a,
+input,
+select,
+textarea,
+[role="button"] {
+  transition-property: color, background-color, border-color, text-decoration-color, fill, stroke, opacity, box-shadow, transform;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   transition-duration: 150ms;
 }
 
+/* Отключаем transitions для пользователей, предпочитающих уменьшенное движение */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ===== Скроллбар ===== */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -55,6 +75,8 @@
 ::-webkit-scrollbar-thumb:hover {
   background: #525252;
 }
+
+/* ===== Анимации ===== */
 @keyframes slide-in-right {
   from {
     opacity: 0;
@@ -84,6 +106,48 @@
 .animate-fade-in-up {
   animation: fade-in-up 0.4s ease-out both;
 }
+
+/* ===== НОВОЕ: Анимации для модалок ===== */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.2s ease-out;
+}
+
+.animate-slide-up {
+  animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.animate-scale-in {
+  animation: scaleIn 0.2s ease-out;
+}
+
+/* ===== Маркиз ===== */
 @keyframes marquee {
   from {
     transform: translateX(0);
@@ -96,4 +160,16 @@
 .animate-marquee {
   animation: marquee 60s linear infinite;
   will-change: transform;
+}
+
+/* ===== НОВОЕ: Focus-visible для доступности ===== */
+:focus-visible {
+  outline: 2px solid #6366f1;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Убираем outline для мыши */
+:focus:not(:focus-visible) {
+  outline: none;
 }
