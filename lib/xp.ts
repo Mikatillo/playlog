@@ -1,8 +1,7 @@
-import { GameData, XP_RULES } from '@/types/game';
+import { GameData, XP_RULES, COIN_RULES } from '@/types/game';
 
 /**
  * Считает, сколько XP нужно начислить за переход из oldData в newData.
- * Возвращает 0, если данные не изменились или изменения уже были учтены.
  */
 export function calculateXpGain(
   oldData: GameData | null,
@@ -14,7 +13,7 @@ export function calculateXpGain(
   const hadGame = !!oldData && oldData.status !== 'none';
   const hasGame = newData.status !== 'none';
 
-  // Первое добавление игры (любой статус кроме none)
+  // Первое добавление игры
   if (!hadGame && hasGame) {
     amount += XP_RULES.ADD_GAME;
     reasons.push('Игра добавлена');
@@ -34,7 +33,7 @@ export function calculateXpGain(
     reasons.push('Рецензия написана');
   }
 
-  // Первый раз completed
+  // ИСПРАВЛЕНО: Проход игры (включая смену с dropped на completed)
   const wasCompleted = oldData?.status === 'completed';
   const isCompleted = newData.status === 'completed';
   if (!wasCompleted && isCompleted) {
@@ -42,21 +41,11 @@ export function calculateXpGain(
     reasons.push('Игра пройдена');
   }
 
-  // Первый раз dropped (не считаем, если уже был completed)
-  const wasDropped = oldData?.status === 'dropped';
-  const isDropped = newData.status === 'dropped';
-  if (!wasDropped && isDropped && !wasCompleted && !isCompleted) {
-    amount += XP_RULES.DROP;
-    reasons.push('Игра заброшена');
-  }
-
   return { amount, reasons };
 }
-import { COIN_RULES } from '@/types/game';
 
 /**
  * Считает, сколько монет начислить за переход из oldData в newData.
- * Логика повторяет calculateXpGain, но с другими суммами.
  */
 export function calculateCoinGain(
   oldData: GameData | null,
@@ -81,16 +70,11 @@ export function calculateCoinGain(
     amount += COIN_RULES.REVIEW;
   }
 
+  // ИСПРАВЛЕНО: Проход игры (включая смену с dropped на completed)
   const wasCompleted = oldData?.status === 'completed';
   const isCompleted = newData.status === 'completed';
   if (!wasCompleted && isCompleted) {
     amount += COIN_RULES.COMPLETE;
-  }
-
-  const wasDropped = oldData?.status === 'dropped';
-  const isDropped = newData.status === 'dropped';
-  if (!wasDropped && isDropped && !wasCompleted && !isCompleted) {
-    amount += COIN_RULES.DROP;
   }
 
   return amount;

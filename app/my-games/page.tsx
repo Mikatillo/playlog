@@ -459,7 +459,7 @@ export default function MyGamesPage() {
           <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-3 md:p-4 text-center">
             <Heart className="w-5 h-5 text-rose-500 mx-auto mb-1" />
             <div className="text-lg md:text-xl font-bold text-white">{stats.want}</div>
-            <div className="text-xs text-neutral-400">Хочу</div>
+            
           </div>
           <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-3 md:p-4 text-center">
             <XCircle className="w-5 h-5 text-neutral-500 mx-auto mb-1" />

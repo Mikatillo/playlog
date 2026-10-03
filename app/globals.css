@@ -32,8 +32,7 @@
   }
 }
 
-/* ===== ИСПРАВЛЕНО: Убран глобальный transition на * ===== */
-/* Точечные transitions только для интерактивных элементов */
+/* ===== ИСПРАВЛЕНО: Точечные transitions только для интерактивных элементов ===== */
 button,
 a,
 input,
@@ -45,7 +44,11 @@ textarea,
   transition-duration: 150ms;
 }
 
-/* Отключаем transitions для пользователей, предпочитающих уменьшенное движение */
+/* ===== ИСПРАВЛЕНО: Отключение автозума на мобильных при фокусе на input ===== */
+input, select, textarea {
+  font-size: 16px !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -57,7 +60,6 @@ textarea,
   }
 }
 
-/* ===== Скроллбар ===== */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -76,27 +78,14 @@ textarea,
   background: #525252;
 }
 
-/* ===== Анимации ===== */
 @keyframes slide-in-right {
-  from {
-    opacity: 0;
-    transform: translateX(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
+  from { opacity: 0; transform: translateX(20px); }
+  to { opacity: 1; transform: translateX(0); }
 }
 
 @keyframes fade-in-up {
-  from {
-    opacity: 0;
-    transform: translateY(12px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .animate-slide-in-right {
@@ -107,32 +96,19 @@ textarea,
   animation: fade-in-up 0.4s ease-out both;
 }
 
-/* ===== НОВОЕ: Анимации для модалок ===== */
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
 }
 
 @keyframes slideUp {
-  from {
-    opacity: 0;
-    transform: translateY(100%);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(100%); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes scaleIn {
-  from {
-    opacity: 0;
-    transform: scale(0.95);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
 }
 
 .animate-fade-in {
@@ -147,14 +123,9 @@ textarea,
   animation: scaleIn 0.2s ease-out;
 }
 
-/* ===== Маркиз ===== */
 @keyframes marquee {
-  from {
-    transform: translateX(0);
-  }
-  to {
-    transform: translateX(-50%);
-  }
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
 }
 
 .animate-marquee {
@@ -162,14 +133,12 @@ textarea,
   will-change: transform;
 }
 
-/* ===== НОВОЕ: Focus-visible для доступности ===== */
 :focus-visible {
   outline: 2px solid #6366f1;
   outline-offset: 2px;
   border-radius: 4px;
 }
 
-/* Убираем outline для мыши */
 :focus:not(:focus-visible) {
   outline: none;
 }

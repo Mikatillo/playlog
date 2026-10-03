@@ -19,15 +19,6 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   title: "PlayLog — Твоя игровая библиотека",
   description: "Отслеживай пройденные игры, ставь оценки и делись мнением",
-  manifest: "/manifest.json",
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: "black-translucent",
-    title: "PlayLog",
-  },
-  formatDetection: {
-    telephone: false,
-  },
   openGraph: {
     title: "PlayLog — Твоя игровая библиотека",
     description: "Отслеживай пройденные игры, ставь оценки и делись мнением",
@@ -43,36 +34,6 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ru">
-      <head>
-        {/* PWA: iOS мета-теги */}
-        <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        <meta name="apple-mobile-web-app-title" content="PlayLog" />
-        <link rel="apple-touch-icon" href="/icon-192.png" />
-        
-        {/* PWA:.theme-color для Android */}
-        <meta name="theme-color" content="#6366f1" />
-        
-        {/* PWA: регистрация Service Worker */}
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              if ('serviceWorker' in navigator) {
-                window.addEventListener('load', function() {
-                  navigator.serviceWorker.register('/sw.js').then(
-                    function(registration) {
-                      console.log('[PlayLog] SW registered:', registration.scope);
-                    },
-                    function(error) {
-                      console.log('[PlayLog] SW registration failed:', error);
-                    }
-                  );
-                });
-              }
-            `,
-          }}
-        />
-      </head>
       <body className={inter.className}>
         <ToastProvider>
           <AuthProvider>
