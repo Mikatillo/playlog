@@ -126,14 +126,12 @@ export default function FriendsPage() {
   const [users, setUsers] = useState<FriendUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [followLoading, setFollowLoading] = useState<string | null>(null);
-  const [followingIds, setFollowingIds] = useState<Set<string>>(new Set());
+  const [followingIds, setFollowingIds] = useState<Set<string>>(new Set<string>());
 
-  // Поиск пользователей по нику
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<FriendUser[]>([]);
   const [searching, setSearching] = useState(false);
 
-  // Обновить timestamp при входе на страницу
   useEffect(() => {
     localStorage.setItem('playlog:last_friends_visit', new Date().toISOString());
   }, []);
@@ -154,14 +152,13 @@ export default function FriendsPage() {
     }
   }, [userId, activeTab]);
 
-  // Загрузить список подписок для проверки
   const loadFollowing = useCallback(async () => {
     if (!userId) return;
     try {
       const res = await fetch(`/api/follows/list?user_id=${userId}&type=following`);
       if (res.ok) {
         const data = await res.json();
-        const ids = new Set((data.users || []).map((u: FriendUser) => u.id));
+        const ids = new Set<string>((data.users || []).map((u: FriendUser) => u.id));
         setFollowingIds(ids);
       }
     } catch (err) {
@@ -174,7 +171,6 @@ export default function FriendsPage() {
     loadFollowing();
   }, [loadUsers, loadFollowing]);
 
-  // Поиск с debounce
   useEffect(() => {
     if (searchQuery.length < 2) {
       setSearchResults([]);
@@ -219,14 +215,14 @@ export default function FriendsPage() {
         if (data.action === 'unfollowed') {
           setUsers((prev) => prev.filter((u) => u.id !== targetId));
           setFollowingIds((prev) => {
-            const next = new Set(prev);
+            const next = new Set<string>(prev);
             next.delete(targetId);
             return next;
           });
           showToast('Вы отписались', 'info');
         } else if (data.action === 'followed') {
           showToast('Вы подписались!', 'success');
-          setFollowingIds((prev) => new Set(prev).add(targetId));
+          setFollowingIds((prev) => new Set<string>([...prev, targetId]));
           loadUsers();
         }
       }
@@ -274,7 +270,6 @@ export default function FriendsPage() {
           <p className="text-sm text-neutral-400 mt-1">Управляй подписками и следи за активностью друзей</p>
         </div>
 
-        {/* ПОИСК ПОЛЬЗОВАТЕЛЕЙ ПО НИКУ */}
         <div className="relative mb-6">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500" />
           <input
@@ -289,7 +284,6 @@ export default function FriendsPage() {
           )}
         </div>
 
-        {/* РЕЗУЛЬТАТЫ ПОИСКА */}
         {searchQuery && searchQuery.length >= 2 && (
           <div className="mb-6">
             <h3 className="text-sm font-medium text-neutral-400 mb-3">Результаты поиска:</h3>
@@ -320,7 +314,6 @@ export default function FriendsPage() {
           </div>
         )}
 
-        {/* ТАБЫ — показываются только если нет поиска */}
         {!searchQuery && (
           <>
             <div className="flex gap-2 mb-6">
@@ -358,7 +351,6 @@ export default function FriendsPage() {
               </button>
             </div>
 
-            {/* СПИСОК */}
             {loading ? (
               <div className="flex items-center justify-center py-20">
                 <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
