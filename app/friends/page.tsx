@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { Suspense, useEffect, useState, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -114,7 +114,7 @@ function UserCard({
   );
 }
 
-export default function FriendsPage() {
+function FriendsPageContent() {
   const { userId } = useAuth();
   const { showToast } = useToast();
   const router = useRouter();
@@ -393,5 +393,17 @@ export default function FriendsPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function FriendsPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
+      </div>
+    }>
+      <FriendsPageContent />
+    </Suspense>
   );
 }
