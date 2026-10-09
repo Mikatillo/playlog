@@ -60,10 +60,15 @@ export async function POST(request: NextRequest) {
   let text = '';
   try {
     const body = await request.json();
-    text = body.text;
+    text = body?.text;
 
-    if (!text) {
+    if (!text || typeof text !== 'string') {
       return NextResponse.json({ error: 'Text is required' }, { status: 400 });
+    }
+
+    // Ограничиваем размер, чтобы эндпоинт нельзя было использовать как бесплатный прокси
+    if (text.length > 5000) {
+      text = text.slice(0, 5000);
     }
 
     if (/[а-яА-ЯёЁ]/.test(text)) {

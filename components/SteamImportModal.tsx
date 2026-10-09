@@ -1,5 +1,6 @@
 'use client';
 
+import { authFetch } from '@/lib/api-client';
 import { useState } from 'react';
 import {
   X, Loader2, Gamepad2, CheckCircle, AlertCircle, Info,
@@ -36,7 +37,7 @@ export default function SteamImportModal({
     setResult(null);
 
     try {
-      const res = await fetch('/api/steam/import', {
+      const res = await authFetch('/api/steam/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, steamUrl: steamUrl.trim() }),

@@ -4,6 +4,7 @@ import "./globals.css";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ToastProvider } from "@/contexts/ToastContext";
 import Header from "@/components/Header";
+import MobileNav from "@/components/MobileNav";
 
 const inter = Inter({ subsets: ["latin", "cyrillic"] });
 
@@ -38,7 +39,9 @@ export default function RootLayout({
         <ToastProvider>
           <AuthProvider>
             <Header />
-            {children}
+            {/* Отступ снизу под мобильную навигацию */}
+            <div className="pb-[calc(3.75rem+env(safe-area-inset-bottom))] lg:pb-0">{children}</div>
+            <MobileNav />
           </AuthProvider>
         </ToastProvider>
       </body>

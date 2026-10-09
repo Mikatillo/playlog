@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { requireUser, serverError, badRequest, isUuid, isPosInt } from '@/lib/server-auth';
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -59,30 +60,33 @@ export async function GET(request: NextRequest) {
   }
 }
 
+const ACTIVITY_TYPES = ['added', 'started', 'completed', 'dropped', 'rated', 'reviewed'];
+
 export async function POST(request: NextRequest) {
+  const auth = await requireUser(request);
+  if (auth instanceof NextResponse) return auth;
+  const { user, db } = auth;
+
   try {
-    const body = await request.json();
-    const { userId, type, gameId, gameTitle, gameCover, hours, rating, preview } = body;
+    const body = await request.json().catch(() => null);
+    const { type, gameId, gameTitle, gameCover, hours, rating, preview } = body || {};
 
-    if (!userId || !type || !gameId) {
-      return NextResponse.json({ error: 'Missing params' }, { status: 400 });
-    }
+    if (!ACTIVITY_TYPES.includes(type) || !isPosInt(gameId)) return badRequest('Missing params');
 
-    const { error } = await supabase.from('activity_feed').insert({
-      user_id: userId,
+    const { error } = await db.from('activity_feed').insert({
+      user_id: user.id,
       type,
       game_id: gameId,
-      game_title: gameTitle,
-      game_cover: gameCover,
-      hours: hours || 0,
-      rating: rating || null,
-      preview: preview || null,
+      game_title: typeof gameTitle === 'string' ? gameTitle.slice(0, 300) : null,
+      game_cover: typeof gameCover === 'string' ? gameCover.slice(0, 1000) : null,
+      hours: typeof hours === 'number' && hours >= 0 && hours < 100000 ? hours : 0,
+      rating: typeof rating === 'number' && rating >= 1 && rating <= 10 ? rating : null,
+      preview: typeof preview === 'string' ? preview.slice(0, 300) : null,
     });
 
     if (error) throw error;
     return NextResponse.json({ ok: true });
-  } catch (error: any) {
-    console.error('[activity POST] error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    return serverError('activity POST', error);
   }
 }

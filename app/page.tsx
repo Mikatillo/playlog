@@ -1,5 +1,6 @@
 'use client';
 
+import { authFetch } from '@/lib/api-client';
 import {
   X, Clock, MessageSquare, Trophy, TrendingUp,
   Zap, Loader2, Lock, Check, Heart, Gamepad, Save,
@@ -14,7 +15,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import { getRatingColor, getSliderColor } from '@/lib/utils';
-import { calculateXpGain, calculateCoinGain } from '@/lib/xp';
+import { fetchRewards } from '@/lib/rewards';
 import GameCard from '@/components/GameCard';
 import GameCardSkeleton from '@/components/GameCardSkeleton';
 import ForYou from '@/components/ForYou';
@@ -46,7 +47,7 @@ const sortOptions = [
 ];
 
 export default function Home() {
-  const { userId, userGames, setUserGames, setProfile } = useAuth();
+  const { userId, userGames, setUserGames, setProfile, profile } = useAuth();
   const { showToast } = useToast();
 
   const [mounted, setMounted] = useState(false);
@@ -285,32 +286,16 @@ export default function Home() {
     return () => window.removeEventListener('keydown', handleEsc);
   }, [selectedGame, selectedScreenshot]);
 
-  // Начисление XP + монет
-  const addRewards = async (xpAmount: number, coinsAmount: number) => {
-    if (xpAmount > 0) {
-      setProfile((prev) => ({ ...prev, xp: prev.xp + xpAmount }));
-      setXpGain(xpAmount);
-      setTimeout(() => setXpGain(null), 2000);
-    }
+  // XP и монеты начисляет сервер (триггер в базе). Здесь только обновляем показанные значения.
+  const syncRewards = async () => {
     if (!userId) return;
-
-    const { data: currentProfile } = await supabase
-      .from('profiles')
-      .select('xp, coins')
-      .eq('id', userId)
-      .single();
-
-    if (!currentProfile) return;
-
-    const patch: { xp?: number; coins?: number } = {};
-    if (xpAmount > 0) patch.xp = (currentProfile.xp || 0) + xpAmount;
-    if (coinsAmount > 0) {
-      patch.coins = (currentProfile.coins || 0) + coinsAmount;
-      setProfile((prev) => ({ ...prev, coins: (prev.coins || 0) + coinsAmount }));
-    }
-
-    if (Object.keys(patch).length > 0) {
-      await supabase.from('profiles').update(patch).eq('id', userId);
+    const r = await fetchRewards(userId);
+    if (!r) return;
+    const gain = r.xp - profile.xp;
+    setProfile((prev) => ({ ...prev, xp: r.xp, coins: r.coins }));
+    if (gain > 0) {
+      setXpGain(gain);
+      setTimeout(() => setXpGain(null), 2000);
     }
   };
 
@@ -320,7 +305,7 @@ export default function Home() {
     extras: { hours?: number; rating?: number; preview?: string } = {},
   ) => {
     if (!userId) return;
-    fetch('/api/activity', {
+    authFetch('/api/activity', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -381,7 +366,7 @@ export default function Home() {
     text: string,
   ) => {
     if (!userId || text.trim().length < 20) return;
-    fetch('/api/reviews', {
+    authFetch('/api/reviews', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -446,11 +431,9 @@ export default function Home() {
     try {
       const oldData = userGames.get(selectedGame.id) || null;
       const gameRef = selectedGame;
-      const newData = await saveData(userRating, userHours, review, gameStatus);
+      await saveData(userRating, userHours, review, gameStatus);
 
-      const { amount: xpAmount } = calculateXpGain(oldData, newData);
-      const coinsAmount = calculateCoinGain(oldData, newData);
-      if (xpAmount > 0 || coinsAmount > 0) addRewards(xpAmount, coinsAmount);
+      await syncRewards();
 
       const oldStatus = oldData?.status || 'none';
       const oldRating = oldData?.rating || 0;
@@ -494,7 +477,7 @@ export default function Home() {
     }
     try {
       const gameRef = selectedGame;
-      await fetch('/api/reviews', {
+      await authFetch('/api/reviews', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -538,12 +521,12 @@ export default function Home() {
     >
       <div className="min-h-full flex items-start md:items-center justify-center p-0 md:p-4">
         <div
-          className="bg-neutral-900 md:rounded-2xl w-full md:max-w-4xl md:max-h-[90vh] overflow-y-auto relative shadow-2xl border-0 md:border border-neutral-800"
+          className="bg-neutral-900 md:rounded-2xl w-full md:max-w-4xl max-h-screen md:max-h-[90vh] overflow-y-auto relative shadow-2xl border-0 md:border border-neutral-800"
           onClick={(e) => e.stopPropagation()}
         >
           <button
             onClick={closeGame}
-            className="absolute top-3 right-3 w-10 h-10 bg-black/60 hover:bg-black/80 backdrop-blur-sm rounded-full flex items-center justify-center transition z-40"
+            className="fixed md:absolute top-3 right-3 w-10 h-10 bg-black/60 hover:bg-black/80 backdrop-blur-sm rounded-full flex items-center justify-center transition z-40"
           >
             <X className="w-5 h-5 text-white" />
           </button>
@@ -787,7 +770,7 @@ export default function Home() {
                   </button>
                 </div>
 
-                <div className="flex gap-2 pt-2 border-t border-neutral-800">
+                <div className="flex gap-2 sticky bottom-0 z-30 -mx-4 px-4 py-3 bg-neutral-900/95 backdrop-blur border-t border-neutral-800 md:static md:mx-0 md:px-0 md:pb-0 md:pt-3 md:bg-transparent md:backdrop-blur-none">
                   <button
                     onClick={saveAndClose}
                     disabled={saving}
@@ -866,13 +849,13 @@ export default function Home() {
               </h2>
 
               {searchMode === 'browse' && (
-                <div className="flex items-center gap-2">
-                  <div className="relative">
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <div className="relative flex-1 sm:flex-none">
                     <Tag className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-500 pointer-events-none z-10" />
                     <select
                       value={selectedGenre}
                       onChange={(e) => setSelectedGenre(e.target.value)}
-                      className="appearance-none bg-neutral-900 border border-neutral-800 hover:border-neutral-700 rounded-lg pl-8 pr-7 py-1.5 text-xs md:text-sm font-medium text-neutral-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 cursor-pointer transition"
+                      className="w-full appearance-none bg-neutral-900 border border-neutral-800 hover:border-neutral-700 rounded-lg pl-8 pr-7 py-2 sm:py-1.5 text-xs md:text-sm font-medium text-neutral-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 cursor-pointer transition"
                     >
                       {genres.map((g) => (
                         <option key={g.id} value={g.id} className="bg-neutral-900">
@@ -883,12 +866,12 @@ export default function Home() {
                     <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-neutral-500 pointer-events-none" />
                   </div>
 
-                  <div className="relative">
+                  <div className="relative flex-1 sm:flex-none">
                     <ArrowUpDown className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-500 pointer-events-none z-10" />
                     <select
                       value={sortBy}
                       onChange={(e) => setSortBy(e.target.value)}
-                      className="appearance-none bg-neutral-900 border border-neutral-800 hover:border-neutral-700 rounded-lg pl-8 pr-7 py-1.5 text-xs md:text-sm font-medium text-neutral-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 cursor-pointer transition"
+                      className="w-full appearance-none bg-neutral-900 border border-neutral-800 hover:border-neutral-700 rounded-lg pl-8 pr-7 py-2 sm:py-1.5 text-xs md:text-sm font-medium text-neutral-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 cursor-pointer transition"
                     >
                       {sortOptions.map((opt) => (
                         <option key={opt.value} value={opt.value} className="bg-neutral-900">

@@ -1,71 +1,38 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { requireUser, serverError, badRequest } from '@/lib/server-auth';
 
+// Покупка выполняется атомарно в Postgres-функции buy_shop_item (см. supabase/security.sql):
+// проверка баланса, списание и выдача предмета — в одной транзакции.
 export async function POST(request: NextRequest) {
+  const auth = await requireUser(request);
+  if (auth instanceof NextResponse) return auth;
+  const { db } = auth;
+
   try {
-    const { userId, itemId } = await request.json();
-    if (!userId || !itemId) {
-      return NextResponse.json({ error: 'Missing params' }, { status: 400 });
+    const body = await request.json().catch(() => null);
+    const itemId = body?.itemId;
+    if (itemId === undefined || itemId === null || String(itemId).length > 100) {
+      return badRequest('Missing params');
     }
 
-    const { data: item, error: itemErr } = await supabase
-      .from('shop_items')
-      .select('id, price')
-      .eq('id', itemId)
-      .eq('active', true)
-      .maybeSingle();
+    const { data, error } = await db.rpc('buy_shop_item', { p_item_id: String(itemId) });
 
-    if (itemErr || !item) {
-      return NextResponse.json({ error: 'Товар не найден' }, { status: 404 });
+    if (error) {
+      const msg = error.message || '';
+      if (msg.includes('item_not_found')) {
+        return NextResponse.json({ error: 'Товар не найден' }, { status: 404 });
+      }
+      if (msg.includes('already_owned')) {
+        return NextResponse.json({ error: 'Уже куплено' }, { status: 400 });
+      }
+      if (msg.includes('insufficient_funds')) {
+        return NextResponse.json({ error: 'Недостаточно монет' }, { status: 400 });
+      }
+      return serverError('shop/buy', error);
     }
 
-    const { data: existing } = await supabase
-      .from('user_inventory')
-      .select('item_id')
-      .eq('user_id', userId)
-      .eq('item_id', itemId)
-      .maybeSingle();
-
-    if (existing) {
-      return NextResponse.json({ error: 'Уже куплено' }, { status: 400 });
-    }
-
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('coins')
-      .eq('id', userId)
-      .single();
-
-    const currentCoins = profile?.coins || 0;
-
-    if (currentCoins < item.price) {
-      return NextResponse.json({ error: 'Недостаточно монет' }, { status: 400 });
-    }
-
-    const newCoins = currentCoins - item.price;
-
-    const { error: updErr } = await supabase
-      .from('profiles')
-      .update({ coins: newCoins })
-      .eq('id', userId);
-
-    if (updErr) throw updErr;
-
-    const { error: invErr } = await supabase
-      .from('user_inventory')
-      .insert({ user_id: userId, item_id: itemId });
-
-    if (invErr) {
-      await supabase
-        .from('profiles')
-        .update({ coins: currentCoins })
-        .eq('id', userId);
-      throw invErr;
-    }
-
-    return NextResponse.json({ ok: true, newCoins });
-  } catch (error: any) {
-    console.error('[shop/buy] error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ ok: true, newCoins: data });
+  } catch (error) {
+    return serverError('shop/buy', error);
   }
 }

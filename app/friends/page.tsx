@@ -1,5 +1,6 @@
 'use client';
 
+import { authFetch } from '@/lib/api-client';
 import { Suspense, useEffect, useState, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
@@ -127,6 +128,8 @@ function FriendsPageContent() {
   const [loading, setLoading] = useState(true);
   const [followLoading, setFollowLoading] = useState<string | null>(null);
   const [followingIds, setFollowingIds] = useState<Set<string>>(new Set<string>());
+  const [followersCount, setFollowersCount] = useState<number | null>(null);
+  const [followingLoaded, setFollowingLoaded] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<FriendUser[]>([]);
@@ -143,7 +146,9 @@ function FriendsPageContent() {
       const res = await fetch(`/api/follows/list?user_id=${userId}&type=${activeTab}`);
       if (res.ok) {
         const data = await res.json();
-        setUsers(data.users || []);
+        const list: FriendUser[] = data.users || [];
+        setUsers(list);
+        if (activeTab === 'followers') setFollowersCount(list.length);
       }
     } catch (err) {
       console.error('Load friends error:', err);
@@ -160,16 +165,35 @@ function FriendsPageContent() {
         const data = await res.json();
         const ids = new Set<string>((data.users || []).map((u: FriendUser) => u.id));
         setFollowingIds(ids);
+        setFollowingLoaded(true);
       }
     } catch (err) {
       console.error('Load following error:', err);
     }
   }, [userId]);
 
+  // Количество подписчиков нужно знать всегда, даже когда открыта вкладка «Подписки»
+  const loadFollowersCount = useCallback(async () => {
+    if (!userId) return;
+    try {
+      const res = await fetch(`/api/follows?user_id=${userId}&target_id=${userId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setFollowersCount(data.count || 0);
+      }
+    } catch (err) {
+      console.error('Load followers count error:', err);
+    }
+  }, [userId]);
+
   useEffect(() => {
     loadUsers();
+  }, [loadUsers]);
+
+  useEffect(() => {
     loadFollowing();
-  }, [loadUsers, loadFollowing]);
+    loadFollowersCount();
+  }, [loadFollowing, loadFollowersCount]);
 
   useEffect(() => {
     if (searchQuery.length < 2) {
@@ -203,7 +227,7 @@ function FriendsPageContent() {
 
     setFollowLoading(targetId);
     try {
-      const res = await fetch('/api/follows', {
+      const res = await authFetch('/api/follows', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, targetId }),
@@ -327,9 +351,9 @@ function FriendsPageContent() {
               >
                 <UserPlus className="w-4 h-4" />
                 Подписки
-                {!loading && (
+                {followingLoaded && (
                   <span className={`px-1.5 py-0.5 rounded text-xs ${activeTab === 'following' ? 'bg-indigo-500/20' : 'bg-neutral-800'}`}>
-                    {users.length}
+                    {followingIds.size}
                   </span>
                 )}
               </button>
@@ -343,9 +367,9 @@ function FriendsPageContent() {
               >
                 <Users className="w-4 h-4" />
                 Подписчики
-                {!loading && (
+                {followersCount !== null && (
                   <span className={`px-1.5 py-0.5 rounded text-xs ${activeTab === 'followers' ? 'bg-indigo-500/20' : 'bg-neutral-800'}`}>
-                    {users.length}
+                    {followersCount}
                   </span>
                 )}
               </button>

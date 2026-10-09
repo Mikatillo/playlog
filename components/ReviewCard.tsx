@@ -1,5 +1,6 @@
 'use client';
 
+import { authFetch } from '@/lib/api-client';
 import { useState, useEffect } from 'react';
 import { ThumbsUp, ThumbsDown, MessageSquare, Send, Trash2, Loader2 } from 'lucide-react';
 import Image from 'next/image';
@@ -88,7 +89,7 @@ export default function ReviewCard({ review, userVote: initialVote }: ReviewCard
     setDislikes(newDislikes);
 
     try {
-      await fetch('/api/reviews/vote', {
+      await authFetch('/api/reviews/vote', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, reviewId: review.id, vote: newVote }),
@@ -124,7 +125,7 @@ export default function ReviewCard({ review, userVote: initialVote }: ReviewCard
     if (!userId || !commentText.trim()) return;
     setPosting(true);
     try {
-      const res = await fetch('/api/reviews/comments', {
+      const res = await authFetch('/api/reviews/comments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -144,7 +145,7 @@ export default function ReviewCard({ review, userVote: initialVote }: ReviewCard
 
   const deleteComment = async (commentId: string) => {
     if (!userId) return;
-    await fetch(`/api/reviews/comments?id=${commentId}&user_id=${userId}`, {
+    await authFetch(`/api/reviews/comments?id=${commentId}`, {
       method: 'DELETE',
     });
     setComments((prev) => prev.filter((c) => c.id !== commentId));

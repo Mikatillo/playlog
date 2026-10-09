@@ -1,41 +1,46 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { requireUser, serverError, badRequest, isUuid, isPosInt } from '@/lib/server-auth';
 
 export async function POST(request: NextRequest) {
-  try {
-    const { userId, reviewId, vote } = await request.json();
+  const auth = await requireUser(request);
+  if (auth instanceof NextResponse) return auth;
+  const { user, db } = auth;
 
-    if (!userId || !reviewId || !['like', 'dislike'].includes(vote)) {
-      return NextResponse.json({ error: 'Invalid payload' }, { status: 400 });
+  try {
+    const body = await request.json().catch(() => null);
+    const { reviewId, vote } = body || {};
+
+    if (!reviewId || typeof reviewId !== 'string' || !['like', 'dislike'].includes(vote)) {
+      return badRequest('Invalid payload');
     }
 
-    // Проверяем текущий голос
-    const { data: existing } = await supabase
+    const { data: existing } = await db
       .from('review_votes')
       .select('vote')
-      .eq('user_id', userId)
+      .eq('user_id', user.id)
       .eq('review_id', reviewId)
       .maybeSingle();
 
     if (existing?.vote === vote) {
-      // Тот же голос — убираем (toggle off)
-      await supabase
+      const { error: delErr } = await db
         .from('review_votes')
         .delete()
-        .eq('user_id', userId)
+        .eq('user_id', user.id)
         .eq('review_id', reviewId);
+      if (delErr) throw delErr;
       return NextResponse.json({ action: 'removed' });
     }
 
-    // Upsert
-    await supabase.from('review_votes').upsert(
-      { user_id: userId, review_id: reviewId, vote },
+    const { error } = await db.from('review_votes').upsert(
+      { user_id: user.id, review_id: reviewId, vote },
       { onConflict: 'user_id,review_id' },
     );
+    if (error) throw error;
 
     return NextResponse.json({ action: existing ? 'changed' : 'added' });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    return serverError('reviews/vote POST', error);
   }
 }
 

@@ -1,5 +1,6 @@
 'use client';
 
+import { authFetch } from '@/lib/api-client';
 import { useEffect, useState } from 'react';
 import {
   Loader2, Coins, Star, Image as ImageIcon, Check, Lock, ShoppingBag,
@@ -70,7 +71,7 @@ export default function ShopPage() {
     }
     setBusyId(item.id);
     try {
-      const res = await fetch('/api/shop/buy', {
+      const res = await authFetch('/api/shop/buy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, itemId: item.id }),
@@ -90,7 +91,7 @@ export default function ShopPage() {
     if (!userId) return;
     setBusyId(item.id);
     try {
-      const res = await fetch('/api/shop/equip', {
+      const res = await authFetch('/api/shop/equip', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, itemId: item.id }),
@@ -108,7 +109,7 @@ export default function ShopPage() {
   const handleUnequip = async (type: 'status' | 'background') => {
     if (!userId) return;
     try {
-      const res = await fetch('/api/shop/equip', {
+      const res = await authFetch('/api/shop/equip', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, itemId: null }),

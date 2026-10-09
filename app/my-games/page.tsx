@@ -1,5 +1,8 @@
 'use client';
 
+import { fetchRewards } from '@/lib/rewards';
+import { fetchGamesByIds } from '@/lib/games-client';
+import { authFetch } from '@/lib/api-client';
 import { useState, useEffect, useMemo } from 'react';
 import {
   Heart, Gamepad, Check, Trophy, Star, Clock,
@@ -32,7 +35,7 @@ const sortOptions: { value: SortType; label: string }[] = [
 ];
 
 export default function MyGamesPage() {
-  const { userId, userGames, setUserGames, loading: authLoading } = useAuth();
+  const { userId, userGames, setUserGames, setProfile, loading: authLoading } = useAuth();
   const { showToast } = useToast();
 
   const [activeTab, setActiveTab] = useState<TabType>('all');
@@ -70,13 +73,9 @@ export default function MyGamesPage() {
     const loadGames = async () => {
       setLoading(true);
       try {
-        const response = await fetch(`/api/games/batch?ids=${ids.join(',')}`);
+        const mapped = await fetchGamesByIds(ids);
         if (cancelled) return;
-        if (response.ok) {
-          const data = await response.json();
-          const mapped = (data.results || []).map((g: RawgGame) => mapRawgGame(g));
-          setGames(mapped);
-        }
+        setGames(mapped);
       } catch (error) {
         console.error('Ошибка загрузки игр:', error);
       }
@@ -90,31 +89,6 @@ export default function MyGamesPage() {
       cancelled = true;
     };
   }, [authLoading, userGames]);
-
-  useEffect(() => {
-    if (authLoading || !userId) return;
-    const values = Array.from(userGames.values());
-    const totalGames = userGames.size;
-    const completedGames = values.filter((d) => d.status === 'completed').length;
-    const totalHours = values.reduce((s, d) => s + (d.hours || 0), 0);
-
-    // Дебаунс — не спамим на каждый чих
-    const timer = setTimeout(() => {
-      supabase
-        .from('profiles')
-        .update({
-          total_games: totalGames,
-          completed_games: completedGames,
-          total_hours: totalHours,
-        })
-        .eq('id', userId)
-        .then(({ error }) => {
-          if (error) console.warn('Profile sync skipped:', error.message || error.code || 'no permission');
-        });
-    }, 1500);
-
-    return () => clearTimeout(timer);
-  }, [userGames, userId, authLoading]);
 
   useEffect(() => {
     if (!selectedGame) return;
@@ -319,6 +293,11 @@ export default function MyGamesPage() {
       { onConflict: 'user_id,game_id' },
     );
 
+    // XP и монеты начисляет база данных — подтягиваем актуальные значения
+    fetchRewards(userId).then((r) => {
+      if (r) setProfile((prev) => ({ ...prev, xp: r.xp, coins: r.coins }));
+    });
+
     setUserGames((prev) => {
       const newMap = new Map(prev);
       newMap.set(selectedGame.id, {
@@ -342,7 +321,7 @@ export default function MyGamesPage() {
         rating: modalRating > 0 ? modalRating : null,
         text: modalReview.trim(),
       };
-      fetch('/api/reviews', {
+      authFetch('/api/reviews', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -361,7 +340,7 @@ export default function MyGamesPage() {
       return;
     }
     try {
-      await fetch('/api/reviews', {
+      await authFetch('/api/reviews', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -593,7 +572,7 @@ export default function MyGamesPage() {
           >
             <button
               onClick={closeGame}
-              className="absolute top-3 right-3 w-10 h-10 bg-black/60 hover:bg-black/80 backdrop-blur-sm rounded-full flex items-center justify-center transition z-40"
+              className="fixed md:absolute top-3 right-3 w-10 h-10 bg-black/60 hover:bg-black/80 backdrop-blur-sm rounded-full flex items-center justify-center transition z-40"
             >
               <X className="w-5 h-5 text-white" />
             </button>
@@ -857,7 +836,7 @@ export default function MyGamesPage() {
                   </button>
                 </div>
 
-                <div className="flex gap-2 pt-4 border-t border-neutral-800">
+                <div className="flex gap-2 sticky bottom-0 z-30 -mx-4 px-4 py-3 bg-neutral-900/95 backdrop-blur border-t border-neutral-800 md:static md:mx-0 md:px-0 md:pb-0 md:pt-3 md:bg-transparent md:backdrop-blur-none">
                   <button
                     onClick={() => {
                       saveModalData();
@@ -866,7 +845,7 @@ export default function MyGamesPage() {
                     className="flex-1 bg-indigo-500 hover:bg-indigo-600 text-white font-medium py-3 rounded-lg transition flex items-center justify-center gap-2 text-sm md:text-base"
                   >
                     <Check className="w-4 h-4" />
-                    <span className="hidden sm:inline">Сохранить</span>
+                    <span>Сохранить</span>
                   </button>
                   <button
                     onClick={() => setShowDeleteConfirm(true)}

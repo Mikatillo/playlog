@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { requireUser, serverError, badRequest, isUuid } from '@/lib/server-auth';
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -24,33 +25,42 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  try {
-    const { userId, targetId } = await request.json();
-    if (!userId || !targetId) return NextResponse.json({ error: 'Missing' }, { status: 400 });
-    if (userId === targetId) return NextResponse.json({ error: 'Нельзя подписаться на себя' }, { status: 400 });
+  const auth = await requireUser(request);
+  if (auth instanceof NextResponse) return auth;
+  const { user, db } = auth;
 
-    const { data: existing } = await supabase
+  try {
+    const body = await request.json().catch(() => null);
+    const targetId = body?.targetId;
+    if (!isUuid(targetId)) return badRequest('Missing');
+    if (user.id === targetId) {
+      return NextResponse.json({ error: 'Нельзя подписаться на себя' }, { status: 400 });
+    }
+
+    const { data: existing } = await db
       .from('follows')
-      .select('*')
-      .eq('follower_id', userId)
+      .select('follower_id')
+      .eq('follower_id', user.id)
       .eq('following_id', targetId)
       .maybeSingle();
 
     if (existing) {
-      await supabase
+      const { error: delErr } = await db
         .from('follows')
         .delete()
-        .eq('follower_id', userId)
+        .eq('follower_id', user.id)
         .eq('following_id', targetId);
+      if (delErr) throw delErr;
       return NextResponse.json({ action: 'unfollowed' });
     }
 
-    const { error } = await supabase
+    const { error } = await db
       .from('follows')
-      .insert({ follower_id: userId, following_id: targetId });
-    if (error) throw error;
+      .insert({ follower_id: user.id, following_id: targetId });
+    // 23505 — уже подписан (параллельный запрос): считаем успехом
+    if (error && error.code !== '23505') throw error;
     return NextResponse.json({ action: 'followed' });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    return serverError('follows POST', error);
   }
 }

@@ -65,7 +65,7 @@ export async function GET(request: NextRequest) {
     const excludeSet = new Set(excludeIds.map(Number));
     const filtered = (data.results || []).filter((g: any) => !excludeSet.has(g.id));
 
-    return NextResponse.json({ results: filtered.slice(0, 8) });
+    return NextResponse.json({ results: filtered.slice(0, 8) }, { headers: { 'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400' } });
   } catch (error) {
     console.error('Recommendations error:', error);
     return NextResponse.json({ error: 'Failed to fetch' }, { status: 500 });

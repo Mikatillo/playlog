@@ -1,5 +1,7 @@
 'use client';
 
+import { fetchRewards } from '@/lib/rewards';
+import { authFetch } from '@/lib/api-client';
 import { useEffect, useState, useMemo } from 'react';
 import {
   Calendar, Loader2, Gamepad2, X, Heart, XCircle,
@@ -38,7 +40,7 @@ function getMonthLabel(iso?: string, year?: number): string {
 }
 
 export default function ReleasesPage() {
-  const { userId, userGames, setUserGames } = useAuth();
+  const { userId, userGames, setUserGames, setProfile } = useAuth();
   const { showToast } = useToast();
 
   const [games, setGames] = useState<Game[]>([]);
@@ -195,6 +197,10 @@ export default function ReleasesPage() {
       { onConflict: 'user_id,game_id' },
     );
 
+    fetchRewards(userId).then((r) => {
+      if (r) setProfile((prev) => ({ ...prev, xp: r.xp, coins: r.coins }));
+    });
+
     setUserGames((prev) => {
       const m = new Map(prev);
       m.set(selectedGame.id, {
@@ -225,7 +231,7 @@ export default function ReleasesPage() {
     }
     setPublishing(true);
     try {
-      const res = await fetch('/api/reviews', {
+      const res = await authFetch('/api/reviews', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -355,7 +361,7 @@ export default function ReleasesPage() {
           >
             <button
               onClick={closeGame}
-              className="absolute top-3 right-3 w-10 h-10 bg-black/60 hover:bg-black/80 backdrop-blur-sm rounded-full flex items-center justify-center transition z-40"
+              className="fixed md:absolute top-3 right-3 w-10 h-10 bg-black/60 hover:bg-black/80 backdrop-blur-sm rounded-full flex items-center justify-center transition z-40"
             >
               <X className="w-5 h-5 text-white" />
             </button>

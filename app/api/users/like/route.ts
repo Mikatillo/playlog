@@ -1,35 +1,44 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { requireUser, serverError, badRequest, isUuid } from '@/lib/server-auth';
 
 export async function POST(request: NextRequest) {
-  try {
-    const { userId, targetId } = await request.json();
-    if (!userId || !targetId) return NextResponse.json({ error: 'Missing' }, { status: 400 });
-    if (userId === targetId) return NextResponse.json({ error: 'Нельзя лайкнуть себя' }, { status: 400 });
+  const auth = await requireUser(request);
+  if (auth instanceof NextResponse) return auth;
+  const { user, db } = auth;
 
-    const { data: existing } = await supabase
+  try {
+    const body = await request.json().catch(() => null);
+    const targetId = body?.targetId;
+    if (!isUuid(targetId)) return badRequest('Missing');
+    if (user.id === targetId) {
+      return NextResponse.json({ error: 'Нельзя лайкнуть себя' }, { status: 400 });
+    }
+
+    const { data: existing } = await db
       .from('profile_likes')
-      .select('*')
-      .eq('from_user_id', userId)
+      .select('from_user_id')
+      .eq('from_user_id', user.id)
       .eq('to_user_id', targetId)
       .maybeSingle();
 
     if (existing) {
-      await supabase
+      const { error: delErr } = await db
         .from('profile_likes')
         .delete()
-        .eq('from_user_id', userId)
+        .eq('from_user_id', user.id)
         .eq('to_user_id', targetId);
+      if (delErr) throw delErr;
       return NextResponse.json({ action: 'removed' });
     }
 
-    const { error } = await supabase
+    const { error } = await db
       .from('profile_likes')
-      .insert({ from_user_id: userId, to_user_id: targetId });
-    if (error) throw error;
+      .insert({ from_user_id: user.id, to_user_id: targetId });
+    if (error && error.code !== '23505') throw error;
     return NextResponse.json({ action: 'added' });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    return serverError('users/like POST', error);
   }
 }
 

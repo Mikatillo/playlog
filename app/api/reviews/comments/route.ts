@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { requireUser, serverError, badRequest, isUuid, isPosInt } from '@/lib/server-auth';
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -40,17 +41,22 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  try {
-    const { userId, reviewId, text } = await request.json();
+  const auth = await requireUser(request);
+  if (auth instanceof NextResponse) return auth;
+  const { user, db } = auth;
 
-    if (!userId || !reviewId || !text || !text.trim()) {
-      return NextResponse.json({ error: 'Invalid payload' }, { status: 400 });
+  try {
+    const body = await request.json().catch(() => null);
+    const { reviewId, text } = body || {};
+
+    if (!reviewId || typeof reviewId !== 'string' || typeof text !== 'string' || !text.trim()) {
+      return badRequest('Invalid payload');
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('review_comments')
       .insert({
-        user_id: userId,
+        user_id: user.id,
         review_id: reviewId,
         text: text.trim().slice(0, 500),
       })
@@ -59,24 +65,25 @@ export async function POST(request: NextRequest) {
 
     if (error) throw error;
     return NextResponse.json({ comment: data });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    return serverError('reviews/comments POST', error);
   }
 }
 
 export async function DELETE(request: NextRequest) {
-  const { searchParams } = new URL(request.url);
-  const id = searchParams.get('id');
-  const userId = searchParams.get('user_id');
+  const auth = await requireUser(request);
+  if (auth instanceof NextResponse) return auth;
+  const { user, db } = auth;
 
-  if (!id || !userId) return NextResponse.json({ error: 'Missing' }, { status: 400 });
+  const id = new URL(request.url).searchParams.get('id');
+  if (!id) return badRequest('Missing');
 
-  const { error } = await supabase
+  const { error } = await db
     .from('review_comments')
     .delete()
     .eq('id', id)
-    .eq('user_id', userId);
+    .eq('user_id', user.id);
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError('reviews/comments DELETE', error);
   return NextResponse.json({ ok: true });
 }

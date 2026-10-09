@@ -11,16 +11,20 @@ const GAME_FIELDS = [
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const idsParam = searchParams.get('ids') || '';
-  const ids = idsParam.split(',').map((s) => s.trim()).filter(Boolean);
+  const ids = idsParam
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => /^\d+$/.test(s))
+    .slice(0, 200);
 
   if (ids.length === 0) {
     return NextResponse.json({ results: [] });
   }
 
   try {
-    // Параллельно, но с ограничением — по 8 игр за раз
+    // Параллельно, но с ограничением — по 16 игр за раз
     const results: any[] = [];
-    const concurrency = 8;
+    const concurrency = 16;
 
     for (let i = 0; i < ids.length; i += concurrency) {
       const batch = ids.slice(i, i + concurrency);

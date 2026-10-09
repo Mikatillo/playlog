@@ -38,71 +38,107 @@ function SteamIcon({ className, style }: { className?: string; style?: React.CSS
   );
 }
 
+// Очередь запросов: не больше 3 одновременно, чтобы десятки карточек
+// не забивали соединения браузера и не тормозили остальные запросы страницы.
+const MAX_PARALLEL = 3;
+let running = 0;
+const queue: (() => void)[] = [];
+const inflight = new Map<string, Promise<SteamReviewData | null>>();
+
+function runLimited<T>(task: () => Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const start = () => {
+      running++;
+      task()
+        .then(resolve, reject)
+        .finally(() => {
+          running--;
+          queue.shift()?.();
+        });
+    };
+    if (running < MAX_PARALLEL) start();
+    else queue.push(start);
+  });
+}
+
+function loadRating(gameTitle: string): Promise<SteamReviewData | null> {
+  if (reviewCache.has(gameTitle)) return Promise.resolve(reviewCache.get(gameTitle) ?? null);
+  const existing = inflight.get(gameTitle);
+  if (existing) return existing;
+
+  const promise = runLimited(async () => {
+    try {
+      const res = await fetch(`/api/steam/rating?name=${encodeURIComponent(gameTitle)}`);
+      if (!res.ok) return null;
+      const revData = await res.json();
+      if (revData.percent !== null && revData.percent !== undefined && revData.total > 0) {
+        return {
+          percent: revData.percent,
+          total: revData.total,
+          description: revData.description,
+        } as SteamReviewData;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }).then((result) => {
+    reviewCache.set(gameTitle, result);
+    inflight.delete(gameTitle);
+    return result;
+  });
+
+  inflight.set(gameTitle, promise);
+  return promise;
+}
+
 export default function SteamRating({ gameTitle, variant = 'inline' }: SteamRatingProps) {
-  const [data, setData] = useState<SteamReviewData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<SteamReviewData | null>(
+    () => reviewCache.get(gameTitle) ?? null,
+  );
+  const [loading, setLoading] = useState(() => !reviewCache.has(gameTitle));
+  const [el, setEl] = useState<HTMLDivElement | null>(null);
+  const [visible, setVisible] = useState(false);
+
+  // Загружаем рейтинг только когда карточка появилась на экране
+  useEffect(() => {
+    if (!el) return;
+    if (typeof IntersectionObserver === 'undefined') {
+      setVisible(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          setVisible(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: '200px' },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [el]);
 
   useEffect(() => {
-    if (!gameTitle) return;
-
+    if (!gameTitle || !visible) return;
     let cancelled = false;
-
-    const load = async () => {
-      // Мгновенно из кеша
-      if (reviewCache.has(gameTitle)) {
-        const cached = reviewCache.get(gameTitle) ?? null;
-        if (!cancelled) {
-          setData(cached);
-          setLoading(false);
-        }
-        return;
-      }
-
-      try {
-        const res = await fetch(`/api/steam/rating?name=${encodeURIComponent(gameTitle)}`);
-        if (!res.ok) {
-          reviewCache.set(gameTitle, null);
-          if (!cancelled) {
-            setData(null);
-            setLoading(false);
-          }
-          return;
-        }
-        const revData = await res.json();
-
-        if (cancelled) return;
-
-        if (revData.percent !== null && revData.total > 0) {
-          const result: SteamReviewData = {
-            percent: revData.percent,
-            total: revData.total,
-            description: revData.description,
-          };
-          reviewCache.set(gameTitle, result);
-          setData(result);
-        } else {
-          reviewCache.set(gameTitle, null);
-          setData(null);
-        }
-      } catch {
-        reviewCache.set(gameTitle, null);
-        setData(null);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-
-    load();
+    loadRating(gameTitle).then((result) => {
+      if (cancelled) return;
+      setData(result);
+      setLoading(false);
+    });
     return () => {
       cancelled = true;
     };
-  }, [gameTitle]);
+  }, [gameTitle, visible]);
 
   // ===== ИКОНКА STEAM ПОКАЗЫВАЕТСЯ ВСЕГДА =====
 
   if (variant === 'badge') {
     return (
       <div
+        ref={setEl}
         className="px-2 py-1 rounded-lg flex items-center gap-1 shadow-lg backdrop-blur-sm"
         style={{ backgroundColor: STEAM_BADGE_BG }}
         title={data ? `${data.percent}% положительных отзывов в Steam` : 'Steam'}
@@ -120,6 +156,7 @@ export default function SteamRating({ gameTitle, variant = 'inline' }: SteamRati
   if (variant === 'compact') {
     return (
       <div
+        ref={setEl}
         className="flex items-center gap-1 text-[10px] font-medium"
         style={{ color: STEAM_BLUE }}
         title={data ? `${data.percent}% положительных отзывов в Steam` : 'Steam'}
@@ -136,6 +173,7 @@ export default function SteamRating({ gameTitle, variant = 'inline' }: SteamRati
 
   return (
     <div
+      ref={setEl}
       className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border transition"
       style={{
         backgroundColor: STEAM_BG,

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Gamepad2, Mail, Lock, User, ArrowRight, AlertCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
@@ -117,6 +118,16 @@ export default function AuthPage() {
                   minLength={6}
                 />
               </div>
+              {isLogin && (
+                <div className="mt-2 text-right">
+                  <Link
+                    href="/auth/forgot-password"
+                    className="text-sm text-indigo-400 hover:text-indigo-300 transition"
+                  >
+                    Забыли пароль?
+                  </Link>
+                </div>
+              )}
             </div>
 
             {error && (

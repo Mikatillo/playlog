@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { requireUser, serverError, badRequest, isUuid, isPosInt } from '@/lib/server-auth';
 
 const STEAM_API_KEY = process.env.STEAM_API_KEY;
-const RAWG_API_KEY = process.env.RAWG_API_KEY || 'demo';
+const RAWG_API_KEY = process.env.RAWG_API_KEY || '';
 const RAWG_BASE = 'https://api.rawg.io/api';
 
 async function resolveSteamId(input: string): Promise<string | null> {
@@ -96,11 +96,23 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  try {
-    const { userId, steamUrl, limit = 50 } = await request.json();
+  if (!RAWG_API_KEY) {
+    return NextResponse.json({ error: 'RAWG_API_KEY не настроен на сервере.' }, { status: 500 });
+  }
 
-    if (!userId || !steamUrl) {
-      return NextResponse.json({ error: 'Missing userId or steamUrl' }, { status: 400 });
+  const auth = await requireUser(request);
+  if (auth instanceof NextResponse) return auth;
+  const { user, db } = auth;
+  const userId = user.id;
+
+  try {
+    const body = await request.json().catch(() => null);
+    const steamUrl = body?.steamUrl;
+    // Не больше 50 игр за раз: каждый импорт делает много запросов к RAWG
+    const limit = Math.min(Math.max(Number(body?.limit) || 50, 1), 50);
+
+    if (typeof steamUrl !== 'string' || !steamUrl.trim() || steamUrl.length > 300) {
+      return NextResponse.json({ error: 'Missing steamUrl' }, { status: 400 });
     }
 
     const steamId = await resolveSteamId(steamUrl);
@@ -111,7 +123,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    await supabase.from('profiles').update({ steam_id: steamId }).eq('id', userId);
+    await db.from('profiles').update({ steam_id: steamId }).eq('id', userId);
 
     const ownedGames = await fetchOwnedGames(steamId);
 
@@ -160,10 +172,10 @@ export async function POST(request: NextRequest) {
       rating: 0,
       hours: g.hours,
       review: '',
-        status: 'none' as const, // Импортированные — как "Играю"
+      status: 'none' as const,
     }));
 
-    const { data: existing } = await supabase
+    const { data: existing } = await db
       .from('user_games')
       .select('game_id')
       .eq('user_id', userId);
@@ -172,10 +184,9 @@ export async function POST(request: NextRequest) {
     const newRows = rows.filter((r) => !existingIds.has(r.game_id));
 
     if (newRows.length > 0) {
-      const { error: insertError } = await supabase.from('user_games').insert(newRows);
+      const { error: insertError } = await db.from('user_games').insert(newRows);
       if (insertError) {
-        console.error('Insert error:', insertError);
-        return NextResponse.json({ error: insertError.message }, { status: 500 });
+        return serverError('steam/import insert', insertError);
       }
     }
 
@@ -187,8 +198,7 @@ export async function POST(request: NextRequest) {
       totalOwned: ownedGames.length,
       steamId,
     });
-  } catch (error: any) {
-    console.error('[steam/import] error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    return serverError('steam/import', error);
   }
 }

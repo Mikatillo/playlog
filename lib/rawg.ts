@@ -17,6 +17,19 @@ export interface RawgGame {
   playtime?: number;
 }
 
+/**
+ * RAWG отдаёт обложки в полном размере (1–3 МБ). Через путь /media/resize/<ширина>/-/
+ * можно получить уменьшенную копию — это сильно ускоряет загрузку списков игр.
+ */
+export function rawgResize(url: string | null | undefined, width = 640): string {
+  if (!url) return '';
+  const marker = 'https://media.rawg.io/media/';
+  if (url.startsWith(marker) && !url.startsWith(marker + 'resize/')) {
+    return url.replace(marker, `${marker}resize/${width}/-/`);
+  }
+  return url;
+}
+
 export function mapRawgGame(raw: RawgGame): Game {
   const cleanDescription =
     raw.description?.replace(/<[^>]*>/g, '').substring(0, 300) ||
@@ -25,7 +38,7 @@ export function mapRawgGame(raw: RawgGame): Game {
   return {
     id: raw.id,
     title: raw.name,
-    cover: raw.background_image,
+    cover: rawgResize(raw.background_image, 640),
     year: Number(raw.released?.split('-')[0]) || 0,
     released: raw.released || undefined,
     rating: Math.round(raw.rating * 10) / 10,

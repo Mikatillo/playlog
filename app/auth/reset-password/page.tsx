@@ -18,25 +18,48 @@ export default function ResetPasswordPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        setValid(true);
-        setChecking(false);
-        return;
-      }
-      const hash = window.location.hash;
-      if (hash.includes('access_token') || hash.includes('type=recovery')) {
-        setTimeout(async () => {
-          const { data: { session: s2 } } = await supabase.auth.getSession();
-          if (s2) setValid(true);
-          setChecking(false);
-        }, 500);
-        return;
-      }
+    let done = false;
+
+    const finish = (ok: boolean) => {
+      if (done) return;
+      done = true;
+      setValid(ok);
       setChecking(false);
     };
-    checkSession();
+
+    // Supabase сам разбирает токен из hash (#access_token=...&type=recovery)
+    // или из query (?code=...), и шлёт событие PASSWORD_RECOVERY / SIGNED_IN
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session && (event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN')) {
+        finish(true);
+      }
+    });
+
+    const init = async () => {
+      // 1. Уже есть сессия? Значит ссылка валидна.
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) return finish(true);
+
+      // 2. В URL есть признаки recovery-ссылки?
+      const hash = window.location.hash || '';
+      const search = window.location.search || '';
+      const hasToken =
+        hash.includes('access_token') ||
+        hash.includes('type=recovery') ||
+        search.includes('code=');
+
+      if (!hasToken) return finish(false);
+
+      // 3. Даём библиотеке время обработать ссылку (обменять code/hash на сессию)
+      setTimeout(async () => {
+        const { data: { session: s2 } } = await supabase.auth.getSession();
+        finish(!!s2);
+      }, 2500);
+    };
+
+    init();
+
+    return () => sub.subscription.unsubscribe();
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -48,11 +71,13 @@ export default function ResetPasswordPage() {
 
     const { error: supaError } = await supabase.auth.updateUser({ password });
     setLoading(false);
+
     if (supaError) {
       setError(supaError.message);
       showToast('Не удалось обновить пароль', 'error');
       return;
     }
+
     showToast('Пароль изменён', 'success');
     router.push('/');
   };

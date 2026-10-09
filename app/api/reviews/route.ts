@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { requireUser, serverError, badRequest, isUuid, isPosInt } from '@/lib/server-auth';
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -98,60 +99,60 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const auth = await requireUser(request);
+  if (auth instanceof NextResponse) return auth;
+  const { user, db } = auth;
+
   try {
-    const body = await request.json();
-    const { userId, gameId, gameTitle, gameCover, rating, text } = body;
+    const body = await request.json().catch(() => null);
+    const { gameId, gameTitle, gameCover, rating, text } = body || {};
 
-    if (!userId || !gameId || !text || text.length < 3) {
-      return NextResponse.json({ error: 'Invalid payload' }, { status: 400 });
+    if (!isPosInt(gameId) || typeof text !== 'string') return badRequest('Invalid payload');
+    const cleanText = text.trim();
+    if (cleanText.length < 3 || cleanText.length > 5000) {
+      return badRequest('Рецензия должна быть от 3 до 5000 символов');
     }
+    const cleanRating =
+      typeof rating === 'number' && rating >= 1 && rating <= 10 ? rating : null;
 
-    const { error } = await supabase
-      .from('public_reviews')
-      .upsert(
-        {
-          user_id: userId,
-          game_id: gameId,
-          game_title: gameTitle,
-          game_cover: gameCover,
-          rating: rating || null,
-          text,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'user_id,game_id' },
-      );
+    const { error } = await db.from('public_reviews').upsert(
+      {
+        user_id: user.id,
+        game_id: gameId,
+        game_title: typeof gameTitle === 'string' ? gameTitle.slice(0, 300) : null,
+        game_cover: typeof gameCover === 'string' ? gameCover.slice(0, 1000) : null,
+        rating: cleanRating,
+        text: cleanText,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'user_id,game_id' },
+    );
 
-    if (error) {
-      console.error('[reviews POST] supabase error:', error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
+    if (error) return serverError('reviews POST', error);
     return NextResponse.json({ ok: true });
-  } catch (error: any) {
-    console.error('[reviews POST] error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    return serverError('reviews POST', error);
   }
 }
 
 export async function DELETE(request: NextRequest) {
-  const { searchParams } = new URL(request.url);
-  const reviewId = searchParams.get('id');
-  const userId = searchParams.get('user_id');
+  const auth = await requireUser(request);
+  if (auth instanceof NextResponse) return auth;
+  const { user, db } = auth;
 
-  if (!reviewId || !userId) {
-    return NextResponse.json({ error: 'Missing params' }, { status: 400 });
-  }
+  const reviewId = new URL(request.url).searchParams.get('id');
+  if (!reviewId) return badRequest('Missing params');
 
   try {
-    const { error } = await supabase
+    const { error } = await db
       .from('public_reviews')
       .delete()
       .eq('id', reviewId)
-      .eq('user_id', userId);
+      .eq('user_id', user.id);
 
     if (error) throw error;
     return NextResponse.json({ ok: true });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    return serverError('reviews DELETE', error);
   }
 }

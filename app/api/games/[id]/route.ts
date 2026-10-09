@@ -30,7 +30,25 @@ export async function GET(
 
   try {
     const url = `${BASE_URL}/games/${id}?key=${API_KEY}&language=rus&fields=${DETAIL_FIELDS}`;
-    const response = await fetch(url, { next: { revalidate: 3600 } });
+
+    // Все три запроса к RAWG идут параллельно (раньше скриншоты и видео ждали основной запрос)
+    const detailPromise = fetch(url, { next: { revalidate: 3600 } });
+    const ssPromise = full
+      ? fetch(`${BASE_URL}/games/${id}/screenshots?key=${API_KEY}`, {
+          next: { revalidate: 86400 },
+        }).catch(() => null)
+      : Promise.resolve(null);
+    const mvPromise = full
+      ? fetch(`${BASE_URL}/games/${id}/movies?key=${API_KEY}`, {
+          next: { revalidate: 86400 },
+        }).catch(() => null)
+      : Promise.resolve(null);
+
+    const [response, ssResponse, mvResponse] = await Promise.all([
+      detailPromise,
+      ssPromise,
+      mvPromise,
+    ]);
 
     if (!response.ok) {
       return NextResponse.json({ error: 'Game not found' }, { status: 404 });
@@ -39,17 +57,8 @@ export async function GET(
     const data = await response.json();
 
     if (!full) {
-      return NextResponse.json(data);
+      return NextResponse.json(data, { headers: { 'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400' } });
     }
-
-    const [ssResponse, mvResponse] = await Promise.all([
-      fetch(`${BASE_URL}/games/${id}/screenshots?key=${API_KEY}`, {
-        next: { revalidate: 86400 },
-      }).catch(() => null),
-      fetch(`${BASE_URL}/games/${id}/movies?key=${API_KEY}`, {
-        next: { revalidate: 86400 },
-      }).catch(() => null),
-    ]);
 
     let screenshots: any[] = [];
     let movies: any[] = [];
@@ -67,11 +76,14 @@ export async function GET(
       } catch {}
     }
 
-    return NextResponse.json({
-      ...data,
-      screenshots,
-      movies,
-    });
+    return NextResponse.json(
+      {
+        ...data,
+        screenshots,
+        movies,
+      },
+      { headers: { 'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400' } },
+    );
   } catch (error) {
     console.error('Error:', error);
     return NextResponse.json({ error: 'Failed to fetch' }, { status: 500 });

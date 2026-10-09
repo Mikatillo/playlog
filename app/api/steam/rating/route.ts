@@ -10,6 +10,7 @@ interface CacheEntry {
 
 // Кеш на сервере (в памяти процесса)
 const cache = new Map<string, CacheEntry>();
+const HTTP_CACHE = { headers: { 'Cache-Control': 'public, s-maxage=86400, stale-while-revalidate=604800' } };
 const CACHE_TTL = 24 * 60 * 60 * 1000; // 24 часа
 
 function normalize(s: string): string {
@@ -25,7 +26,7 @@ async function searchSteam(name: string): Promise<{ appid: number; name: string 
   const url = `https://steamcommunity.com/actions/SearchApps/${encodeURIComponent(name)}`;
 
   const res = await fetch(url, {
-    cache: 'no-store',
+    next: { revalidate: 86400 },
     headers: {
       'User-Agent': 'Mozilla/5.0 (compatible; playlog/1.0)',
       'Accept': 'application/json',
@@ -61,7 +62,7 @@ export async function GET(request: NextRequest) {
       percent: cached.percent,
       total: cached.total,
       description: cached.description,
-    });
+    }, HTTP_CACHE);
   }
 
   try {
@@ -76,7 +77,7 @@ export async function GET(request: NextRequest) {
         cachedAt: Date.now(),
       };
       cache.set(name, empty);
-      return NextResponse.json({ appid: null, percent: null });
+      return NextResponse.json({ appid: null, percent: null }, HTTP_CACHE);
     }
 
     const target = normalize(name);
@@ -89,7 +90,7 @@ export async function GET(request: NextRequest) {
     const revRes = await fetch(
       `https://store.steampowered.com/appreviews/${best.appid}?json=1&language=all&purchase_type=all&num_per_page=0`,
       {
-        cache: 'no-store',
+        next: { revalidate: 86400 },
         headers: {
           'User-Agent': 'Mozilla/5.0 (compatible; playlog/1.0)',
         },
@@ -112,7 +113,7 @@ export async function GET(request: NextRequest) {
         cachedAt: Date.now(),
       };
       cache.set(name, entry);
-      return NextResponse.json({ appid: best.appid, percent: null, total: 0 });
+      return NextResponse.json({ appid: best.appid, percent: null, total: 0 }, HTTP_CACHE);
     }
 
     const positive = summary.total_positive || 0;
@@ -134,7 +135,7 @@ export async function GET(request: NextRequest) {
       percent,
       total,
       description,
-    });
+    }, HTTP_CACHE);
   } catch (error: any) {
     console.error('[steam/rating] ошибка:', error.message);
     // Ошибку не кешируем — попробуем в следующий раз

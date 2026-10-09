@@ -1,5 +1,7 @@
 'use client';
 
+import { fetchGamesByIds } from '@/lib/games-client';
+import { authFetch } from '@/lib/api-client';
 import { useEffect, useState, use, useMemo, useCallback } from 'react';
 import {
   Loader2, Star, Check, Gamepad, XCircle, MessageSquare, ArrowLeft,
@@ -178,12 +180,8 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
     }
     setGamesLoading(true);
     try {
-      const res = await fetch(`/api/games/batch?ids=${ids.join(',')}`);
-      if (res.ok) {
-        const data = await res.json();
-        const mapped = (data.results || []).map((g: RawgGame) => mapRawgGame(g));
-        setGames(mapped);
-      }
+      const mapped = await fetchGamesByIds(ids);
+      setGames(mapped);
     } catch (err) {
       console.error('Games batch error:', err);
     } finally {
@@ -362,7 +360,7 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
     setFollowersCount(newFollowing ? followersCount + 1 : Math.max(0, followersCount - 1));
 
     try {
-      const res = await fetch('/api/follows', {
+      const res = await authFetch('/api/follows', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, targetId: id }),
@@ -394,13 +392,13 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
 
     try {
       if (order === null) {
-        const res = await fetch(
-          `/api/users/favorites?userId=${userId}&gameId=${gameId}`,
+        const res = await authFetch(
+          `/api/users/favorites?gameId=${gameId}`,
           { method: 'DELETE' },
         );
         if (!res.ok) throw new Error();
       } else {
-        const res = await fetch('/api/users/favorites', {
+        const res = await authFetch('/api/users/favorites', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ userId, gameId, order }),
@@ -1110,7 +1108,7 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
           >
             <button
               onClick={closeGameModal}
-              className="absolute top-3 right-3 w-10 h-10 bg-black/60 hover:bg-black/80 backdrop-blur-sm rounded-full flex items-center justify-center transition z-40"
+              className="fixed md:absolute top-3 right-3 w-10 h-10 bg-black/60 hover:bg-black/80 backdrop-blur-sm rounded-full flex items-center justify-center transition z-40"
             >
               <X className="w-5 h-5 text-white" />
             </button>

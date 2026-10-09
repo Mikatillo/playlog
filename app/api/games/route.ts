@@ -27,8 +27,6 @@ export async function GET(request: NextRequest) {
     let url = `${BASE_URL}/games?key=${API_KEY}&page=${page}&page_size=${pageSize}&ordering=${ordering}&language=rus&fields=${GAME_FIELDS}&dates=${dates}`;
     if (genres) url += `&genres=${genres}`;
 
-    console.log(`[games] fetch: ${url}`);
-
     let response = await fetch(url, { next: { revalidate: 3600 } });
     let data = await response.json();
 
@@ -65,14 +63,15 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    console.log(`[games] returned ${results.length} games (from ${fromYear})`);
-
-    return NextResponse.json({
-      count: results.length,
-      next: null,
-      previous: null,
-      results,
-    });
+    return NextResponse.json(
+      {
+        count: results.length,
+        next: null,
+        previous: null,
+        results,
+      },
+      { headers: { 'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400' } },
+    );
   } catch (error) {
     console.error('Games API error:', error);
     return NextResponse.json({ error: 'Failed to fetch' }, { status: 500 });
