@@ -15,6 +15,18 @@ const nextConfig: NextConfig = {
         protocol: "https",
         hostname: "cdn.simpleicons.org",
       },
+      {
+        protocol: "https",
+        hostname: "via.placeholder.com",
+      },
+      {
+        protocol: "https",
+        hostname: "cdn.cloudflare.steamstatic.com",
+      },
+      {
+        protocol: "https",
+        hostname: "shared.cloudflare.steamstatic.com",
+      },
     ],
   },
 };

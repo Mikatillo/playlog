@@ -87,13 +87,29 @@ export default function Home() {
   }, [selectedGame, selectedScreenshot]);
 
   const loadGames = useCallback(
-    async (pageNum: number, append: boolean = false, genre?: string, sort?: string) => {
+    async (
+      pageNum: number,
+      append: boolean = false,
+      genre?: string,
+      sort?: string,
+      force = false,
+    ) => {
       setLoading(true);
       try {
         const g = genre !== undefined ? genre : selectedGenre;
         const s = sort !== undefined ? sort : sortBy;
-        let url = `/api/games?page=${pageNum}&pageSize=20&ordering=${s}`;
-        if (g) url += `&genres=${g}`;
+
+        // На чистой главной (без жанра, дефолтная сортировка, первая страница) — Steam
+        const useSteam = !g && s === '-added' && pageNum === 1 && !append;
+
+        let url: string;
+        if (useSteam) {
+          url = `/api/steam/steam-popular?limit=20${force ? '&force=1' : ''}`;
+        } else {
+          url = `/api/games?page=${pageNum}&pageSize=20&ordering=${s}`;
+          if (g) url += `&genres=${g}`;
+        }
+
         const response = await fetch(url);
         const data = await response.json();
         if (data.results) {

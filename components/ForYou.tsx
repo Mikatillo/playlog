@@ -12,13 +12,34 @@ interface ForYouProps {
   onGameClick: (game: Game) => void;
 }
 
+const SEED_KEY = 'playlog:foryou:seed';
+const SEED_TS_KEY = 'playlog:foryou:ts';
+const TTL = 24 * 60 * 60 * 1000; // 24 часа
+
+function getOrCreateSeed(force = false): string {
+  if (typeof window === 'undefined') return String(Date.now());
+
+  const now = Date.now();
+  const savedSeed = localStorage.getItem(SEED_KEY);
+  const savedTs = Number(localStorage.getItem(SEED_TS_KEY) || 0);
+
+  const isFresh = savedSeed && savedTs && now - savedTs < TTL;
+
+  if (!force && isFresh) return savedSeed!;
+
+  const newSeed = String(now) + Math.floor(Math.random() * 100000);
+  localStorage.setItem(SEED_KEY, newSeed);
+  localStorage.setItem(SEED_TS_KEY, String(now));
+  return newSeed;
+}
+
 export default function ForYou({ onGameClick }: ForYouProps) {
   const { userId, userGames } = useAuth();
   const [recommendations, setRecommendations] = useState<Game[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [lastSeed, setLastSeed] = useState<number>(0);
+  const [seed, setSeed] = useState<string>('');
   const loadedRef = useRef(false);
 
   const load = useCallback(
@@ -45,11 +66,11 @@ export default function ForYou({ onGameClick }: ForYouProps) {
         const topIds = Array.from(new Set([...topByRating, ...topByHours])).slice(0, 8);
         const allIds = entries.map(([id]) => id);
 
-        // Seed всегда разный — но пул на сервере кешируется
-        const seed = String(Date.now());
-        setLastSeed(Number(seed));
+        // Сид: свежий из кеша или новый при refresh
+        const currentSeed = getOrCreateSeed(isRefresh);
+        setSeed(currentSeed);
 
-        const url = `/api/games/for-you?all=${allIds.join(',')}&top=${topIds.join(',')}&seed=${seed}`;
+        const url = `/api/games/for-you?all=${allIds.join(',')}&top=${topIds.join(',')}&seed=${currentSeed}`;
 
         const res = await fetch(url);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -73,7 +94,7 @@ export default function ForYou({ onGameClick }: ForYouProps) {
     [userGames],
   );
 
-  // Загружаем ОДИН раз при монтировании — без ожидания userGames
+  // Загружаем один раз при монтировании
   useEffect(() => {
     if (loadedRef.current) return;
     loadedRef.current = true;
@@ -145,7 +166,7 @@ export default function ForYou({ onGameClick }: ForYouProps) {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {recommendations.map((game, idx) => (
           <GameCard
-            key={`${game.id}-${lastSeed}`}
+            key={`${game.id}-${seed}`}
             game={game}
             onClick={() => onGameClick(game)}
             userGameData={userGames.get(game.id)}

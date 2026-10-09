@@ -8,9 +8,22 @@ const FIELDS = [
   'metacritic', 'genres', 'platforms', 'playtime', 'ratings_count',
 ].join(',');
 
-// In-memory кеш на сервере (живёт между запросами в рамках процесса)
+// Разные ordering — меняем при каждом обновлении
+const ORDERINGS = ['-rating', '-metacritic', '-added', '-released'];
+
+// Разные диапазоны годов
+const YEAR_RANGES = [
+  '',
+  '2015-2020',
+  '2010-2015',
+  '2005-2010',
+  '1998-2005',
+  '2020-2026',
+];
+
+// In-memory кеш на сервере
 const memCache = new Map<string, { data: any; expiresAt: number }>();
-const CACHE_TTL = 30 * 60 * 1000; // 30 минут
+const CACHE_TTL = 5 * 60 * 1000; // 5 минут
 
 const TOO_MAINSTREAM = new Set<number>([
   3498, 4200, 3328, 13536, 4291, 12020, 5286, 5679, 3439, 278, 1942,
@@ -42,9 +55,15 @@ export async function GET(request: NextRequest) {
   try {
     const excludeSet = new Set(allIds.map(Number));
 
-    // Ключ кеша — только от topIds (жанры/теги не зависят от seed)
+    // Seed превращаем в детерминированные числа — выбор ordering, страниц, годов
+    const seedNum = hashSeed(seedParam);
+    const ordering = ORDERINGS[seedNum % ORDERINGS.length];
+    const pageOffset = (seedNum % 3) + 1; // 1..3 — разные страницы RAWG
+    const yearRange = YEAR_RANGES[(seedNum >> 3) % YEAR_RANGES.length];
+
+    // Ключ кеша включает выбор из seed — разные seed = разные пулы
     const topKey = topIds.slice(0, 8).sort().join('-');
-    const cacheKey = `pool:${topKey}`;
+    const cacheKey = `pool:${topKey}:${ordering}:${pageOffset}:${yearRange}`;
     const cached = memCache.get(cacheKey);
 
     let pool: any[] = [];
@@ -52,12 +71,10 @@ export async function GET(request: NextRequest) {
     if (cached && Date.now() < cached.expiresAt) {
       pool = cached.data;
     } else {
-      // 1. Жанры — ОДИН параллельный запрос для всех топ-игр
+      // 1. Жанры — параллельный запрос для топ-игр
       let topGenres: string[] = [];
 
       if (topIds.length > 0) {
-        const sample = topIds.slice(0, 8).join(',');
-        // RAWG позволяет через запятую НЕ передавать, поэтому берём по одной, но параллельно
         const genreResults = await Promise.all(
           topIds.slice(0, 6).map(async (id) => {
             try {
@@ -87,15 +104,15 @@ export async function GET(request: NextRequest) {
           .map(([id]) => id);
       }
 
-      // 2. Пул игр — 2 источника параллельно (вместо 6)
       const candidateMap = new Map<number, any>();
       const fetches: Promise<void>[] = [];
 
-      // Источник A: по жанрам, топ по рейтингу
+      // Источник A: по жанрам, ordering/страница/годы — из seed
       if (topGenres.length > 0) {
         fetches.push(
           (async () => {
-            const url = `${BASE_URL}/games?key=${API_KEY}&genres=${topGenres.join(',')}&ordering=-rating&page_size=40&language=rus&fields=${FIELDS}`;
+            let url = `${BASE_URL}/games?key=${API_KEY}&genres=${topGenres.join(',')}&ordering=${ordering}&page=${pageOffset}&page_size=40&language=rus&fields=${FIELDS}`;
+            if (yearRange) url += `&dates=${yearRange}`;
             const res = await fetch(url, { next: { revalidate: 1800 } });
             if (!res.ok) return;
             const data = await res.json();
@@ -108,10 +125,13 @@ export async function GET(request: NextRequest) {
         );
       }
 
-      // Источник B: топ по метакритике глобально (fallback + разнообразие)
+      // Источник B: глобальный, другой ordering и другая страница
       fetches.push(
         (async () => {
-          const url = `${BASE_URL}/games?key=${API_KEY}&ordering=-metacritic&page_size=40&language=rus&fields=${FIELDS}`;
+          const altOrdering = ORDERINGS[(seedNum + 1) % ORDERINGS.length];
+          const altPage = (pageOffset % 3) + 1;
+          let url = `${BASE_URL}/games?key=${API_KEY}&ordering=${altOrdering}&page=${altPage}&page_size=40&language=rus&fields=${FIELDS}`;
+          if (yearRange) url += `&dates=${yearRange}`;
           const res = await fetch(url, { next: { revalidate: 1800 } });
           if (!res.ok) return;
           const data = await res.json();
@@ -123,14 +143,38 @@ export async function GET(request: NextRequest) {
         })(),
       );
 
+      // Источник C: случайная страница популярных игр — для разнообразия
+      fetches.push(
+        (async () => {
+          const randomPage = (seedNum % 8) + 1; // 1..8
+          const url = `${BASE_URL}/games?key=${API_KEY}&ordering=-added&page=${randomPage}&page_size=40&language=rus&fields=${FIELDS}`;
+          const res = await fetch(url, { next: { revalidate: 1800 } });
+          if (!res.ok) return;
+          const data = await res.json();
+          (data.results || []).forEach((g: any) => {
+            if (!excludeSet.has(g.id) && !TOO_MAINSTREAM.has(g.id)) {
+              candidateMap.set(g.id, g);
+            }
+          });
+        })(),
+      );
+
       await Promise.all(fetches);
 
       const now = new Date().getFullYear();
-      pool = Array.from(candidateMap.values()).sort((a, b) => {
-        const scoreA = (a.metacritic || 0) * 0.5 + (a.rating || 0) * 10 + Math.max(0, 30 - (now - (Number(a.released?.split('-')[0]) || now)) * 2);
-        const scoreB = (b.metacritic || 0) * 0.5 + (b.rating || 0) * 10 + Math.max(0, 30 - (now - (Number(b.released?.split('-')[0]) || now)) * 2);
-        return scoreB - scoreA;
-      }).slice(0, 50);
+      pool = Array.from(candidateMap.values())
+        .sort((a, b) => {
+          const scoreA =
+            (a.metacritic || 0) * 0.5 +
+            (a.rating || 0) * 10 +
+            Math.max(0, 30 - (now - (Number(a.released?.split('-')[0]) || now)) * 2);
+          const scoreB =
+            (b.metacritic || 0) * 0.5 +
+            (b.rating || 0) * 10 +
+            Math.max(0, 30 - (now - (Number(b.released?.split('-')[0]) || now)) * 2);
+          return scoreB - scoreA;
+        })
+        .slice(0, 150); // пул больше — из него можно выбрать 8 разных
 
       memCache.set(cacheKey, { data: pool, expiresAt: Date.now() + CACHE_TTL });
     }

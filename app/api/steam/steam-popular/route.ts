@@ -3,47 +3,60 @@ import { mapRawgGame, RawgGame } from '@/lib/rawg';
 
 const RAWG_API_KEY = process.env.RAWG_API_KEY || 'demo';
 const RAWG_BASE = 'https://api.rawg.io/api';
-const STEAMSPY_TOP_URL = 'https://steamspy.com/api.php?request=top100in2weeks';
 
-// Небольшая задержка между запросами к RAWG, чтобы не превысить лимиты
+const STEAM_FEATURED_URL =
+  'https://store.steampowered.com/api/featuredcategories?cc=ru&l=russian';
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const limit = Number(searchParams.get('limit') || '20');
+  const limit = Math.min(Number(searchParams.get('limit') || '20'), 30);
+  const force = searchParams.get('force') === '1';
 
   try {
-    // 1. Забираем топ Steam из SteamSpy
-    const topRes = await fetch(STEAMSPY_TOP_URL, {
-      next: { revalidate: 3600 }, // кеш 1 час
+    // 1. Забираем топ продаж Steam
+    const steamRes = await fetch(STEAM_FEATURED_URL, {
+      next: force ? { revalidate: 0 } : { revalidate: 86400 },
     });
 
-    if (!topRes.ok) {
-      return NextResponse.json({ error: 'SteamSpy failed' }, { status: 502 });
+    if (!steamRes.ok) {
+      return NextResponse.json({ error: 'Steam API failed' }, { status: 502 });
     }
 
-    const topData = await topRes.json();
-    // SteamSpy возвращает объект вида { "730": { name: "Counter-Strike 2", ... }, ... }
-    const topGames = Object.values(topData)
-      .slice(0, limit)
-      .map((g: any) => g.name)
-      .filter(Boolean);
+    const data = await steamRes.json();
+    const topSellers = data?.top_sellers?.items || [];
 
-    if (topGames.length === 0) {
+    if (!topSellers.length) {
       return NextResponse.json({ results: [] });
     }
 
-    // 2. Для каждой игры ищем её в RAWG (параллельно, но с ограничением)
+    const topGames = topSellers
+      .slice(0, limit)
+      .map((g: any) => ({
+        appid: g.id,
+        name: g.name,
+      }))
+      .filter((g: any) => g.name);
+
+    // 2. Для каждой игры ищем её в RAWG
     const games: RawgGame[] = [];
-    const concurrency = 5;
+    const concurrency = 4;
 
     for (let i = 0; i < topGames.length; i += concurrency) {
       const batch = topGames.slice(i, i + concurrency);
       const results = await Promise.all(
-        batch.map(async (title) => {
+        batch.map(async ({ name }: { name: string }) => {
           try {
-            const searchUrl = `${RAWG_BASE}/games?key=${RAWG_API_KEY}&search=${encodeURIComponent(title)}&page_size=1&stores=1`;
-            const res = await fetch(searchUrl, { next: { revalidate: 86400 } });
+            const cleanName = name
+              .replace(/™|®/g, '')
+              .replace(/\s+/g, ' ')
+              .trim();
+
+            const searchUrl = `${RAWG_BASE}/games?key=${RAWG_API_KEY}&search=${encodeURIComponent(cleanName)}&page_size=1`;
+            const res = await fetch(searchUrl, {
+              next: { revalidate: 86400 },
+            });
             if (!res.ok) return null;
             const data = await res.json();
             return data.results?.[0] || null;
@@ -53,18 +66,45 @@ export async function GET(request: NextRequest) {
         }),
       );
       games.push(...results.filter(Boolean));
-      await sleep(200); // пауза между батчами
+      await sleep(250);
     }
 
-    // 3. Преобразуем в формат, который понимает фронтенд
-    const mappedGames = games.map((g: any) => mapRawgGame(g));
+    // 3. Мапим и сохраняем порядок Steam
+     const mappedGames = games.map((g: any) => mapRawgGame(g));
 
-    // 4. Сортируем — сохраняем порядок Steam (SteamSpy отдаёт уже отсортированными)
+    // Дедупликация: одна игра RAWG = один результат
+    const seen = new Set<number>();
     const orderedGames = topGames
-      .map((title) => mappedGames.find((g) => g.title.toLowerCase().includes(title.toLowerCase())))
-      .filter((g): g is ReturnType<typeof mapRawgGame> => !!g);
+      .map(({ name }: { name: string }) => {
+        const clean = name
+          .replace(/™|®/g, '')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .toLowerCase();
+        return mappedGames.find((m) => {
+          const title = m.title.toLowerCase();
+          return title.includes(clean) || clean.includes(title);
+        });
+      })
+      .filter((g): g is ReturnType<typeof mapRawgGame> => !!g)
+      .filter((g) => {
+        if (seen.has(g.id)) return false;
+        seen.add(g.id);
+        return true;
+      });
 
-    return NextResponse.json({ results: orderedGames });
+    return NextResponse.json(
+      {
+        results: orderedGames,
+        source: 'steam-top-sellers',
+        updatedAt: new Date().toISOString(),
+      },
+      {
+        headers: {
+          'Cache-Control': 'public, s-maxage=86400, stale-while-revalidate=3600',
+        },
+      },
+    );
   } catch (error) {
     console.error('Steam popular error:', error);
     return NextResponse.json({ error: 'Failed to fetch' }, { status: 500 });
