@@ -9,13 +9,17 @@ const STEAM_FEATURED_URL =
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+interface SteamTopGame {
+  appid: number;
+  name: string;
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const limit = Math.min(Number(searchParams.get('limit') || '20'), 30);
   const force = searchParams.get('force') === '1';
 
   try {
-    // 1. Забираем топ продаж Steam
     const steamRes = await fetch(STEAM_FEATURED_URL, {
       next: force ? { revalidate: 0 } : { revalidate: 86400 },
     });
@@ -31,22 +35,21 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ results: [] });
     }
 
-    const topGames = topSellers
+    const topGames: SteamTopGame[] = topSellers
       .slice(0, limit)
-      .map((g: any) => ({
+      .map((g: any): SteamTopGame => ({
         appid: g.id,
         name: g.name,
       }))
-      .filter((g: any) => g.name);
+      .filter((g: SteamTopGame) => g.name);
 
-    // 2. Для каждой игры ищем её в RAWG
     const games: RawgGame[] = [];
     const concurrency = 4;
 
     for (let i = 0; i < topGames.length; i += concurrency) {
       const batch = topGames.slice(i, i + concurrency);
       const results = await Promise.all(
-        batch.map(async ({ name }: { name: string }) => {
+        batch.map(async ({ name }: SteamTopGame) => {
           try {
             const cleanName = name
               .replace(/™|®/g, '')
@@ -65,17 +68,15 @@ export async function GET(request: NextRequest) {
           }
         }),
       );
-      games.push(...results.filter(Boolean));
+      games.push(...results.filter(Boolean) as RawgGame[]);
       await sleep(250);
     }
 
-    // 3. Мапим и сохраняем порядок Steam
-     const mappedGames = games.map((g: any) => mapRawgGame(g));
+    const mappedGames = games.map((g: RawgGame) => mapRawgGame(g));
 
-    // Дедупликация: одна игра RAWG = один результат
     const seen = new Set<number>();
     const orderedGames = topGames
-      .map(({ name }: { name: string }) => {
+      .map(({ name }: SteamTopGame) => {
         const clean = name
           .replace(/™|®/g, '')
           .replace(/\s+/g, ' ')
@@ -86,8 +87,8 @@ export async function GET(request: NextRequest) {
           return title.includes(clean) || clean.includes(title);
         });
       })
-      .filter((g): g is ReturnType<typeof mapRawgGame> => !!g)
-      .filter((g) => {
+      .filter((g): g is ReturnType<typeof mapRawgGame> => {
+        if (!g) return false;
         if (seen.has(g.id)) return false;
         seen.add(g.id);
         return true;
