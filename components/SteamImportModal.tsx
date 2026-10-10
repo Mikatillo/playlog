@@ -6,6 +6,7 @@ import {
   X, Loader2, Gamepad2, CheckCircle, AlertCircle, Info,
 } from 'lucide-react';
 import { useToast } from '@/contexts/ToastContext';
+import SteamIcon from '@/components/SteamIcon';
 
 interface SteamImportModalProps {
   isOpen: boolean;
@@ -27,38 +28,83 @@ export default function SteamImportModal({
     totalOwned: number;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [progress, setProgress] = useState({ done: 0, total: 0 });
 
   if (!isOpen) return null;
 
   const handleImport = async () => {
-    if (!steamUrl.trim()) return;
+    if (!steamUrl.trim() || loading) return;
     setLoading(true);
     setError(null);
     setResult(null);
+    setProgress({ done: 0, total: 0 });
+
+    const totals = { imported: 0, skipped: 0, notFound: 0, totalOwned: 0 };
+    let offset = 0;
+    let total = 0;
 
     try {
-      const res = await authFetch('/api/steam/import', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, steamUrl: steamUrl.trim() }),
-      });
+      // Импорт идёт порциями — так он не обрывается на мобильной сети
+      for (let guard = 0; guard < 30; guard++) {
+        let data: any = null;
+        let lastError = 'Не удалось выполнить импорт';
 
-      const data = await res.json();
+        // До 3 попыток на каждую порцию
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            const res = await authFetch('/api/steam/import', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ steamUrl: steamUrl.trim(), offset }),
+            });
+            const text = await res.text();
+            let parsed: any = null;
+            try {
+              parsed = JSON.parse(text);
+            } catch {}
 
-      if (!res.ok) {
-        setError(data.error || 'Ошибка импорта');
-        setLoading(false);
-        return;
+            if (res.ok && parsed) {
+              data = parsed;
+              break;
+            }
+            lastError =
+              parsed?.error ||
+              (res.status === 401
+                ? 'Сессия истекла. Обнови страницу и войди заново'
+                : `Сервер ответил с ошибкой (${res.status})`);
+            // Ошибки пользователя (400/401/500 с понятным текстом) повторять нет смысла
+            if (res.status >= 400 && res.status < 500) break;
+          } catch {
+            lastError = 'Нет соединения. Проверь интернет и попробуй снова';
+          }
+          await new Promise((r) => setTimeout(r, 800));
+        }
+
+        if (!data) {
+          if (totals.imported > 0) {
+            // Часть игр уже сохранена — показываем что есть
+            setError(lastError);
+            break;
+          }
+          throw new Error(lastError);
+        }
+
+        totals.imported += data.imported || 0;
+        totals.skipped += data.skipped || 0;
+        totals.notFound += data.notFound || 0;
+        totals.totalOwned = data.totalOwned || totals.totalOwned;
+        total = data.total || total;
+        offset = data.nextOffset ?? offset;
+        setProgress({ done: Math.min(offset, total), total });
+
+        if (data.done) break;
       }
 
-      setResult({
-        imported: data.imported,
-        skipped: data.skipped,
-        notFound: data.notFound,
-        totalOwned: data.totalOwned,
-      });
-      showToast(`Импортировано ${data.imported} игр`, 'success');
-      onComplete(data.imported);
+      setResult(totals);
+      if (totals.imported > 0) {
+        showToast(`Импортировано ${totals.imported} игр`, 'success');
+      }
+      onComplete(totals.imported);
     } catch (err: any) {
       setError(err.message || 'Сетевая ошибка');
     }
@@ -74,11 +120,11 @@ export default function SteamImportModal({
 
   return (
     <div
-      className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[60] flex items-center justify-center p-4 overflow-y-auto"
+      className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[10001] flex items-start sm:items-center justify-center p-3 sm:p-4 overflow-y-auto"
       onClick={() => !loading && handleClose()}
     >
       <div
-        className="bg-neutral-900 rounded-2xl max-w-lg w-full my-8 relative border border-neutral-800 shadow-2xl"
+        className="bg-neutral-900 rounded-2xl max-w-lg w-full my-4 sm:my-8 relative border border-neutral-800 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <button
@@ -92,11 +138,7 @@ export default function SteamImportModal({
         <div className="p-6 space-y-5">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-xl bg-[#1b6ca8] flex items-center justify-center">
-              <img
-                src="https://cdn.simpleicons.org/steam/ffffff"
-                alt="Steam"
-                className="w-6 h-6"
-              />
+              <SteamIcon className="w-6 h-6 text-white" />
             </div>
             <div>
               <h2 className="text-xl font-bold text-white">Импорт из Steam</h2>
@@ -126,15 +168,18 @@ export default function SteamImportModal({
                 </label>
                 <input
                   type="text"
+                  inputMode="url"
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                  spellCheck={false}
                   value={steamUrl}
                   onChange={(e) => setSteamUrl(e.target.value)}
                   disabled={loading}
                   placeholder="https://steamcommunity.com/id/username"
                   className="w-full px-4 py-3 bg-neutral-800 border border-neutral-700 rounded-lg text-white placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
-                  autoFocus
                 />
                 <p className="text-[11px] text-neutral-500 mt-1.5">
-                  Подойдёт ссылка вида <code className="text-neutral-400">/id/username</code> или <code className="text-neutral-400">/profiles/7656...</code>. Или просто ник.
+                  Подойдёт ссылка вида <code className="text-neutral-400">/id/username</code> или <code className="text-neutral-400">/profiles/7656...</code>. Короткая ссылка из приложения Steam (s.team/...) или просто ник тоже подойдут.
                 </p>
               </div>
 
@@ -142,6 +187,15 @@ export default function SteamImportModal({
                 <div className="flex items-start gap-2 px-3 py-2.5 bg-red-500/10 border border-red-500/30 rounded-lg text-sm text-red-400">
                   <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
                   <span>{error}</span>
+                </div>
+              )}
+
+              {loading && progress.total > 0 && (
+                <div className="w-full h-2 bg-neutral-800 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-indigo-500 to-sky-400 rounded-full transition-all duration-300"
+                    style={{ width: `${Math.round((progress.done / progress.total) * 100)}%` }}
+                  />
                 </div>
               )}
 
@@ -153,7 +207,9 @@ export default function SteamImportModal({
                 {loading ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    Импортируем... (это может занять до минуты)
+                    {progress.total > 0
+                      ? `Импортируем ${progress.done} из ${progress.total}...`
+                      : 'Ищем профиль...'}
                   </>
                 ) : (
                   <>
@@ -191,6 +247,13 @@ export default function SteamImportModal({
                   <div className="text-xs text-neutral-400">Уже было</div>
                 </div>
               </div>
+
+              {error && (
+                <div className="flex items-start gap-2 px-3 py-2.5 bg-red-500/10 border border-red-500/30 rounded-lg text-sm text-red-400">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                  <span>Импорт прерван: {error}</span>
+                </div>
+              )}
 
               {result.notFound > 0 && (
                 <p className="text-xs text-neutral-500 text-center">

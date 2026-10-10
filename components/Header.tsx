@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import {
   Gamepad2, Menu, X, LogOut, Award, Pencil, AlertTriangle,
   User as UserIcon, Home, Library, Search, Calendar, Loader2, ShoppingBag,
-  Users, ChevronDown,
+  Users, ChevronDown, Coins,
 } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -226,7 +226,7 @@ export default function Header() {
 
   const navLinkClass = (href: string) => {
     const active = isActive(href);
-    return `flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition ${
+    return `nav-link flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition ${
       active
         ? 'bg-indigo-500/15 text-indigo-400 ring-1 ring-indigo-500/30'
         : 'text-neutral-300 hover:text-white hover:bg-neutral-800'
@@ -327,7 +327,7 @@ export default function Header() {
             </Link>
             <button
               onClick={() => setAchievementsOpen(true)}
-              className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-neutral-300 hover:text-yellow-400 hover:bg-neutral-800 transition"
+              className="nav-link flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-neutral-300 hover:text-yellow-400 hover:bg-neutral-800 transition"
             >
               <Award className="w-4 h-4" />
               Достижения
@@ -384,7 +384,15 @@ export default function Header() {
             {loading ? (
               <div className="w-24 md:w-32 h-10 bg-neutral-800 rounded-lg animate-pulse" />
             ) : isLoggedIn ? (
-              <div className="hidden sm:block relative" ref={userMenuRef}>
+              <div className="hidden sm:flex items-center gap-2 relative" ref={userMenuRef}>
+                <Link
+                  href="/shop"
+                  title="Монеты · открыть магазин"
+                  className="coin-pill flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/25 text-amber-300 text-sm font-semibold hover:bg-amber-500/20 hover:border-amber-400/50 transition"
+                >
+                  <Coins className="w-4 h-4" />
+                  {(profile.coins || 0).toLocaleString('ru-RU')}
+                </Link>
                 <button
                   onClick={() => setUserMenuOpen((v) => !v)}
                   className="flex items-center gap-2.5 bg-neutral-800 hover:bg-neutral-700 rounded-lg pl-1.5 pr-3 py-1.5 transition"
@@ -536,7 +544,7 @@ export default function Header() {
                     {profile.nickname || 'Игрок'}
                   </div>
                   <div className="text-xs text-neutral-400">
-                    Уровень {levelInfo.level} • {profile.xp} XP
+                    Уровень {levelInfo.level} • {profile.xp} XP • {profile.coins || 0} монет
                   </div>
                 </div>
               </div>
@@ -545,34 +553,37 @@ export default function Header() {
             <Link
               href="/"
               onClick={() => setMenuOpen(false)}
-              className={`block text-sm font-medium transition py-2.5 px-3 rounded-lg ${
+              className={`flex items-center gap-2.5 text-sm font-medium transition py-2.5 px-3 rounded-lg ${
                 isActive('/')
                   ? 'bg-indigo-500/15 text-indigo-400 ring-1 ring-indigo-500/30'
                   : 'text-neutral-300 hover:text-white hover:bg-neutral-800'
               }`}
             >
+              <Home className="w-4 h-4" />
               Главная
             </Link>
             <Link
               href="/my-games"
               onClick={() => setMenuOpen(false)}
-              className={`block text-sm font-medium transition py-2.5 px-3 rounded-lg ${
+              className={`flex items-center gap-2.5 text-sm font-medium transition py-2.5 px-3 rounded-lg ${
                 isActive('/my-games')
                   ? 'bg-indigo-500/15 text-indigo-400 ring-1 ring-indigo-500/30'
                   : 'text-neutral-300 hover:text-white hover:bg-neutral-800'
               }`}
             >
+              <Library className="w-4 h-4" />
               Мои игры
             </Link>
             <Link
               href="/releases"
               onClick={() => setMenuOpen(false)}
-              className={`block text-sm font-medium transition py-2.5 px-3 rounded-lg ${
+              className={`flex items-center gap-2.5 text-sm font-medium transition py-2.5 px-3 rounded-lg ${
                 isActive('/releases')
                   ? 'bg-indigo-500/15 text-indigo-400 ring-1 ring-indigo-500/30'
                   : 'text-neutral-300 hover:text-white hover:bg-neutral-800'
               }`}
             >
+              <Calendar className="w-4 h-4" />
               Релизы
             </Link>
             <button
@@ -655,8 +666,9 @@ export default function Header() {
               <Link
                 href="/auth"
                 onClick={() => setMenuOpen(false)}
-                className="block text-sm font-medium text-indigo-400 hover:text-indigo-300 transition py-2.5 px-3 rounded-lg border-t border-neutral-800 pt-3 mt-2"
+                className="flex items-center gap-2.5 text-sm font-medium text-indigo-400 hover:text-indigo-300 transition py-2.5 px-3 rounded-lg border-t border-neutral-800 pt-3 mt-2"
               >
+                <UserIcon className="w-4 h-4" />
                 Войти
               </Link>
             )}

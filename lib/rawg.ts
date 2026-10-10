@@ -17,31 +17,28 @@ export interface RawgGame {
   playtime?: number;
 }
 
-// Убираем HTML-теги и лишние пробелы
-function stripHtml(html: string | undefined | null): string {
-  if (!html) return '';
-  return html
-    .replace(/<[^>]*>/g, ' ')   // вырезаем все теги <...>
-    .replace(/&nbsp;/g, ' ')     // распространённые HTML-сущности
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/\s+/g, ' ')        // схлопываем пробелы/переносы
-    .trim();
+/**
+ * RAWG отдаёт обложки в полном размере (1–3 МБ). Через путь /media/resize/<ширина>/-/
+ * можно получить уменьшенную копию — это сильно ускоряет загрузку списков игр.
+ */
+export function rawgResize(url: string | null | undefined, width = 640): string {
+  if (!url) return '';
+  const marker = 'https://media.rawg.io/media/';
+  if (url.startsWith(marker) && !url.startsWith(marker + 'resize/')) {
+    return url.replace(marker, `${marker}resize/${width}/-/`);
+  }
+  return url;
 }
 
 export function mapRawgGame(raw: RawgGame): Game {
   const cleanDescription =
-    stripHtml(raw.description).substring(0, 300) || 'Описание отсутствует';
-
-  const cleanDescriptionRaw = stripHtml(raw.description_raw || raw.description);
+    raw.description?.replace(/<[^>]*>/g, '').substring(0, 300) ||
+    'Описание отсутствует';
 
   return {
     id: raw.id,
     title: raw.name,
-    cover: raw.background_image,
+    cover: rawgResize(raw.background_image, 640),
     year: Number(raw.released?.split('-')[0]) || 0,
     released: raw.released || undefined,
     rating: Math.round(raw.rating * 10) / 10,
@@ -49,9 +46,9 @@ export function mapRawgGame(raw: RawgGame): Game {
     genres: raw.genres || [],
     tags: raw.tags || [],
     description: cleanDescription,
-    descriptionRaw: cleanDescriptionRaw,
+    descriptionRaw: raw.description_raw || raw.description || '',
     descriptionRu: undefined,
-    platforms: raw.platforms?.map((p) => p?.platform?.name).filter(Boolean) as string[] || [],
+    platforms: raw.platforms?.map((p) => p.platform.name) || [],
     screenshots: raw.screenshots || [],
     trailer: raw.movies?.[0]?.data?.max || raw.movies?.[0]?.preview || '',
     metacritic: raw.metacritic || undefined,

@@ -1,6 +1,7 @@
 'use client';
 
-import { fetchRewards } from '@/lib/rewards';
+import PageHeading from '@/components/PageHeading';
+import { fetchRewards, describeGain } from '@/lib/rewards';
 import { authFetch } from '@/lib/api-client';
 import { useEffect, useState, useMemo } from 'react';
 import {
@@ -40,7 +41,7 @@ function getMonthLabel(iso?: string, year?: number): string {
 }
 
 export default function ReleasesPage() {
-  const { userId, userGames, setUserGames, setProfile } = useAuth();
+  const { userId, userGames, setUserGames, setProfile, profile } = useAuth();
   const { showToast } = useToast();
 
   const [games, setGames] = useState<Game[]>([]);
@@ -197,8 +198,13 @@ export default function ReleasesPage() {
       { onConflict: 'user_id,game_id' },
     );
 
+    const prevXp = profile.xp;
+    const prevCoins = profile.coins || 0;
     fetchRewards(userId).then((r) => {
-      if (r) setProfile((prev) => ({ ...prev, xp: r.xp, coins: r.coins }));
+      if (!r) return;
+      setProfile((prev) => ({ ...prev, xp: r.xp, coins: r.coins }));
+      const text = describeGain(r.xp - prevXp, r.coins - prevCoins);
+      if (text) showToast(text, 'success');
     });
 
     setUserGames((prev) => {
@@ -256,13 +262,12 @@ export default function ReleasesPage() {
   return (
     <div className="min-h-screen bg-[#0a0a0a]">
       <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-8">
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-white mb-2 flex items-center gap-2">
-            <Calendar className="w-6 h-6 text-indigo-500" />
-            Календарь релизов
-          </h1>
-          <p className="text-neutral-400">Скоро выходящие игры на ближайшие 6 месяцев</p>
-        </div>
+        <PageHeading
+          icon={Calendar}
+          title="Календарь релизов"
+          subtitle="Скоро выходящие игры на ближайшие 6 месяцев"
+          accent="sky"
+        />
 
         {loading ? (
           <div className="flex items-center justify-center py-20">

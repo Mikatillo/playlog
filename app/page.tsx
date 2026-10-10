@@ -15,7 +15,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import { getRatingColor, getSliderColor } from '@/lib/utils';
-import { fetchRewards } from '@/lib/rewards';
+import { fetchRewards, describeGain } from '@/lib/rewards';
 import GameCard from '@/components/GameCard';
 import GameCardSkeleton from '@/components/GameCardSkeleton';
 import ForYou from '@/components/ForYou';
@@ -87,29 +87,13 @@ export default function Home() {
   }, [selectedGame, selectedScreenshot]);
 
   const loadGames = useCallback(
-    async (
-      pageNum: number,
-      append: boolean = false,
-      genre?: string,
-      sort?: string,
-      force = false,
-    ) => {
+    async (pageNum: number, append: boolean = false, genre?: string, sort?: string) => {
       setLoading(true);
       try {
         const g = genre !== undefined ? genre : selectedGenre;
         const s = sort !== undefined ? sort : sortBy;
-
-        // На чистой главной (без жанра, дефолтная сортировка, первая страница) — Steam
-        const useSteam = !g && s === '-added' && pageNum === 1 && !append;
-
-        let url: string;
-        if (useSteam) {
-          url = `/api/steam/steam-popular?limit=20${force ? '&force=1' : ''}`;
-        } else {
-          url = `/api/games?page=${pageNum}&pageSize=20&ordering=${s}`;
-          if (g) url += `&genres=${g}`;
-        }
-
+        let url = `/api/games?page=${pageNum}&pageSize=20&ordering=${s}`;
+        if (g) url += `&genres=${g}`;
         const response = await fetch(url);
         const data = await response.json();
         if (data.results) {
@@ -308,11 +292,14 @@ export default function Home() {
     const r = await fetchRewards(userId);
     if (!r) return;
     const gain = r.xp - profile.xp;
+    const coinGain = r.coins - (profile.coins || 0);
     setProfile((prev) => ({ ...prev, xp: r.xp, coins: r.coins }));
     if (gain > 0) {
       setXpGain(gain);
       setTimeout(() => setXpGain(null), 2000);
     }
+    const text = describeGain(gain, coinGain);
+    if (text) showToast(text, 'success');
   };
 
   const logActivity = (

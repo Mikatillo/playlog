@@ -19,7 +19,6 @@ export default function ResetPasswordPage() {
 
   useEffect(() => {
     let done = false;
-
     const finish = (ok: boolean) => {
       if (done) return;
       done = true;
@@ -27,8 +26,7 @@ export default function ResetPasswordPage() {
       setChecking(false);
     };
 
-    // Supabase сам разбирает токен из hash (#access_token=...&type=recovery)
-    // или из query (?code=...), и шлёт событие PASSWORD_RECOVERY / SIGNED_IN
+    // Supabase сам разбирает токен из ссылки и шлёт событие PASSWORD_RECOVERY
     const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
       if (session && (event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN')) {
         finish(true);
@@ -36,27 +34,22 @@ export default function ResetPasswordPage() {
     });
 
     const init = async () => {
-      // 1. Уже есть сессия? Значит ссылка валидна.
       const { data: { session } } = await supabase.auth.getSession();
       if (session) return finish(true);
 
-      // 2. В URL есть признаки recovery-ссылки?
-      const hash = window.location.hash || '';
-      const search = window.location.search || '';
       const hasToken =
-        hash.includes('access_token') ||
-        hash.includes('type=recovery') ||
-        search.includes('code=');
+        window.location.hash.includes('access_token') ||
+        window.location.hash.includes('type=recovery') ||
+        window.location.search.includes('code=');
 
       if (!hasToken) return finish(false);
 
-      // 3. Даём библиотеке время обработать ссылку (обменять code/hash на сессию)
+      // Даём библиотеке время обработать ссылку
       setTimeout(async () => {
         const { data: { session: s2 } } = await supabase.auth.getSession();
         finish(!!s2);
       }, 2500);
     };
-
     init();
 
     return () => sub.subscription.unsubscribe();
@@ -71,13 +64,11 @@ export default function ResetPasswordPage() {
 
     const { error: supaError } = await supabase.auth.updateUser({ password });
     setLoading(false);
-
     if (supaError) {
       setError(supaError.message);
       showToast('Не удалось обновить пароль', 'error');
       return;
     }
-
     showToast('Пароль изменён', 'success');
     router.push('/');
   };

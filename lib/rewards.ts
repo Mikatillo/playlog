@@ -15,3 +15,11 @@ export async function fetchRewards(
   if (error || !data) return null;
   return { xp: data.xp || 0, coins: data.coins || 0 };
 }
+
+/** Текст для уведомления о награде или null, если награды не было. */
+export function describeGain(xpGain: number, coinGain: number): string | null {
+  const parts: string[] = [];
+  if (xpGain > 0) parts.push(`+${xpGain} XP`);
+  if (coinGain > 0) parts.push(`+${coinGain} монет`);
+  return parts.length ? `Награда: ${parts.join(' · ')}` : null;
+}

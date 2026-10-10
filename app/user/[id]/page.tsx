@@ -1,5 +1,6 @@
 'use client';
 
+import ProfileStats from '@/components/ProfileStats';
 import { fetchGamesByIds } from '@/lib/games-client';
 import { authFetch } from '@/lib/api-client';
 import { useEffect, useState, use, useMemo, useCallback } from 'react';
@@ -641,6 +642,17 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
       .slice(0, 5);
   }, [collectionGames]);
 
+  const profileTotalHours = useMemo(
+    () => userGames.reduce((sum, g) => sum + (g.hours || 0), 0),
+    [userGames],
+  );
+
+  const profileAverageRating = useMemo(() => {
+    const rated = userGames.filter((g) => (g.rating || 0) > 0);
+    if (rated.length === 0) return null;
+    return rated.reduce((sum, g) => sum + g.rating, 0) / rated.length;
+  }, [userGames]);
+
   const gameTabOptions: { id: GameTab; label: string; count: number; color: string }[] = [
     { id: 'all', label: 'Все', count: collectionGames.length, color: 'text-indigo-400' },
     { id: 'playing', label: 'Играю', count: statusCounts.playing, color: 'text-blue-400' },
@@ -812,58 +824,14 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
             </div>
           </div>
 
-          {/* Интересы и статистика — горизонтальные полосы */}
-          <div className="bg-neutral-900/80 backdrop-blur-md border border-neutral-800 rounded-2xl p-5 flex flex-col">
-            <h3 className="font-semibold text-white mb-4">Интересы и статистика</h3>
-
-            {/* Жанры */}
-            <div className="flex flex-wrap gap-1.5 mb-5">
-              {topGenres.length === 0 ? (
-                <span className="text-sm text-neutral-500">Нет данных</span>
-              ) : (
-                topGenres.map(([genre, count]) => (
-                  <span
-                    key={genre}
-                    className="px-2.5 py-1 rounded-full bg-neutral-800 text-neutral-300 text-xs"
-                  >
-                    {genre} · {count}
-                  </span>
-                ))
-              )}
-            </div>
-
-            {/* Статусы — горизонтальные полосы */}
-            <div className="space-y-3 mt-auto">
-              {[
-                { label: 'Играю', count: statusCounts.playing, color: 'bg-indigo-500' },
-                { label: 'Пройдено', count: statusCounts.completed, color: 'bg-emerald-500' },
-                { label: 'Заброшено', count: statusCounts.dropped, color: 'bg-rose-500' },
-              ].map(({ label, count, color }) => {
-                const total =
-                  statusCounts.playing + statusCounts.completed + statusCounts.dropped;
-                const percent = total > 0 ? Math.round((count / total) * 100) : 0;
-                const w = Math.max((count / Math.max(total, 1)) * 100, count > 0 ? 4 : 0);
-
-                return (
-                  <div key={label}>
-                    <div className="flex items-center justify-between text-xs mb-1.5">
-                      <span className="text-neutral-400">{label}</span>
-                      <span className="text-neutral-300 font-medium">
-                        {count}
-                        <span className="text-neutral-500 ml-1.5">({percent}%)</span>
-                      </span>
-                    </div>
-                    <div className="w-full h-2 bg-neutral-800 rounded-full overflow-hidden">
-                      <div
-                        className={`h-full rounded-full ${color} transition-all`}
-                        style={{ width: `${w}%` }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+          {/* Интересы и статистика */}
+          <ProfileStats
+            topGenres={topGenres}
+            statusCounts={statusCounts}
+            totalHours={profileTotalHours}
+            averageRating={profileAverageRating}
+            totalGames={collectionGames.length}
+          />
         </div>
 
         {/* Табы + коллекция */}

@@ -1,13 +1,15 @@
 'use client';
 
-import { fetchRewards } from '@/lib/rewards';
+import PageHeading from '@/components/PageHeading';
+import SteamIcon from '@/components/SteamIcon';
+import { fetchRewards, describeGain } from '@/lib/rewards';
 import { fetchGamesByIds } from '@/lib/games-client';
 import { authFetch } from '@/lib/api-client';
 import { useState, useEffect, useMemo } from 'react';
 import {
   Heart, Gamepad, Check, Trophy, Star, Clock,
   Loader2, Lock, X, MessageSquare, Trash2, AlertTriangle, XCircle,
-  ChevronDown, ChevronUp, Compass, ArrowUpDown, Filter,
+  ChevronDown, ChevronUp, Compass, ArrowUpDown, Filter, Library,
 } from 'lucide-react';
 import Link from 'next/link';
 import { Game, GameData } from '@/types/game';
@@ -35,7 +37,7 @@ const sortOptions: { value: SortType; label: string }[] = [
 ];
 
 export default function MyGamesPage() {
-  const { userId, userGames, setUserGames, setProfile, loading: authLoading } = useAuth();
+  const { userId, userGames, setUserGames, setProfile, profile, loading: authLoading } = useAuth();
   const { showToast } = useToast();
 
   const [activeTab, setActiveTab] = useState<TabType>('all');
@@ -294,8 +296,13 @@ export default function MyGamesPage() {
     );
 
     // XP и монеты начисляет база данных — подтягиваем актуальные значения
+    const prevXp = profile.xp;
+    const prevCoins = profile.coins || 0;
     fetchRewards(userId).then((r) => {
-      if (r) setProfile((prev) => ({ ...prev, xp: r.xp, coins: r.coins }));
+      if (!r) return;
+      setProfile((prev) => ({ ...prev, xp: r.xp, coins: r.coins }));
+      const text = describeGain(r.xp - prevXp, r.coins - prevCoins);
+      if (text) showToast(text, 'success');
     });
 
     setUserGames((prev) => {
@@ -401,23 +408,15 @@ export default function MyGamesPage() {
     <div className="min-h-screen bg-[#0a0a0a]">
       <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-8">
         {/* Заголовок + кнопка Steam-импорта */}
-        <div className="mb-6 flex items-start justify-between gap-4 flex-wrap">
-          <div>
-            <h1 className="text-2xl font-bold text-white mb-2">Мои игры</h1>
-            <p className="text-neutral-400">Твоя личная коллекция</p>
-          </div>
+        <PageHeading icon={Library} title="Мои игры" subtitle="Твоя личная коллекция" accent="indigo">
           <button
             onClick={() => setSteamImportOpen(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-[#1b6ca8] hover:bg-[#155a8a] text-white font-medium rounded-lg transition text-sm"
+            className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-[#1b6ca8] to-[#2a8bd0] hover:from-[#1f7cc0] hover:to-[#37a0ec] text-white font-medium rounded-xl transition text-sm shadow-lg shadow-sky-900/30 hover:-translate-y-0.5"
           >
-            <img
-              src="https://cdn.simpleicons.org/steam/ffffff"
-              alt="Steam"
-              className="w-4 h-4"
-            />
+            <SteamIcon className="w-4 h-4" />
             Импорт из Steam
           </button>
-        </div>
+        </PageHeading>
 
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-2 md:gap-3 mb-6">
           <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-3 md:p-4 text-center">
@@ -532,11 +531,7 @@ export default function MyGamesPage() {
                 onClick={() => setSteamImportOpen(true)}
                 className="inline-flex items-center gap-2 px-6 py-3 bg-[#1b6ca8] hover:bg-[#155a8a] text-white font-medium rounded-lg transition"
               >
-                <img
-                  src="https://cdn.simpleicons.org/steam/ffffff"
-                  alt="Steam"
-                  className="w-4 h-4"
-                />
+                <SteamIcon className="w-4 h-4" />
                 Импорт из Steam
               </button>
             </div>

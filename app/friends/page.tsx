@@ -1,5 +1,6 @@
 'use client';
 
+import PageHeading from '@/components/PageHeading';
 import { authFetch } from '@/lib/api-client';
 import { Suspense, useEffect, useState, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -286,13 +287,12 @@ function FriendsPageContent() {
   return (
     <div className="min-h-screen bg-[#0a0a0a]">
       <div className="max-w-3xl mx-auto px-4 py-6 md:py-8">
-        <div className="mb-6">
-          <h1 className="text-2xl md:text-3xl font-bold text-white flex items-center gap-3">
-            <Users className="w-7 h-7 text-indigo-500" />
-            Друзья
-          </h1>
-          <p className="text-sm text-neutral-400 mt-1">Управляй подписками и следи за активностью друзей</p>
-        </div>
+        <PageHeading
+          icon={Users}
+          title="Друзья"
+          subtitle="Управляй подписками и следи за активностью друзей"
+          accent="fuchsia"
+        />
 
         <div className="relative mb-6">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500" />

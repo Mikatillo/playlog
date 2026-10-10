@@ -1,262 +1,162 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import {
-  X, Gamepad, Check, Trophy, Star, Clock,
-  Flame, Crown, Lock, TrendingUp, BookOpen,
-} from 'lucide-react';
-import { ACHIEVEMENT_LEVELS, getAchievementLevel } from '@/types/game';
+import { X, Trophy, Lock, Check, Sparkles } from 'lucide-react';
+import { getAchievementLevel } from '@/types/game';
+import { ACHIEVEMENTS, type AchievementDef, type AchievementStats } from '@/lib/achievements';
+import { TIERS, tierForLevel } from '@/lib/achievement-art';
+import AchievementBadge from './AchievementBadge';
 
 interface AchievementsModalProps {
   isOpen: boolean;
   onClose: () => void;
-  stats: {
-    total: number;
-    completed: number;
-    playing: number;
-    want: number;
-    dropped: number;
-    totalHours: number;
-    ratedGames: number;
-    reviewsCount: number;
-  };
+  stats: AchievementStats;
 }
 
-const iconMap: Record<string, any> = {
-  Check,
-  Gamepad,
-  Trophy,
-  Star,
-  Clock,
-  Flame,
-  Crown,
-  TrendingUp,
-  BookOpen,
-};
+const MAX_LEVEL = 10;
 
-interface AchievementDef {
-  id: string;
-  title: string;
-  description: string;
-  icon: string;
-  getValue: (stats: any) => number;
-  thresholds: number[];
-}
-
-const ACHIEVEMENTS: AchievementDef[] = [
-  {
-    id: 'collector',
-    title: 'Коллекционер',
-    description: 'Добавь игры в свой список',
-    icon: 'Crown',
-    getValue: (s) => s.total,
-    thresholds: [1, 5, 10, 25, 50, 100, 200, 500, 1000, 2500],
-  },
-  {
-    id: 'finisher',
-    title: 'Финишёр',
-    description: 'Пройди игры до конца',
-    icon: 'Check',
-    getValue: (s) => s.completed,
-    thresholds: [1, 3, 5, 10, 20, 50, 100, 200, 500, 1000],
-  },
-  {
-    id: 'hardcore',
-    title: 'Хардкорщик',
-    description: 'Наиграй часы в играх',
-    icon: 'Flame',
-    getValue: (s) => s.totalHours,
-    thresholds: [10, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 25000],
-  },
-  {
-    id: 'critic',
-    title: 'Критик',
-    description: 'Оцени игры',
-    icon: 'Star',
-    getValue: (s) => s.ratedGames,
-    thresholds: [1, 5, 10, 25, 50, 100, 250, 500, 1000, 2500],
-  },
-  {
-    id: 'writer',
-    title: 'Писатель',
-    description: 'Напиши рецензии',
-    icon: 'BookOpen',
-    getValue: (s) => s.reviewsCount,
-    thresholds: [1, 3, 5, 10, 25, 50, 100, 250, 500, 1000],
-  },
-  {
-    id: 'explorer',
-    title: 'Исследователь',
-    description: 'Добавь игры в "Хочу пройти"',
-    icon: 'TrendingUp',
-    getValue: (s) => s.want,
-    thresholds: [1, 5, 10, 25, 50, 100, 200, 500, 1000, 2500],
-  },
-  {
-    id: 'gamer',
-    title: 'Геймер',
-    description: 'Игры в процессе',
-    icon: 'Gamepad',
-    getValue: (s) => s.playing,
-    thresholds: [1, 3, 5, 10, 20, 50, 100, 200, 500, 1000],
-  },
-  {
-    id: 'marathon',
-    title: 'Марафонец',
-    description: 'Общее время в играх',
-    icon: 'Clock',
-    getValue: (s) => s.totalHours,
-    thresholds: [100, 250, 500, 1000, 2000, 5000, 10000, 20000, 50000, 100000],
-  },
-];
-
-export default function AchievementsModal({
-  isOpen,
-  onClose,
-  stats,
-}: AchievementsModalProps) {
-  const [selectedAchievement, setSelectedAchievement] = useState<AchievementDef | null>(null);
+export default function AchievementsModal({ isOpen, onClose, stats }: AchievementsModalProps) {
+  const [selected, setSelected] = useState<AchievementDef | null>(null);
 
   // Escape закрывает сначала детали, потом саму модалку
   useEffect(() => {
     if (!isOpen) return;
     const handleEsc = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (selectedAchievement) {
-          setSelectedAchievement(null);
-        } else {
-          onClose();
-        }
+        if (selected) setSelected(null);
+        else onClose();
       }
     };
     window.addEventListener('keydown', handleEsc);
     return () => window.removeEventListener('keydown', handleEsc);
-  }, [isOpen, selectedAchievement, onClose]);
+  }, [isOpen, selected, onClose]);
+
+  // Блокируем прокрутку страницы под модалкой
+  useEffect(() => {
+    if (!isOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
-  const totalLevels = ACHIEVEMENTS.reduce((sum, a) => {
-    const { level } = getAchievementLevel(a.thresholds, a.getValue(stats));
-    return sum + level;
-  }, 0);
-
-  const maxLevels = ACHIEVEMENTS.length * 10;
+  const rows = ACHIEVEMENTS.map((a) => {
+    const value = a.getValue(stats);
+    return { def: a, value, ...getAchievementLevel(a.thresholds, value) };
+  });
+  const totalLevels = rows.reduce((sum, r) => sum + r.level, 0);
+  const maxLevels = ACHIEVEMENTS.length * MAX_LEVEL;
   const totalProgress = Math.round((totalLevels / maxLevels) * 100);
+  const unlocked = rows.filter((r) => r.level > 0).length;
+
+  const selectedRow = selected ? rows.find((r) => r.def.id === selected.id)! : null;
 
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-neutral-900 rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto relative shadow-2xl border border-neutral-800">
+    <div
+      className="fixed inset-0 bg-black/75 backdrop-blur-sm z-[10000] flex items-end sm:items-center justify-center sm:p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-neutral-900 sm:rounded-3xl rounded-t-3xl w-full max-w-4xl max-h-[92vh] overflow-y-auto relative shadow-2xl border border-neutral-800 animate-slide-up"
+        onClick={(e) => e.stopPropagation()}
+      >
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 w-10 h-10 bg-neutral-800 hover:bg-neutral-700 rounded-full flex items-center justify-center transition z-10"
+          aria-label="Закрыть"
+          className="sticky top-3 float-right mr-3 mt-3 w-10 h-10 bg-neutral-800/90 hover:bg-neutral-700 rounded-full flex items-center justify-center transition z-20 hover:rotate-90"
         >
-          <X className="w-5 h-5 text-neutral-400" />
+          <X className="w-5 h-5 text-neutral-300" />
         </button>
 
-        <div className="p-8">
-          {/* Заголовок */}
-          <div className="mb-6">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-12 h-12 bg-gradient-to-br from-yellow-400 to-amber-600 rounded-xl flex items-center justify-center shadow-lg">
-                <Trophy className="w-6 h-6 text-white" />
+        <div className="p-5 sm:p-8">
+          {/* Заголовок и общий прогресс */}
+          <div className="relative overflow-hidden rounded-2xl border border-amber-500/20 bg-gradient-to-br from-amber-500/10 via-neutral-900 to-indigo-500/10 p-5 sm:p-6 mb-6">
+            <div className="absolute -top-16 -right-10 w-48 h-48 bg-amber-400/10 blur-3xl rounded-full pointer-events-none" />
+            <div className="relative flex items-center gap-4">
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-300 to-amber-600 flex items-center justify-center shadow-lg shadow-amber-500/30 flex-shrink-0">
+                <Trophy className="w-7 h-7 text-amber-950" />
               </div>
-              <div>
+              <div className="min-w-0">
                 <h1 className="text-2xl font-bold text-white">Достижения</h1>
-                <p className="text-sm text-neutral-400">Развивай свой профиль</p>
+                <p className="text-sm text-neutral-400">
+                  Открыто {unlocked} из {ACHIEVEMENTS.length} · {totalLevels} из {maxLevels} уровней
+                </p>
+              </div>
+              <div className="ml-auto text-right hidden sm:block">
+                <div className="text-3xl font-extrabold text-amber-300 leading-none">{totalProgress}%</div>
+                <div className="text-[11px] text-neutral-500 mt-1">общий прогресс</div>
               </div>
             </div>
-
-            {/* Общий прогресс */}
-            <div className="mt-4 bg-neutral-800 rounded-xl p-4">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-white">Общий прогресс</span>
-                <span className="text-sm font-bold text-yellow-400">
-                  {totalLevels} / {maxLevels} уровней
-                </span>
-              </div>
-              <div className="w-full h-3 bg-neutral-700 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-yellow-500 to-amber-400 rounded-full transition-all duration-500"
-                  style={{ width: `${totalProgress}%` }}
-                />
-              </div>
-              <div className="text-xs text-neutral-500 mt-1">{totalProgress}% завершено</div>
+            <div className="relative mt-4 h-2.5 bg-neutral-800 rounded-full overflow-hidden">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-amber-500 via-yellow-300 to-amber-400 transition-all duration-700"
+                style={{ width: `${totalProgress}%` }}
+              />
             </div>
           </div>
 
           {/* Сетка достижений */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {ACHIEVEMENTS.map((achievement) => {
-              const value = achievement.getValue(stats);
-              const { level, progress, nextThreshold } = getAchievementLevel(
-                achievement.thresholds,
-                value,
-              );
-              const levelData = ACHIEVEMENT_LEVELS[level - 1] || ACHIEVEMENT_LEVELS[0];
-              const Icon = iconMap[achievement.icon] || Trophy;
-              const isMaxLevel = level === 10;
-
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
+            {rows.map(({ def, value, level, progress, nextThreshold }) => {
+              const tier = tierForLevel(level);
+              const isMax = level === MAX_LEVEL;
               return (
                 <button
-                  key={achievement.id}
-                  onClick={() => setSelectedAchievement(achievement)}
-                  className="bg-neutral-800 border border-neutral-700 rounded-xl p-4 text-left hover:border-neutral-600 transition group"
-                  style={{
-                    boxShadow: level > 0 ? `0 0 20px ${levelData.glowColor}` : 'none',
-                  }}
+                  key={def.id}
+                  onClick={() => setSelected(def)}
+                  className="group relative text-left rounded-2xl border border-neutral-800 bg-neutral-800/40 p-4 pt-5 transition-all duration-200 hover:-translate-y-1 hover:border-neutral-600 hover:bg-neutral-800/70 active:scale-[0.98] overflow-hidden"
+                  style={{ boxShadow: tier ? `0 10px 30px -12px ${tier.glow}` : undefined }}
                 >
-                  <div className="flex items-center justify-between mb-3">
+                  {tier && (
                     <div
-                      className="w-10 h-10 rounded-lg flex items-center justify-center"
-                      style={{ backgroundColor: levelData.color + '20' }}
-                    >
-                      <Icon className="w-5 h-5" style={{ color: levelData.color }} />
+                      className="absolute inset-x-0 -top-10 h-24 opacity-40 blur-2xl pointer-events-none transition-opacity group-hover:opacity-70"
+                      style={{ background: tier.glow }}
+                    />
+                  )}
+                  <div className="relative flex justify-center mb-3 transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-3">
+                    <AchievementBadge id={def.id} level={level} size={92} />
+                  </div>
+                  <div className="relative text-center">
+                    <div className="font-semibold text-sm text-white">{def.title}</div>
+                    <div className="text-[11px] mt-0.5 font-medium" style={{ color: tier ? tier.mid : '#737373' }}>
+                      {tier ? `${tier.name} · ур. ${level}` : 'Не открыто'}
                     </div>
-                    <div className="text-right">
-                      <div className="text-xs font-bold" style={{ color: levelData.color }}>
-                        Ур. {level}
-                      </div>
-                      <div className="text-[10px] text-neutral-500">
-                        {isMaxLevel ? 'MAX' : `до ${nextThreshold}`}
-                      </div>
-                    </div>
                   </div>
-
-                  <div className="font-medium text-sm text-white mb-1 group-hover:text-indigo-400 transition">
-                    {achievement.title}
-                  </div>
-                  <div className="text-[10px] text-neutral-500 leading-tight mb-2">
-                    {achievement.description}
-                  </div>
-
-                  <div className="w-full h-1.5 bg-neutral-700 rounded-full overflow-hidden">
+                  <div className="relative mt-3 h-1.5 bg-neutral-700/70 rounded-full overflow-hidden">
                     <div
                       className="h-full rounded-full transition-all duration-500"
-                      style={{
-                        width: `${progress}%`,
-                        backgroundColor: levelData.color,
-                      }}
+                      style={{ width: `${progress}%`, background: tier ? `linear-gradient(90deg, ${tier.dark}, ${tier.light})` : '#525252' }}
                     />
                   </div>
-                  <div className="text-[10px] text-neutral-500 mt-1">
-                    {value} {isMaxLevel ? '(макс.)' : `/ ${nextThreshold}`}
+                  <div className="relative text-[10px] text-neutral-500 mt-1.5 text-center">
+                    {isMax ? `${value} · максимум` : `${value} / ${nextThreshold}`}
                   </div>
                 </button>
               );
             })}
           </div>
 
-          {/* Легенда уровней */}
-          <div className="mt-6 pt-6 border-t border-neutral-800">
-            <h3 className="text-sm font-medium text-white mb-3">Уровни достижений</h3>
+          {/* Ранги */}
+          <div className="mt-8 pt-6 border-t border-neutral-800">
+            <h3 className="text-sm font-medium text-white mb-3 flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-amber-400" />
+              Ранги значков
+            </h3>
             <div className="flex flex-wrap gap-2">
-              {ACHIEVEMENT_LEVELS.map((lvl) => (
+              {TIERS.map((t, i) => (
                 <div
-                  key={lvl.level}
-                  className="flex items-center gap-1.5 px-2 py-1 bg-neutral-800 rounded-lg"
+                  key={t.key}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-neutral-800 bg-neutral-800/50"
                 >
-                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: lvl.color }} />
-                  <span className="text-xs text-neutral-400">Ур. {lvl.level}</span>
+                  <span
+                    className="w-3.5 h-3.5 rounded-full"
+                    style={{ background: `linear-gradient(135deg, ${t.light}, ${t.dark})`, boxShadow: `0 0 8px ${t.glow}` }}
+                  />
+                  <span className="text-xs text-neutral-300">{t.name}</span>
+                  <span className="text-[10px] text-neutral-500">ур. {i * 2 + 1}–{i * 2 + 2}</span>
                 </div>
               ))}
             </div>
@@ -265,144 +165,105 @@ export default function AchievementsModal({
       </div>
 
       {/* Детали достижения */}
-      {selectedAchievement && (
+      {selectedRow && (
         <div
-          className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] flex items-center justify-center p-4"
-          onClick={() => setSelectedAchievement(null)}
+          className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[10001] flex items-end sm:items-center justify-center sm:p-4"
+          onClick={(e) => {
+            e.stopPropagation();
+            setSelected(null);
+          }}
         >
           <div
-            className="bg-neutral-900 rounded-2xl max-w-md w-full p-6 relative border border-neutral-800"
+            className="bg-neutral-900 sm:rounded-3xl rounded-t-3xl max-w-md w-full max-h-[90vh] overflow-y-auto p-6 relative border border-neutral-800 animate-slide-up"
             onClick={(e) => e.stopPropagation()}
           >
             <button
-              onClick={() => setSelectedAchievement(null)}
+              onClick={() => setSelected(null)}
+              aria-label="Закрыть"
               className="absolute top-4 right-4 w-8 h-8 bg-neutral-800 hover:bg-neutral-700 rounded-full flex items-center justify-center transition"
             >
               <X className="w-4 h-4 text-neutral-400" />
             </button>
 
             {(() => {
-              const value = selectedAchievement.getValue(stats);
-              const { level, progress, nextThreshold } = getAchievementLevel(
-                selectedAchievement.thresholds,
-                value,
-              );
-              const levelData = ACHIEVEMENT_LEVELS[level - 1] || ACHIEVEMENT_LEVELS[0];
-              const Icon = iconMap[selectedAchievement.icon] || Trophy;
-              const isMaxLevel = level === 10;
-
+              const { def, value, level, progress, nextThreshold } = selectedRow;
+              const tier = tierForLevel(level);
+              const isMax = level === MAX_LEVEL;
               return (
                 <>
-                  <div className="flex items-center gap-4 mb-6">
-                    <div
-                      className="w-16 h-16 rounded-xl flex items-center justify-center"
-                      style={{
-                        backgroundColor: levelData.color + '20',
-                        boxShadow: `0 0 30px ${levelData.glowColor}`,
-                      }}
-                    >
-                      <Icon className="w-8 h-8" style={{ color: levelData.color }} />
+                  <div className="flex flex-col items-center text-center mb-5">
+                    <div className="relative">
+                      {tier && (
+                        <div className="absolute inset-0 blur-2xl opacity-60 rounded-full" style={{ background: tier.glow }} />
+                      )}
+                      <AchievementBadge id={def.id} level={level} size={132} className="relative" />
                     </div>
-                    <div>
-                      <h2 className="text-xl font-bold text-white">
-                        {selectedAchievement.title}
-                      </h2>
-                      <p className="text-sm text-neutral-400">
-                        {selectedAchievement.description}
-                      </p>
-                      <div className="mt-1 flex items-center gap-2">
-                        <span
-                          className="text-xs font-bold px-2 py-0.5 rounded"
-                          style={{
-                            backgroundColor: levelData.color + '20',
-                            color: levelData.color,
-                          }}
-                        >
-                          Уровень {level}
+                    <h2 className="text-xl font-bold text-white mt-3">{def.title}</h2>
+                    <p className="text-sm text-neutral-400 mt-1 max-w-xs">{def.description}</p>
+                    <div className="mt-2 flex items-center gap-2">
+                      <span
+                        className="text-xs font-bold px-2.5 py-0.5 rounded-full"
+                        style={{ background: (tier ? tier.mid : '#737373') + '25', color: tier ? tier.light : '#a3a3a3' }}
+                      >
+                        {tier ? `${tier.name} · уровень ${level}` : 'Не открыто'}
+                      </span>
+                      {isMax && (
+                        <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-amber-400/20 text-amber-300">
+                          МАКСИМУМ
                         </span>
-                        {isMaxLevel && (
-                          <span className="text-xs font-bold px-2 py-0.5 rounded bg-yellow-400/20 text-yellow-400">
-                            МАКСИМУМ
-                          </span>
-                        )}
-                      </div>
+                      )}
                     </div>
                   </div>
 
-                  <div className="bg-neutral-800 rounded-xl p-4 mb-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm text-neutral-400">Прогресс</span>
-                      <span className="text-sm font-bold text-white">
-                        {value} {isMaxLevel ? '(макс.)' : `/ ${nextThreshold}`}
+                  <div className="bg-neutral-800/70 rounded-2xl p-4 mb-5">
+                    <div className="flex items-center justify-between mb-2 text-sm">
+                      <span className="text-neutral-400">Прогресс</span>
+                      <span className="font-bold text-white">
+                        {value} {isMax ? '(максимум)' : `/ ${nextThreshold}`}
                       </span>
                     </div>
-                    <div className="w-full h-3 bg-neutral-700 rounded-full overflow-hidden">
+                    <div className="h-2.5 bg-neutral-700 rounded-full overflow-hidden">
                       <div
                         className="h-full rounded-full transition-all duration-500"
-                        style={{
-                          width: `${progress}%`,
-                          backgroundColor: levelData.color,
-                        }}
+                        style={{ width: `${progress}%`, background: tier ? `linear-gradient(90deg, ${tier.dark}, ${tier.light})` : '#525252' }}
                       />
                     </div>
-                    <div className="text-xs text-neutral-500 mt-1">
-                      {Math.round(progress)}% до следующего уровня
-                    </div>
+                    {!isMax && (
+                      <div className="text-xs text-neutral-500 mt-1.5">{Math.round(progress)}% до следующего уровня</div>
+                    )}
                   </div>
 
-                  {/* Все уровни */}
-                  <div>
-                    <h3 className="text-sm font-medium text-white mb-3">Все уровни</h3>
-                    <div className="space-y-2">
-                      {selectedAchievement.thresholds.map((threshold, idx) => {
-                        const lvl = idx + 1;
-                        const lvlData = ACHIEVEMENT_LEVELS[idx];
-                        const isUnlocked = value >= threshold;
-                        const isCurrent = lvl === level;
-
-                        return (
-                          <div
-                            key={lvl}
-                            className={`flex items-center gap-3 p-2 rounded-lg transition ${
-                              isCurrent ? 'bg-neutral-800 border border-neutral-700' : ''
-                            }`}
-                          >
-                            <div
-                              className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-                              style={{
-                                backgroundColor: isUnlocked
-                                  ? lvlData.color + '20'
-                                  : 'rgba(115,115,115,0.1)',
-                                opacity: isUnlocked ? 1 : 0.4,
-                              }}
-                            >
-                              <span
-                                className="text-xs font-bold"
-                                style={{ color: isUnlocked ? lvlData.color : '#737373' }}
-                              >
-                                {lvl}
-                              </span>
+                  <h3 className="text-sm font-medium text-white mb-2">Все уровни</h3>
+                  <div className="space-y-1.5">
+                    {def.thresholds.map((threshold, idx) => {
+                      const lvl = idx + 1;
+                      const lvlTier = tierForLevel(lvl)!;
+                      const done = value >= threshold;
+                      const current = lvl === level;
+                      return (
+                        <div
+                          key={lvl}
+                          className={`flex items-center gap-3 p-2 rounded-xl transition ${
+                            current ? 'bg-neutral-800 ring-1 ring-neutral-700' : ''
+                          }`}
+                        >
+                          <AchievementBadge id={def.id} level={done ? lvl : 0} size={36} />
+                          <div className="flex-1 min-w-0">
+                            <div className="text-xs font-medium text-white">
+                              Уровень {lvl} · {lvlTier.name}
                             </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="text-xs font-medium text-white">
-                                Уровень {lvl}
-                              </div>
-                              <div className="text-[10px] text-neutral-500">
-                                {threshold} {selectedAchievement.description.toLowerCase()}
-                              </div>
+                            <div className="text-[11px] text-neutral-500">
+                              {threshold} {def.unit}
                             </div>
-                            {isUnlocked ? (
-                              <Check
-                                className="w-4 h-4 flex-shrink-0"
-                                style={{ color: lvlData.color }}
-                              />
-                            ) : (
-                              <Lock className="w-4 h-4 flex-shrink-0 text-neutral-600" />
-                            )}
                           </div>
-                        );
-                      })}
-                    </div>
+                          {done ? (
+                            <Check className="w-4 h-4 flex-shrink-0" style={{ color: lvlTier.mid }} />
+                          ) : (
+                            <Lock className="w-4 h-4 flex-shrink-0 text-neutral-600" />
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </>
               );

@@ -1,5 +1,6 @@
 'use client';
 
+import SteamIcon from '@/components/SteamIcon';
 import { useEffect, useState } from 'react';
 import {
   Pencil, MapPin, ThumbsUp, ExternalLink,
@@ -143,7 +144,7 @@ export default function ProfileHeader({
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1.5 px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-md bg-neutral-800/70 hover:bg-neutral-800 border border-neutral-700 text-neutral-300 text-[11px] sm:text-xs transition"
               >
-                <img src="https://cdn.simpleicons.org/steam/66c0f4" alt="Steam" className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                <SteamIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#66c0f4]" />
                 Steam
                 <ExternalLink className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
               </a>

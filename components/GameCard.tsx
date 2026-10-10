@@ -1,11 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import Image from 'next/image';
-import { Star, Clock, Heart, Gamepad, Check, XCircle, Gamepad2 } from 'lucide-react';
+import { Star, Clock, Heart, Gamepad, Check, XCircle } from 'lucide-react';
 import { Game, GameData } from '@/types/game';
 import { getMetacriticColor, getStatusColor } from '@/lib/utils';
-import { mapRawgGame, RawgGame } from '@/lib/rawg';
 import SteamRating from './SteamRating';
 
 interface GameCardProps {
@@ -25,6 +23,7 @@ const statusIcon = {
   none: null,
 };
 
+// Сколько карточек в сетке грузить сразу (выше первого экрана)
 const EAGER_LIMIT = 4;
 
 export default function GameCard({
@@ -39,68 +38,22 @@ export default function GameCard({
   const delay = Math.min(index * 40, 400);
   const isPriority = index < EAGER_LIMIT;
 
-  // Локальные значения — дозаполняем, если пусто
-  const [title, setTitle] = useState(game.title);
-  const [cover, setCover] = useState(game.cover);
-  const [fetching, setFetching] = useState(false);
-
-  // Синхронизация, если пропс обновился
-  useEffect(() => {
-    setTitle(game.title);
-    setCover(game.cover);
-  }, [game.id, game.title, game.cover]);
-
-  // Догрузка, если не хватает данных
-  useEffect(() => {
-    if (title && cover) return;
-    if (!game.id) return;
-
-    let cancelled = false;
-    setFetching(true);
-
-    fetch(`/api/games/${game.id}?full=true`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((raw: RawgGame | null) => {
-        if (cancelled || !raw) return;
-        const mapped = mapRawgGame(raw);
-        if (mapped.title) setTitle(mapped.title);
-        if (mapped.cover) setCover(mapped.cover);
-      })
-      .catch(() => {})
-      .finally(() => {
-        if (!cancelled) setFetching(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [game.id]);
-
-  const displayTitle = title || `Игра #${game.id}`;
-
   return (
     <div
       onClick={onClick}
-      className="group cursor-pointer bg-neutral-900 rounded-xl border border-neutral-800 overflow-hidden hover:shadow-lg hover:border-neutral-700 transition-all duration-200 hover:-translate-y-1 animate-fade-in-up"
+      className="card-glow group cursor-pointer bg-neutral-900 rounded-xl border border-neutral-800 overflow-hidden animate-fade-in-up"
       style={{ animationDelay: `${delay}ms` }}
     >
       <div className="relative aspect-video bg-neutral-800 overflow-hidden">
-        {cover ? (
-          <Image
-            src={cover}
-            alt={displayTitle}
-            fill
-            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, (max-width: 1280px) 33vw, 25vw"
-            className="object-cover group-hover:scale-105 transition-transform duration-300"
-            loading={isPriority ? 'eager' : 'lazy'}
-            priority={isPriority}
-          />
-        ) : (
-          <div className="absolute inset-0 flex items-center justify-center bg-neutral-800">
-            <Gamepad2 className="w-10 h-10 text-neutral-600" />
-          </div>
-        )}
+        <Image
+          src={game.cover || 'https://via.placeholder.com/400x225/171717/525252?text=No+Image'}
+          alt={game.title}
+          fill
+          sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, (max-width: 1280px) 33vw, 25vw"
+          className="object-cover group-hover:scale-105 transition-transform duration-300"
+          loading={isPriority ? 'eager' : 'lazy'}
+          priority={isPriority}
+        />
 
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
 
@@ -113,7 +66,7 @@ export default function GameCard({
               <span className="text-[9px] opacity-70">MC</span>
             </div>
           )}
-          {!hideSteam && displayTitle && <SteamRating gameTitle={displayTitle} variant="badge" />}
+          {!hideSteam && <SteamRating gameTitle={game.title} variant="badge" />}
         </div>
 
         {showUserData && showUserData.status !== 'none' && (
@@ -126,13 +79,13 @@ export default function GameCard({
 
         <div className="absolute bottom-2 left-2 right-2">
           <h3 className="font-semibold text-sm text-white line-clamp-1 drop-shadow-lg">
-            {displayTitle}
+            {game.title}
           </h3>
         </div>
       </div>
 
       <div className="p-3 space-y-2">
-        <div className="flex flex-wrap gap-1 min-h-[18px]">
+        <div className="flex flex-wrap gap-1">
           {game.genres?.slice(0, 3).map((g) => (
             <span
               key={g.id}
@@ -144,9 +97,9 @@ export default function GameCard({
         </div>
 
         <div className="flex items-center justify-between text-xs text-neutral-500">
-          <span>{game.year || ''}</span>
+          <span>{game.year}</span>
           <span className="truncate ml-2">
-            {game.platforms?.slice(0, 2).join(', ') || ''}
+            {game.platforms?.slice(0, 2).join(', ') || 'PC'}
           </span>
         </div>
 
