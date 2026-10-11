@@ -22,6 +22,8 @@ import ForYou from '@/components/ForYou';
 import ReleasesTicker from '@/components/ReleasesTicker';
 import GameMediaCarousel from '@/components/GameMediaCarousel';
 import SteamRating from '@/components/SteamRating';
+import GameSeries from '@/components/GameSeries';
+import GameMeta from '@/components/GameMeta';
 import ReviewsSection from '@/components/ReviewsSection';
 
 type ActivityType = 'added' | 'started' | 'completed' | 'dropped' | 'rated' | 'reviewed';
@@ -668,23 +670,7 @@ export default function Home() {
               )}
             </div>
 
-            {selectedGame.platforms.length > 0 && (
-              <div>
-                <h3 className="text-xs font-medium text-neutral-500 uppercase tracking-wider mb-2">
-                  Платформы
-                </h3>
-                <div className="flex gap-1.5 flex-wrap">
-                  {selectedGame.platforms.map((platform) => (
-                    <div
-                      key={platform}
-                      className="px-2.5 py-1 bg-neutral-800 rounded-lg text-xs text-neutral-300"
-                    >
-                      {platform}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+            <GameMeta gameId={selectedGame.id} platforms={selectedGame.platforms} />
 
             {userId && (
               <>
@@ -743,6 +729,8 @@ export default function Home() {
                     <span className="text-sm text-neutral-400">часов</span>
                   </div>
                 </div>
+
+                <GameSeries gameId={selectedGame.id} onOpen={openGame} />
 
                 <div className="bg-neutral-800 rounded-xl p-4 md:p-5">
                   <h3 className="font-semibold text-white text-sm md:text-base mb-3 flex items-center gap-2">
