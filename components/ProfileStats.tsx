@@ -1,6 +1,9 @@
 'use client';
 
-import { BarChart3, Clock, Star, Trophy, Gamepad2, Flame } from 'lucide-react';
+import { useId, useState } from 'react';
+import {
+  BarChart3, Clock, Star, Trophy, Gamepad2, Flame, ChevronDown, Hourglass,
+} from 'lucide-react';
 
 interface ProfileStatsProps {
   topGenres: [string, number][];
@@ -28,17 +31,19 @@ function Donut({ values, total }: { values: { value: number; color: string }[]; 
   const r = 38;
   const c = 2 * Math.PI * r;
   const sum = values.reduce((s, v) => s + v.value, 0);
+  const visible = values.filter((x) => x.value > 0).length;
   let offset = 0;
 
   return (
     <div className="relative w-32 h-32 flex-shrink-0">
-      <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
+      <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90" aria-hidden="true">
         <circle cx="50" cy="50" r={r} fill="none" stroke="#262626" strokeWidth="11" />
         {sum > 0 &&
           values.map((v, i) => {
             if (v.value === 0) return null;
             const len = (v.value / sum) * c;
-            const gap = values.filter((x) => x.value > 0).length > 1 ? 2 : 0;
+            const gap = visible > 1 ? 2 : 0;
+            const dash = Math.max(len - gap, 0);
             const el = (
               <circle
                 key={i}
@@ -49,7 +54,7 @@ function Donut({ values, total }: { values: { value: number; color: string }[]; 
                 stroke={v.color}
                 strokeWidth="11"
                 strokeLinecap="butt"
-                strokeDasharray={`${Math.max(len - gap, 0)} ${c - Math.max(len - gap, 0)}`}
+                strokeDasharray={`${dash} ${c - dash}`}
                 strokeDashoffset={-offset}
                 className="transition-all duration-700"
               />
@@ -73,15 +78,21 @@ export default function ProfileStats({
   averageRating,
   totalGames,
 }: ProfileStatsProps) {
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const panelId = useId();
+
   const tracked = statusCounts.completed + statusCounts.playing + statusCounts.dropped;
   const completionRate = tracked > 0 ? Math.round((statusCounts.completed / tracked) * 100) : 0;
   const maxGenre = topGenres[0]?.[1] || 1;
+  const hoursPerGame = totalGames > 0 ? Math.round(totalHours / totalGames) : 0;
 
   const tiles = [
     { icon: Clock, label: 'Часов в играх', value: totalHours.toLocaleString('ru-RU'), tint: 'text-sky-400 bg-sky-500/10' },
     { icon: Star, label: 'Средняя оценка', value: averageRating !== null ? averageRating.toFixed(1) : '—', tint: 'text-amber-400 bg-amber-500/10' },
     { icon: Trophy, label: 'Прошёл из начатых', value: `${completionRate}%`, tint: 'text-emerald-400 bg-emerald-500/10' },
     { icon: Gamepad2, label: 'В желаемом', value: String(statusCounts.want), tint: 'text-fuchsia-400 bg-fuchsia-500/10' },
+    { icon: Hourglass, label: 'Часов на игру', value: hoursPerGame.toLocaleString('ru-RU'), tint: 'text-orange-400 bg-orange-500/10' },
+    { icon: Flame, label: 'Любимый жанр', value: topGenres[0]?.[0] ?? '—', tint: 'text-rose-400 bg-rose-500/10' },
   ];
 
   return (
@@ -93,23 +104,7 @@ export default function ProfileStats({
         Интересы и статистика
       </h3>
 
-      {/* Ключевые цифры */}
-      <div className="grid grid-cols-2 gap-2.5">
-        {tiles.map(({ icon: Icon, label, value, tint }) => (
-          <div
-            key={label}
-            className="rounded-xl bg-neutral-800/60 border border-neutral-800 p-3 transition hover:border-neutral-700 hover:bg-neutral-800"
-          >
-            <span className={`w-7 h-7 rounded-lg inline-flex items-center justify-center ${tint}`}>
-              <Icon className="w-3.5 h-3.5" />
-            </span>
-            <div className="text-xl font-bold text-white mt-2 leading-none">{value}</div>
-            <div className="text-[11px] text-neutral-500 mt-1">{label}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* Статусы: кольцевая диаграмма + легенда */}
+      {/* Статусы игр: кольцевая диаграмма + легенда (всегда на виду) */}
       <div>
         <div className="text-xs font-medium text-neutral-400 uppercase tracking-wider mb-3">Статусы игр</div>
         <div className="flex items-center gap-5">
@@ -134,14 +129,14 @@ export default function ProfileStats({
         </div>
       </div>
 
-      {/* Жанры */}
+      {/* Любимые жанры (всегда на виду) */}
       <div>
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center justify-between mb-3 gap-2">
           <div className="text-xs font-medium text-neutral-400 uppercase tracking-wider">Любимые жанры</div>
           {topGenres[0] && (
-            <span className="flex items-center gap-1 text-[11px] text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded-full">
-              <Flame className="w-3 h-3" />
-              {topGenres[0][0]}
+            <span className="flex items-center gap-1 text-[11px] text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded-full max-w-[60%]">
+              <Flame className="w-3 h-3 flex-shrink-0" />
+              <span className="truncate">{topGenres[0][0]}</span>
             </span>
           )}
         </div>
@@ -165,6 +160,54 @@ export default function ProfileStats({
             ))}
           </ul>
         )}
+      </div>
+
+      {/* Статистика профиля: свёрнута по умолчанию, раскрывается по клику */}
+      <div className="border-t border-neutral-800 pt-4 -mb-1">
+        <button
+          type="button"
+          onClick={() => setDetailsOpen((v) => !v)}
+          aria-expanded={detailsOpen}
+          aria-controls={panelId}
+          className="group w-full flex items-center justify-between gap-3 rounded-xl px-3 py-2.5 bg-neutral-800/40 hover:bg-neutral-800 border border-neutral-800 hover:border-neutral-700 transition"
+        >
+          <span className="flex items-center gap-2 text-sm font-medium text-neutral-200">
+            <Trophy className="w-4 h-4 text-emerald-400" />
+            Статистика профиля
+          </span>
+          <span className="flex items-center gap-2 text-xs text-neutral-500 group-hover:text-neutral-300 transition">
+            {detailsOpen ? 'Свернуть' : 'Показать'}
+            <ChevronDown
+              className={`w-4 h-4 transition-transform duration-300 ${detailsOpen ? 'rotate-180' : ''}`}
+            />
+          </span>
+        </button>
+
+        {/* Плавное раскрытие: высота анимируется через grid-template-rows */}
+        <div
+          id={panelId}
+          className={`grid transition-[grid-template-rows,opacity] duration-300 ease-out ${
+            detailsOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+          }`}
+          aria-hidden={!detailsOpen}
+        >
+          <div className="overflow-hidden">
+            <div className="grid grid-cols-2 gap-2.5 pt-3">
+              {tiles.map(({ icon: Icon, label, value, tint }) => (
+                <div
+                  key={label}
+                  className="rounded-xl bg-neutral-800/60 border border-neutral-800 p-3 transition hover:border-neutral-700 hover:bg-neutral-800"
+                >
+                  <span className={`w-7 h-7 rounded-lg inline-flex items-center justify-center ${tint}`}>
+                    <Icon className="w-3.5 h-3.5" />
+                  </span>
+                  <div className="text-xl font-bold text-white mt-2 leading-none truncate" title={value}>{value}</div>
+                  <div className="text-[11px] text-neutral-500 mt-1">{label}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

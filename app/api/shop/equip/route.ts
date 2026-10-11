@@ -10,12 +10,18 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => ({}));
     const itemId = body?.itemId;
 
-    // itemId = null → снять всё
+    // itemId = null → снять предмет указанного типа (без типа — снять всё)
     if (!itemId) {
-      const { error } = await db
-        .from('profiles')
-        .update({ active_status_id: null, active_background_id: null })
-        .eq('id', user.id);
+      const type = body?.type;
+      const patch: Record<string, null> =
+        type === 'status'
+          ? { active_status_id: null }
+          : type === 'background'
+            ? { active_background_id: null }
+            : type === 'banner'
+              ? { active_banner_id: null }
+              : { active_status_id: null, active_background_id: null, active_banner_id: null };
+      const { error } = await db.from('profiles').update(patch).eq('id', user.id);
       if (error) throw error;
       return NextResponse.json({ ok: true });
     }
@@ -44,6 +50,7 @@ export async function POST(request: NextRequest) {
     const patch: Record<string, string | null> = {};
     if (item.type === 'status') patch.active_status_id = item.id;
     else if (item.type === 'background') patch.active_background_id = item.id;
+    else if (item.type === 'banner') patch.active_banner_id = item.id;
     else {
       return NextResponse.json({ error: 'Этот тип нельзя применить' }, { status: 400 });
     }

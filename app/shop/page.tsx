@@ -3,7 +3,7 @@
 import { authFetch } from '@/lib/api-client';
 import { useEffect, useState } from 'react';
 import {
-  Loader2, Coins, Star, Image as ImageIcon, Check, Lock, ShoppingBag,
+  Loader2, Coins, Star, Image as ImageIcon, Check, Lock, ShoppingBag, PanelTop,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
@@ -11,7 +11,7 @@ import { useToast } from '@/contexts/ToastContext';
 
 interface ShopItem {
   id: string;
-  type: 'status' | 'background' | string;
+  type: 'status' | 'background' | 'banner' | string;
   name: string;
   description: string | null;
   price: number;
@@ -27,9 +27,10 @@ export default function ShopPage() {
   const [owned, setOwned] = useState<Set<string>>(new Set());
   const [activeStatus, setActiveStatus] = useState<string | null>(null);
   const [activeBg, setActiveBg] = useState<string | null>(null);
+  const [activeBanner, setActiveBanner] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [tab, setTab] = useState<'status' | 'background'>('status');
+  const [tab, setTab] = useState<'status' | 'background' | 'banner'>('status');
 
   const coins = profile?.coins || 0;
 
@@ -54,6 +55,14 @@ export default function ShopPage() {
       setOwned(new Set((invRes.data || []).map((r: any) => r.item_id)));
       setActiveStatus(profRes.data?.active_status_id || null);
       setActiveBg(profRes.data?.active_background_id || null);
+
+      // Отдельно, чтобы магазин работал, даже если колонка ещё не создана
+      const bannerRes = await supabase
+        .from('profiles')
+        .select('active_banner_id')
+        .eq('id', userId)
+        .maybeSingle();
+      setActiveBanner((bannerRes.data as any)?.active_banner_id || null);
 
       if (profRes.data && typeof profRes.data.coins === 'number') {
         setProfile((prev) => ({ ...prev, coins: profRes.data!.coins }));
@@ -99,6 +108,7 @@ export default function ShopPage() {
       if (!res.ok) throw new Error();
       if (item.type === 'status') setActiveStatus(item.id);
       if (item.type === 'background') setActiveBg(item.id);
+      if (item.type === 'banner') setActiveBanner(item.id);
       showToast('Применено', 'success');
     } catch {
       showToast('Не удалось применить', 'error');
@@ -106,23 +116,24 @@ export default function ShopPage() {
     setBusyId(null);
   };
 
-  const handleUnequip = async (type: 'status' | 'background') => {
+  const handleUnequip = async (type: 'status' | 'background' | 'banner') => {
     if (!userId) return;
     try {
       const res = await authFetch('/api/shop/equip', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, itemId: null }),
+        body: JSON.stringify({ userId, itemId: null, type }),
       });
       if (!res.ok) throw new Error();
       if (type === 'status') setActiveStatus(null);
       if (type === 'background') setActiveBg(null);
+      if (type === 'banner') setActiveBanner(null);
       showToast('Снято', 'info');
     } catch {}
   };
 
   const filtered = items.filter((i) => i.type === tab);
-  const activeId = tab === 'status' ? activeStatus : activeBg;
+  const activeId = tab === 'status' ? activeStatus : tab === 'background' ? activeBg : activeBanner;
 
   return (
     <div className="min-h-screen bg-[#0a0a0a]">
@@ -136,7 +147,7 @@ export default function ShopPage() {
             <div>
               <h1 className="text-2xl font-bold text-white">Магазин</h1>
               <p className="text-sm text-neutral-500">
-                Трать монеты на цитаты и фоны профиля
+                Трать монеты на цитаты, фоны и шапки профиля
               </p>
             </div>
           </div>
@@ -171,6 +182,17 @@ export default function ShopPage() {
             <ImageIcon className="w-4 h-4" />
             Фоны
           </button>
+          <button
+            onClick={() => setTab('banner')}
+            className={`px-4 py-2.5 text-sm font-medium transition border-b-2 -mb-px flex items-center gap-2 ${
+              tab === 'banner'
+                ? 'text-indigo-400 border-indigo-500'
+                : 'text-neutral-400 border-transparent hover:text-white'
+            }`}
+          >
+            <PanelTop className="w-4 h-4" />
+            Шапки
+          </button>
         </div>
 
         {!userId ? (
@@ -203,6 +225,18 @@ export default function ShopPage() {
                       : 'border-neutral-800 hover:border-neutral-700'
                   }`}
                 >
+                  {/* Превью шапки: широкая полоса */}
+                  {item.type === 'banner' && (
+                    <div
+                      className="h-24 w-full border-b border-neutral-800"
+                      style={
+                        item.value?.startsWith('http')
+                          ? { backgroundImage: `url(${item.value})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+                          : { backgroundImage: item.value }
+                      }
+                    />
+                  )}
+
                   {/* Превью фона */}
                   {item.type === 'background' && (
                     <div
@@ -254,7 +288,7 @@ export default function ShopPage() {
                       {isOwned ? (
                         isActive ? (
                           <button
-                            onClick={() => handleUnequip(item.type as 'status' | 'background')}
+                            onClick={() => handleUnequip(item.type as 'status' | 'background' | 'banner')}
                             className="px-3 py-1.5 text-xs font-medium rounded-lg bg-rose-500/15 border border-rose-500/30 text-rose-400 hover:bg-rose-500/25 transition"
                           >
                             Снять

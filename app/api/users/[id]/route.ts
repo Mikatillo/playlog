@@ -31,6 +31,17 @@ export async function GET(
         .eq('user_id', id),
     ]);
 
+    // Отдельный запрос: если колонки active_banner_id ещё нет (SQL не выполнен), профиль всё равно откроется
+    let activeBannerId: string | null = null;
+    try {
+      const { data: b } = await supabase
+        .from('profiles')
+        .select('active_banner_id')
+        .eq('id', id)
+        .maybeSingle();
+      activeBannerId = (b as any)?.active_banner_id || null;
+    } catch {}
+
     const profile = profileRes.data;
     const reviews = reviewsRes.data;
     const likesCount = likesRes.count;
@@ -67,6 +78,7 @@ export async function GET(
           coins: profile.coins || 0,
           activeStatusId: profile.active_status_id || null,
           activeBackgroundId: profile.active_background_id || null,
+          activeBannerId,
         },
         stats: {
           likes: likesCount || 0,

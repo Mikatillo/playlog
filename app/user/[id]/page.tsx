@@ -53,6 +53,7 @@ interface PublicProfile {
   coins?: number;
   activeStatusId?: string | null;
   activeBackgroundId?: string | null;
+  activeBannerId?: string | null;
 }
 
 interface ProfileStats {
@@ -732,6 +733,7 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
             totalHours: publicProfile.totalHours,
             activeStatusId: publicProfile.activeStatusId,
             activeBackgroundId: publicProfile.activeBackgroundId,
+            activeBannerId: publicProfile.activeBannerId,
           }}
           isOwnProfile={isOwnProfile}
           isFollowing={isFollowing}
