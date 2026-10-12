@@ -10,7 +10,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { Game, GameData } from '@/types/game';
-import { mapRawgGame, RawgGame } from '@/lib/rawg';
+import { mapRawgGame, RawgGame, cleanDescription } from '@/lib/rawg';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
@@ -20,6 +20,10 @@ import GameCard from '@/components/GameCard';
 import GameCardSkeleton from '@/components/GameCardSkeleton';
 import ForYou from '@/components/ForYou';
 import ReleasesTicker from '@/components/ReleasesTicker';
+import SteamHero from '@/components/SteamHero';
+import ContinuePlaying from '@/components/ContinuePlaying';
+import GenreTiles from '@/components/GenreTiles';
+import HomeWelcome from '@/components/HomeWelcome';
 import GameMediaCarousel from '@/components/GameMediaCarousel';
 import SteamRating from '@/components/SteamRating';
 import GameSeries from '@/components/GameSeries';
@@ -28,20 +32,23 @@ import ReviewsSection from '@/components/ReviewsSection';
 
 type ActivityType = 'added' | 'started' | 'completed' | 'dropped' | 'rated' | 'reviewed';
 
+// Жанры RAWG — по slug (числовые id легко перепутать)
 const genres = [
   { id: '', name: 'Все жанры' },
-  { id: '4', name: 'Action' },
-  { id: '3', name: 'Adventure' },
-  { id: '5', name: 'RPG' },
-  { id: '2', name: 'Strategy' },
-  { id: '1', name: 'Shooter' },
-  { id: '7', name: 'Puzzle' },
-  { id: '10', name: 'Racing' },
-  { id: '11', name: 'Sports' },
-  { id: '40', name: 'Indie' },
+  { id: 'action', name: 'Экшен' },
+  { id: 'adventure', name: 'Приключения' },
+  { id: 'role-playing-games-rpg', name: 'RPG' },
+  { id: 'strategy', name: 'Стратегии' },
+  { id: 'shooter', name: 'Шутеры' },
+  { id: 'puzzle', name: 'Головоломки' },
+  { id: 'racing', name: 'Гонки' },
+  { id: 'sports', name: 'Спорт' },
+  { id: 'simulation', name: 'Симуляторы' },
+  { id: 'indie', name: 'Инди' },
 ];
 
 const sortOptions = [
+  { value: 'steam', label: 'Популярные в Steam' },
   { value: '-added', label: 'Популярные' },
   { value: '-rating', label: 'По рейтингу' },
   { value: '-released', label: 'Новинки' },
@@ -55,7 +62,7 @@ export default function Home() {
   const [mounted, setMounted] = useState(false);
   const [selectedGenre, setSelectedGenre] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
-  const [sortBy, setSortBy] = useState<string>('-added');
+  const [sortBy, setSortBy] = useState<string>('steam');
   const [selectedGame, setSelectedGame] = useState<Game | null>(null);
   const [userRating, setUserRating] = useState(0);
   const [userHours, setUserHours] = useState(0);
@@ -94,7 +101,31 @@ export default function Home() {
       try {
         const g = genre !== undefined ? genre : selectedGenre;
         const s = sort !== undefined ? sort : sortBy;
-        let url = `/api/games?page=${pageNum}&pageSize=20&ordering=${s}`;
+
+        // Популярные в Steam за всё время (по жанру, если выбран) — листается дальше
+        if (s === 'steam') {
+          try {
+            const res = await fetch(
+              `/api/steam/genre?page=${pageNum}${g ? `&genre=${encodeURIComponent(g)}` : ''}`,
+            ).then((r) => r.json());
+            const fromApi: Game[] = (res.results || []).map((r: RawgGame) => mapRawgGame(r));
+            if (fromApi.length > 0) {
+              setGames((prev) => {
+                const base = append ? prev : [];
+                const seen = new Set(base.map((x) => x.id));
+                return [...base, ...fromApi.filter((x) => !seen.has(x.id))];
+              });
+              setHasMore(!!res.next);
+              setLoading(false);
+              return;
+            }
+          } catch {
+            // упадём в запасной вариант ниже
+          }
+        }
+        // Запасной вариант, если Steam не ответил: обычный каталог по популярности
+        const ord = s === 'steam' ? '-added' : s;
+        let url = `/api/games?page=${pageNum}&pageSize=20&ordering=${ord}`;
         if (g) url += `&genres=${g}`;
         const response = await fetch(url);
         const data = await response.json();
@@ -197,7 +228,7 @@ export default function Home() {
       } else {
         setSearchQuery('');
         setPage(1);
-        loadGames(1, false, '', '-added');
+        loadGames(1, false, '', 'steam');
       }
     };
     window.addEventListener('playlog:search', handler);
@@ -208,7 +239,7 @@ export default function Home() {
       setSearchQuery(pending);
       performSearch(pending);
     } else {
-      loadGames(1, false, '', '-added');
+      loadGames(1, false, '', 'steam');
     }
 
     return () => window.removeEventListener('playlog:search', handler);
@@ -326,10 +357,11 @@ export default function Home() {
     }).catch(() => {});
   };
 
-  const translateDescription = async (text: string, gameId: number) => {
+  const translateDescription = async (rawText: string, gameId: number) => {
+    const text = cleanDescription(rawText);
     const cached = localStorage.getItem(`translation_${gameId}`);
     if (cached) {
-      setDescriptionRu(cached);
+      setDescriptionRu(cleanDescription(cached));
       return;
     }
     if (/[а-яА-ЯёЁ]/.test(text)) {
@@ -516,7 +548,7 @@ export default function Home() {
     setSelectedGenre('');
     setPage(1);
     window.dispatchEvent(new CustomEvent('playlog:search', { detail: { query: '' } }));
-    loadGames(1, false, '', '-added');
+    loadGames(1, false, '', 'steam');
   };
 
   const gameModal = selectedGame ? (
@@ -620,7 +652,7 @@ export default function Home() {
                 <div>
                   {descriptionExpanded ? (
                     <div>
-                      <p className="text-neutral-300 leading-relaxed text-sm md:text-base">
+                      <p className="whitespace-pre-line text-neutral-300 leading-relaxed text-sm md:text-base">
                         {descriptionRu}
                       </p>
                       <button
@@ -633,7 +665,7 @@ export default function Home() {
                     </div>
                   ) : (
                     <div>
-                      <p className="text-neutral-300 leading-relaxed line-clamp-4 text-sm md:text-base">
+                      <p className="whitespace-pre-line text-neutral-300 leading-relaxed line-clamp-4 text-sm md:text-base">
                         {descriptionRu}
                       </p>
                       {descriptionRu.length > 300 && (
@@ -650,7 +682,7 @@ export default function Home() {
                 </div>
               ) : (
                 <div>
-                  <p className="text-neutral-400 leading-relaxed mb-3 line-clamp-3 text-sm md:text-base">
+                  <p className="whitespace-pre-line text-neutral-400 leading-relaxed mb-3 line-clamp-3 text-sm md:text-base">
                     {selectedGame.description}
                   </p>
                   {selectedGame?.descriptionRaw && (
@@ -827,16 +859,38 @@ export default function Home() {
         </div>
       )}
       <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-8">
-        <main className="space-y-5 md:space-y-6">
-          <ReleasesTicker />
+        <main className="space-y-7 md:space-y-10">
+          {searchMode === 'browse' && (
+            <>
+              <HomeWelcome />
+              <SteamHero onGameClick={openGame} />
+              <ContinuePlaying onGameClick={openGame} />
+              <ForYou onGameClick={openGame} />
+              <GenreTiles
+                selected={selectedGenre}
+                onPick={(id) => {
+                  setSelectedGenre(id);
+                  setTimeout(
+                    () => document.getElementById('catalog')?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+                    50,
+                  );
+                }}
+              />
+              <ReleasesTicker />
+            </>
+          )}
 
-          {searchMode === 'browse' && <ForYou onGameClick={openGame} />}
-
-          <div>
+          <div id="catalog" className="scroll-mt-20">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
               <h2 className="text-lg font-semibold text-white flex items-center gap-2">
                 <TrendingUp className="w-5 h-5 text-indigo-500" />
-                {searchMode === 'results' ? `Результаты: "${searchQuery}"` : 'Популярные игры'}
+                {searchMode === 'results'
+                  ? `Результаты: "${searchQuery}"`
+                  : sortBy === 'steam'
+                    ? selectedGenre
+                      ? `Популярные в Steam: ${genres.find((x) => x.id === selectedGenre)?.name || ''}`
+                      : 'Популярные в Steam'
+                    : 'Каталог игр'}
               </h2>
 
               {searchMode === 'browse' && (

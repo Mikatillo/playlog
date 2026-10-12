@@ -14,7 +14,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import { Game, GameData } from '@/types/game';
-import { mapRawgGame, RawgGame } from '@/lib/rawg';
+import { mapRawgGame, RawgGame, cleanDescription } from '@/lib/rawg';
 import GameCard from '@/components/GameCard';
 import GameCardSkeleton from '@/components/GameCardSkeleton';
 import GameMediaCarousel from '@/components/GameMediaCarousel';
@@ -22,6 +22,8 @@ import SteamRating from '@/components/SteamRating';
 import ReviewsSection from '@/components/ReviewsSection';
 import EditProfileModal from '@/components/EditProfileModal';
 import ProfileHeader from '@/components/ProfileHeader';
+import GameMeta from '@/components/GameMeta';
+import GameSeries from '@/components/GameSeries';
 import ActivityFeed from '@/components/ActivityFeed';
 
 type TopTab = 'games' | 'wishlist' | 'reviews';
@@ -445,10 +447,11 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
     setSelectedScreenshot(null);
   };
 
-  const translateDescription = async (text: string, gameId: number) => {
+  const translateDescription = async (rawText: string, gameId: number) => {
+    const text = cleanDescription(rawText);
     const cached = localStorage.getItem(`translation_${gameId}`);
     if (cached) {
-      setDescriptionRu(cached);
+      setDescriptionRu(cleanDescription(cached));
       return;
     }
     if (/[а-яА-ЯёЁ]/.test(text)) {
@@ -1148,7 +1151,7 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
                     <div>
                       {descriptionExpanded ? (
                         <div>
-                          <p className="text-neutral-300 leading-relaxed text-sm md:text-base">
+                          <p className="whitespace-pre-line text-neutral-300 leading-relaxed text-sm md:text-base">
                             {descriptionRu}
                           </p>
                           <button
@@ -1161,7 +1164,7 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
                         </div>
                       ) : (
                         <div>
-                          <p className="text-neutral-300 leading-relaxed line-clamp-4 text-sm md:text-base">
+                          <p className="whitespace-pre-line text-neutral-300 leading-relaxed line-clamp-4 text-sm md:text-base">
                             {descriptionRu}
                           </p>
                           {descriptionRu.length > 300 && (
@@ -1178,7 +1181,7 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
                     </div>
                   ) : (
                     <div>
-                      <p className="text-neutral-400 leading-relaxed mb-3 line-clamp-3 text-sm md:text-base">
+                      <p className="whitespace-pre-line text-neutral-400 leading-relaxed mb-3 line-clamp-3 text-sm md:text-base">
                         {selectedGame.description}
                       </p>
                       {selectedGame?.descriptionRaw && (
@@ -1195,23 +1198,9 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
                   )}
                 </div>
 
-                {selectedGame.platforms.length > 0 && (
-                  <div>
-                    <h3 className="text-xs font-medium text-neutral-500 uppercase tracking-wider mb-2">
-                      Платформы
-                    </h3>
-                    <div className="flex gap-1.5 flex-wrap">
-                      {selectedGame.platforms.map((platform) => (
-                        <div
-                          key={platform}
-                          className="px-2.5 py-1 bg-neutral-800 rounded-lg text-xs text-neutral-300"
-                        >
-                          {platform}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                <GameMeta gameId={selectedGame.id} platforms={selectedGame.platforms} ownerId={id} />
+
+                <GameSeries gameId={selectedGame.id} onOpen={openGameModal} />
 
                 {isOwnProfile && userGamesData.get(selectedGame.id) && (
                   <div>

@@ -16,6 +16,8 @@ interface Friend {
 interface GameMetaProps {
   gameId: number;
   platforms: string[];
+  /** Чьих тиммейтов показывать (по умолчанию — свои). На чужом профиле список только для чтения */
+  ownerId?: string;
 }
 
 const VISIBLE_PLATFORMS = 2;
@@ -36,8 +38,10 @@ function Avatar({ friend, size = 24 }: { friend: Friend; size?: number }) {
   );
 }
 
-export default function GameMeta({ gameId, platforms }: GameMetaProps) {
+export default function GameMeta({ gameId, platforms, ownerId }: GameMetaProps) {
   const { userId } = useAuth();
+  const owner = ownerId || userId;
+  const canEdit = !!userId && owner === userId;
   const { showToast } = useToast();
 
   const [platformsOpen, setPlatformsOpen] = useState(false);
@@ -52,13 +56,13 @@ export default function GameMeta({ gameId, platforms }: GameMetaProps) {
     setPlatformsOpen(false);
     setPickerOpen(false);
     setTeammates([]);
-    if (!userId) return;
+    if (!owner) return;
     let cancelled = false;
     (async () => {
       const { data: rows } = await supabase
         .from('game_teammates')
         .select('teammate_id')
-        .eq('user_id', userId)
+        .eq('user_id', owner)
         .eq('game_id', gameId);
       const ids = (rows || []).map((r: any) => r.teammate_id as string);
       if (ids.length === 0 || cancelled) return;
@@ -71,7 +75,7 @@ export default function GameMeta({ gameId, platforms }: GameMetaProps) {
     return () => {
       cancelled = true;
     };
-  }, [gameId, userId]);
+  }, [gameId, owner]);
 
   const openPicker = async () => {
     const next = !pickerOpen;
@@ -158,7 +162,7 @@ export default function GameMeta({ gameId, platforms }: GameMetaProps) {
         )}
 
         {/* Тиммейты */}
-        {userId && (
+        {(canEdit || teammates.length > 0) && (
           <div className="min-w-0">
             <h3 className="text-xs font-medium text-neutral-500 uppercase tracking-wider mb-2">Проходил с</h3>
             <div className="flex items-center gap-2 flex-wrap">
@@ -171,18 +175,21 @@ export default function GameMeta({ gameId, platforms }: GameMetaProps) {
                     >
                       <Avatar friend={t} size={20} />
                       <span className="max-w-[90px] truncate">{t.nickname}</span>
-                      <button
-                        type="button"
-                        onClick={() => toggle(t)}
-                        aria-label={`Убрать ${t.nickname}`}
-                        className="text-neutral-500 hover:text-rose-400 transition"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
+                      {canEdit && (
+                        <button
+                          type="button"
+                          onClick={() => toggle(t)}
+                          aria-label={`Убрать ${t.nickname}`}
+                          className="text-neutral-500 hover:text-rose-400 transition"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      )}
                     </span>
                   ))}
                 </div>
               )}
+              {canEdit && (
               <button
                 type="button"
                 onClick={openPicker}
@@ -192,13 +199,14 @@ export default function GameMeta({ gameId, platforms }: GameMetaProps) {
                 <UserPlus className="w-3.5 h-3.5" />
                 {teammates.length === 0 ? 'Тиммейт' : 'Ещё'}
               </button>
+              )}
             </div>
           </div>
         )}
       </div>
 
       {/* Список подписок: раскрывается под строкой */}
-      {userId && pickerOpen && (
+      {canEdit && pickerOpen && (
         <div className="rounded-xl bg-neutral-800/70 border border-neutral-700 p-2">
           {loadingFriends ? (
             <div className="flex items-center justify-center py-4">

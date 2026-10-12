@@ -229,3 +229,25 @@ main > *:nth-child(3) { animation-delay: 120ms; }
   background: rgba(99, 102, 241, 0.45);
   color: #fff;
 }
+
+/* ===== Главная: герой и ленты ===== */
+@keyframes heroProgress {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+@keyframes heroFade {
+  from { opacity: 0; transform: scale(1.04); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.hero-fade {
+  animation: heroFade 0.7s ease-out;
+}
+
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}

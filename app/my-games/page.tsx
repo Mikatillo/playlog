@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { Game, GameData } from '@/types/game';
-import { mapRawgGame, RawgGame } from '@/lib/rawg';
+import { mapRawgGame, RawgGame, cleanDescription } from '@/lib/rawg';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
@@ -124,10 +124,11 @@ export default function MyGamesPage() {
     return null;
   };
 
-  const translateDescription = async (text: string, gameId: number) => {
+  const translateDescription = async (rawText: string, gameId: number) => {
+    const text = cleanDescription(rawText);
     const cached = localStorage.getItem(`translation_${gameId}`);
     if (cached) {
-      setDescriptionRu(cached);
+      setDescriptionRu(cleanDescription(cached));
       return;
     }
     if (/[\u0410-\u044F]/.test(text)) {
@@ -678,7 +679,7 @@ export default function MyGamesPage() {
                     <div>
                       {descriptionExpanded ? (
                         <div>
-                          <p className="text-neutral-300 leading-relaxed text-sm md:text-base">
+                          <p className="whitespace-pre-line text-neutral-300 leading-relaxed text-sm md:text-base">
                             {descriptionRu}
                           </p>
                           <button
@@ -691,7 +692,7 @@ export default function MyGamesPage() {
                         </div>
                       ) : (
                         <div>
-                          <p className="text-neutral-300 leading-relaxed line-clamp-4 text-sm md:text-base">
+                          <p className="whitespace-pre-line text-neutral-300 leading-relaxed line-clamp-4 text-sm md:text-base">
                             {descriptionRu}
                           </p>
                           {descriptionRu.length > 300 && (
@@ -708,7 +709,7 @@ export default function MyGamesPage() {
                     </div>
                   ) : (
                     <div>
-                      <p className="text-neutral-400 leading-relaxed mb-3 line-clamp-3 text-sm md:text-base">
+                      <p className="whitespace-pre-line text-neutral-400 leading-relaxed mb-3 line-clamp-3 text-sm md:text-base">
                         {selectedGame.description}
                       </p>
                       {selectedGame?.descriptionRaw && (
