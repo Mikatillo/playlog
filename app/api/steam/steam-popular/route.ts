@@ -15,7 +15,7 @@ interface SteamEntry {
 }
 
 // ----- Кэш в памяти сервера -----
-const CACHE_TTL = 20 * 60 * 1000; // список из Steam обновляем каждые 20 минут
+const CACHE_TTL = 10 * 60 * 1000; // список и онлайн обновляем каждые 10 минут
 let listCache: { data: any[]; expiresAt: number } | null = null;
 const rawgMatchCache = new Map<string, any | null>(); // название → игра RAWG (живёт долго)
 
@@ -59,7 +59,17 @@ async function fromSteamNewPopular(limit: number): Promise<SteamEntry[]> {
   return out.slice(0, limit + 6);
 }
 
-// Пик игроков за сутки из чарта Steam — подставляем тем новинкам, которые в него попали
+// Текущий онлайн игры — официальный счётчик Steam (без ключа)
+async function currentPlayers(appid: number): Promise<number> {
+  if (!appid) return 0;
+  const data = await getJson(
+    `https://api.steampowered.com/ISteamUserStats/GetNumberOfCurrentPlayers/v1/?appid=${appid}`,
+    300,
+  );
+  return Number(data?.response?.player_count) || 0;
+}
+
+// Запасной вариант: пик игроков за сутки из чарта Steam — подставляем тем новинкам, которые в него попали
 async function playersFromChart(): Promise<Map<number, number>> {
   const data = await getJson(
     'https://api.steampowered.com/ISteamChartsService/GetMostPlayedGames/v1/',
@@ -128,9 +138,17 @@ export async function GET(request: NextRequest) {
           if ((Number(g.released?.split('-')[0]) || 9999) < minYear) return;
           seen.add(g.id);
           const e = batch[idx];
-          out.push({ ...g, steam: { appid: e.appid, players: players.get(e.appid) || 0, rank: out.length + 1 } });
+          out.push({ ...g, steam: { appid: e.appid, players: 0, rank: out.length + 1 } });
         });
       }
+
+      // Онлайн для КАЖДОЙ игры: сначала живой счётчик Steam, если его нет — пик из чарта
+      await Promise.all(
+        out.map(async (g) => {
+          const live = await currentPlayers(g.steam.appid);
+          g.steam.players = live || players.get(g.steam.appid) || 0;
+        }),
+      );
     }
 
     // Steam не ответил или совпадений мало — берём популярные новинки из RAWG

@@ -106,7 +106,7 @@ export default function SteamHero({ onGameClick }: SteamHeroProps) {
             {current.players > 0 && (
               <span className="inline-flex items-center gap-1.5">
                 <Users className="w-4 h-4 text-emerald-400" />
-                {formatPlayers(current.players)} в пике за сутки
+                {formatPlayers(current.players)} онлайн сейчас
               </span>
             )}
             {g.year > 0 && <span className="text-neutral-400">{g.year}</span>}
@@ -175,7 +175,10 @@ export default function SteamHero({ onGameClick }: SteamHeroProps) {
                   <span className="min-w-0 flex-1">
                     <span className="block text-xs sm:text-sm font-medium text-white truncate">{s.game.title}</span>
                     {s.players > 0 && (
-                      <span className="block text-[11px] text-emerald-400/90">{formatPlayers(s.players)}</span>
+                      <span className="flex items-center gap-1 text-[11px] text-emerald-400/90">
+                        <Users className="w-3 h-3 flex-shrink-0" />
+                        {formatPlayers(s.players)} онлайн
+                      </span>
                     )}
                   </span>
                   {isActive && !paused && shown.length > 1 && (

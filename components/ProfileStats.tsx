@@ -101,68 +101,26 @@ export default function ProfileStats({
         <span className="w-7 h-7 rounded-lg bg-indigo-500/15 flex items-center justify-center">
           <BarChart3 className="w-4 h-4 text-indigo-400" />
         </span>
-        Интересы и статистика
+        Статистика профиля
       </h3>
 
-      {/* Статусы игр: кольцевая диаграмма + легенда (всегда на виду) */}
-      <div>
-        <div className="text-xs font-medium text-neutral-400 uppercase tracking-wider mb-3">Статусы игр</div>
-        <div className="flex items-center gap-5">
-          <Donut
-            total={totalGames}
-            values={STATUS_SEGMENTS.map((s) => ({ value: statusCounts[s.key], color: s.color }))}
-          />
-          <ul className="flex-1 space-y-2.5 min-w-0">
-            {STATUS_SEGMENTS.map((s) => {
-              const count = statusCounts[s.key];
-              const percent = tracked > 0 ? Math.round((count / tracked) * 100) : 0;
-              return (
-                <li key={s.key} className="flex items-center gap-2 text-sm">
-                  <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: s.color }} />
-                  <span className="text-neutral-300 truncate">{s.label}</span>
-                  <span className="ml-auto text-white font-semibold">{count}</span>
-                  <span className="text-neutral-500 text-xs w-9 text-right">{percent}%</span>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      </div>
-
-      {/* Любимые жанры (всегда на виду) */}
-      <div>
-        <div className="flex items-center justify-between mb-3 gap-2">
-          <div className="text-xs font-medium text-neutral-400 uppercase tracking-wider">Любимые жанры</div>
-          {topGenres[0] && (
-            <span className="flex items-center gap-1 text-[11px] text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded-full max-w-[60%]">
-              <Flame className="w-3 h-3 flex-shrink-0" />
-              <span className="truncate">{topGenres[0][0]}</span>
+      {/* Статистика профиля: всегда на виду */}
+      <div className="grid grid-cols-2 gap-2.5">
+        {tiles.map(({ icon: Icon, label, value, tint }) => (
+          <div
+            key={label}
+            className="rounded-xl bg-neutral-800/60 border border-neutral-800 p-3 transition hover:border-neutral-700 hover:bg-neutral-800"
+          >
+            <span className={`w-7 h-7 rounded-lg inline-flex items-center justify-center ${tint}`}>
+              <Icon className="w-3.5 h-3.5" />
             </span>
-          )}
-        </div>
-        {topGenres.length === 0 ? (
-          <p className="text-sm text-neutral-500">Добавь игры в коллекцию, и здесь появятся жанры</p>
-        ) : (
-          <ul className="space-y-2.5">
-            {topGenres.map(([genre, count], i) => (
-              <li key={genre}>
-                <div className="flex items-center justify-between text-xs mb-1">
-                  <span className="text-neutral-300 truncate pr-2">{genre}</span>
-                  <span className="text-neutral-500 flex-shrink-0">{count}</span>
-                </div>
-                <div className="h-2 bg-neutral-800 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full rounded-full bg-gradient-to-r ${GENRE_GRADIENTS[i % GENRE_GRADIENTS.length]} transition-all duration-700`}
-                    style={{ width: `${Math.max((count / maxGenre) * 100, 6)}%` }}
-                  />
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
+            <div className="text-xl font-bold text-white mt-2 leading-none truncate" title={value}>{value}</div>
+            <div className="text-[11px] text-neutral-500 mt-1">{label}</div>
+          </div>
+        ))}
       </div>
 
-      {/* Статистика профиля: свёрнута по умолчанию, раскрывается по клику */}
+      {/* Интересы и статусы: свёрнуты по умолчанию, раскрываются по клику */}
       <div className="border-t border-neutral-800 pt-4 -mb-1">
         <button
           type="button"
@@ -172,8 +130,8 @@ export default function ProfileStats({
           className="group w-full flex items-center justify-between gap-3 rounded-xl px-3 py-2.5 bg-neutral-800/40 hover:bg-neutral-800 border border-neutral-800 hover:border-neutral-700 transition"
         >
           <span className="flex items-center gap-2 text-sm font-medium text-neutral-200">
-            <Trophy className="w-4 h-4 text-emerald-400" />
-            Статистика профиля
+            <Flame className="w-4 h-4 text-amber-400" />
+            Интересы и статистика
           </span>
           <span className="flex items-center gap-2 text-xs text-neutral-500 group-hover:text-neutral-300 transition">
             {detailsOpen ? 'Свернуть' : 'Показать'}
@@ -192,19 +150,64 @@ export default function ProfileStats({
           aria-hidden={!detailsOpen}
         >
           <div className="overflow-hidden">
-            <div className="grid grid-cols-2 gap-2.5 pt-3">
-              {tiles.map(({ icon: Icon, label, value, tint }) => (
-                <div
-                  key={label}
-                  className="rounded-xl bg-neutral-800/60 border border-neutral-800 p-3 transition hover:border-neutral-700 hover:bg-neutral-800"
-                >
-                  <span className={`w-7 h-7 rounded-lg inline-flex items-center justify-center ${tint}`}>
-                    <Icon className="w-3.5 h-3.5" />
-                  </span>
-                  <div className="text-xl font-bold text-white mt-2 leading-none truncate" title={value}>{value}</div>
-                  <div className="text-[11px] text-neutral-500 mt-1">{label}</div>
+            <div className="flex flex-col gap-5 pt-4">
+              {/* Статусы игр: кольцевая диаграмма + легенда */}
+              <div>
+                <div className="text-xs font-medium text-neutral-400 uppercase tracking-wider mb-3">Статусы игр</div>
+                <div className="flex items-center gap-5">
+                  <Donut
+                    total={totalGames}
+                    values={STATUS_SEGMENTS.map((s) => ({ value: statusCounts[s.key], color: s.color }))}
+                  />
+                  <ul className="flex-1 space-y-2.5 min-w-0">
+                    {STATUS_SEGMENTS.map((s) => {
+                      const count = statusCounts[s.key];
+                      const percent = tracked > 0 ? Math.round((count / tracked) * 100) : 0;
+                      return (
+                        <li key={s.key} className="flex items-center gap-2 text-sm">
+                          <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: s.color }} />
+                          <span className="text-neutral-300 truncate">{s.label}</span>
+                          <span className="ml-auto text-white font-semibold">{count}</span>
+                          <span className="text-neutral-500 text-xs w-9 text-right">{percent}%</span>
+                        </li>
+                      );
+                    })}
+                  </ul>
                 </div>
-              ))}
+              </div>
+
+              {/* Любимые жанры */}
+              <div>
+                <div className="flex items-center justify-between mb-3 gap-2">
+                  <div className="text-xs font-medium text-neutral-400 uppercase tracking-wider">Любимые жанры</div>
+                  {topGenres[0] && (
+                    <span className="flex items-center gap-1 text-[11px] text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded-full max-w-[60%]">
+                      <Flame className="w-3 h-3 flex-shrink-0" />
+                      <span className="truncate">{topGenres[0][0]}</span>
+                    </span>
+                  )}
+                </div>
+                {topGenres.length === 0 ? (
+                  <p className="text-sm text-neutral-500">Добавь игры в коллекцию, и здесь появятся жанры</p>
+                ) : (
+                  <ul className="space-y-2.5">
+                    {topGenres.map(([genre, count], i) => (
+                      <li key={genre}>
+                        <div className="flex items-center justify-between text-xs mb-1">
+                          <span className="text-neutral-300 truncate pr-2">{genre}</span>
+                          <span className="text-neutral-500 flex-shrink-0">{count}</span>
+                        </div>
+                        <div className="h-2 bg-neutral-800 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full bg-gradient-to-r ${GENRE_GRADIENTS[i % GENRE_GRADIENTS.length]} transition-all duration-700`}
+                            style={{ width: `${Math.max((count / maxGenre) * 100, 6)}%` }}
+                          />
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             </div>
           </div>
         </div>

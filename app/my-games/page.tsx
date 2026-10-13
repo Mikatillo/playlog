@@ -421,47 +421,6 @@ export default function MyGamesPage() {
           </button>
         </PageHeading>
 
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-2 md:gap-3 mb-6">
-          <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-3 md:p-4 text-center">
-            <Trophy className="w-5 h-5 text-indigo-500 mx-auto mb-1" />
-            <div className="text-lg md:text-xl font-bold text-white">{stats.total}</div>
-            <div className="text-xs text-neutral-400">Всего</div>
-          </div>
-          <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-3 md:p-4 text-center">
-            <Check className="w-5 h-5 text-emerald-500 mx-auto mb-1" />
-            <div className="text-lg md:text-xl font-bold text-white">{stats.completed}</div>
-            <div className="text-xs text-neutral-400">Прошёл</div>
-          </div>
-          <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-3 md:p-4 text-center">
-            <Gamepad className="w-5 h-5 text-blue-500 mx-auto mb-1" />
-            <div className="text-lg md:text-xl font-bold text-white">{stats.playing}</div>
-            <div className="text-xs text-neutral-400">Играю</div>
-          </div>
-          <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-3 md:p-4 text-center">
-            <Heart className="w-5 h-5 text-rose-500 mx-auto mb-1" />
-            <div className="text-lg md:text-xl font-bold text-white">{stats.want}</div>
-            
-          </div>
-          <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-3 md:p-4 text-center">
-            <XCircle className="w-5 h-5 text-neutral-500 mx-auto mb-1" />
-            <div className="text-lg md:text-xl font-bold text-white">{stats.dropped}</div>
-            <div className="text-xs text-neutral-400">Заброшено</div>
-          </div>
-          <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-3 md:p-4 text-center">
-            <Clock className="w-5 h-5 text-purple-500 mx-auto mb-1" />
-            <div className="text-lg md:text-xl font-bold text-white">{stats.totalHours}h</div>
-            <div className="text-xs text-neutral-400">Часов</div>
-          </div>
-          <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-3 md:p-4 text-center">
-            <Star className="w-5 h-5 text-yellow-500 mx-auto mb-1" />
-            <div className="text-lg md:text-xl font-bold text-white">
-              {stats.avgRating}
-              <span className="text-sm text-neutral-500">/10</span>
-            </div>
-            <div className="text-xs text-neutral-400">Ср. оценка</div>
-          </div>
-        </div>
-
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
           <h2 className="text-lg font-semibold text-white flex items-center gap-2">
             <Trophy className="w-5 h-5 text-indigo-500" />

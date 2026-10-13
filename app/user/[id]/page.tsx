@@ -750,7 +750,7 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
         {/* 3 колонки: любимые игры / лента / интересы */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {/* Любимые игры */}
-          <div className="bg-neutral-900/80 backdrop-blur-md border border-neutral-800 rounded-2xl p-5">
+          <div className="bg-neutral-900/80 backdrop-blur-md border border-neutral-800 rounded-2xl p-5 flex flex-col">
             <h3 className="font-semibold text-white mb-4 flex items-center gap-2">
               <Star className="w-4 h-4 text-yellow-500" />
               Мои любимые игры
@@ -762,7 +762,7 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
                   : 'Пользователь ещё не выбрал любимые игры'}
               </div>
             ) : (
-              <div className="space-y-3">
+              <div className="flex-1 flex flex-col gap-3">
                 {favoriteGames.map((game) => {
                   const data = userGamesData.get(game.id);
                   const slot = favoriteOrderMap.get(game.id);
@@ -770,40 +770,43 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
                     <button
                       key={game.id}
                       onClick={() => openGameModal(game)}
-                      className="w-full flex items-center gap-3 p-2 rounded-xl hover:bg-neutral-800/60 transition text-left"
+                      className="group relative flex-1 min-h-[112px] lg:max-h-[190px] flex items-stretch gap-4 p-2.5 rounded-2xl bg-neutral-800/40 hover:bg-neutral-800/80 border border-neutral-800 hover:border-neutral-700 overflow-hidden transition text-left"
                     >
-                      <div className="relative w-12 h-16 rounded-lg overflow-hidden bg-neutral-800 flex-shrink-0">
+                      <div className="relative w-[84px] sm:w-24 self-stretch min-h-[92px] rounded-xl overflow-hidden bg-neutral-800 flex-shrink-0 shadow-lg shadow-black/40">
                         {game.cover && (
                           <Image
                             src={game.cover}
                             alt={game.title}
                             fill
-                            sizes="48px"
-                            className="object-cover"
+                            sizes="96px"
+                            className="object-cover transition duration-500 group-hover:scale-105"
                             unoptimized
                           />
                         )}
                         {slot && (
-                          <div className="absolute top-1 left-1 w-5 h-5 rounded-full bg-yellow-500 text-black text-[10px] font-bold flex items-center justify-center">
+                          <div className="absolute top-1.5 left-1.5 w-6 h-6 rounded-full bg-yellow-500 text-black text-xs font-bold flex items-center justify-center shadow">
                             {slot}
                           </div>
                         )}
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium text-white truncate">
+                      <div className="flex-1 min-w-0 flex flex-col justify-center gap-2">
+                        <div className="text-base font-semibold text-white leading-snug line-clamp-2">
                           {game.title}
                         </div>
-                        <div className="flex items-center gap-2 mt-0.5 text-xs">
+                        <div className="flex flex-wrap items-center gap-2 text-xs">
                           {data?.rating ? (
-                            <span className="flex items-center gap-1 text-yellow-400 font-semibold">
+                            <span className="flex items-center gap-1 text-yellow-300 font-semibold bg-yellow-500/10 border border-yellow-500/25 px-2 py-0.5 rounded-lg">
                               <Star className="w-3 h-3 fill-yellow-400" />
                               {data.rating}/10
                             </span>
                           ) : null}
                           {data?.hours ? (
-                            <span className="text-neutral-500">{data.hours}h</span>
+                            <span className="text-neutral-300 bg-neutral-700/40 px-2 py-0.5 rounded-lg">{data.hours} ч.</span>
                           ) : null}
                         </div>
+                        {game.genre && (
+                          <div className="text-[11px] text-neutral-500 truncate">{game.genre}</div>
+                        )}
                       </div>
                     </button>
                   );
@@ -818,14 +821,17 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
               <MessageSquare className="w-4 h-4 text-indigo-500" />
               Лента активности
             </h3>
-            <div className="overflow-y-auto pr-1 max-h-[280px] activity-scroll">
-              <ActivityFeed
-                userId={id}
-                scope="user"
-                showAvatars={false}
-                limit={20}
-                emptyText="Пока нет активности"
-              />
+            {/* Высота ленты равна соседним блокам; внутри — прокрутка (на десктопе), на телефоне — фиксированные ~5 событий */}
+            <div className="relative h-[470px] lg:h-auto lg:flex-1 lg:min-h-[320px]">
+              <div className="absolute inset-0 overflow-y-auto pr-1 activity-scroll">
+                <ActivityFeed
+                  userId={id}
+                  scope="user"
+                  showAvatars={false}
+                  limit={20}
+                  emptyText="Пока нет активности"
+                />
+              </div>
             </div>
           </div>
 
@@ -880,15 +886,15 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
           {activeTab === 'games' && (
             <div className="space-y-4">
               {collectionGames.length > 0 && (
-                <div className="flex flex-wrap items-center gap-3 bg-neutral-900/70 backdrop-blur-md p-3 rounded-xl border border-neutral-800">
-                  <div className="flex flex-wrap gap-2">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 sm:gap-3 bg-neutral-900/70 backdrop-blur-md p-2.5 sm:p-3 rounded-xl border border-neutral-800">
+                  <div className="flex gap-2 overflow-x-auto sm:flex-wrap sm:overflow-visible no-scrollbar -mx-0.5 px-0.5 snap-x">
                     {gameTabOptions.map((opt) => {
                       const active = gameTab === opt.id;
                       return (
                         <button
                           key={opt.id}
                           onClick={() => setGameTab(opt.id)}
-                          className={`px-3.5 py-1.5 rounded-full text-xs md:text-sm font-medium transition flex items-center gap-1.5 ${
+                          className={`flex-shrink-0 snap-start whitespace-nowrap px-3 sm:px-3.5 py-1.5 rounded-full text-xs md:text-sm font-medium transition flex items-center gap-1.5 ${
                             active
                               ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/20'
                               : 'bg-neutral-900 border border-neutral-800 text-neutral-300 hover:bg-neutral-800'
@@ -902,12 +908,12 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
                       );
                     })}
                   </div>
-                  <div className="relative flex-shrink-0 ml-auto">
+                  <div className="relative w-full sm:w-auto sm:flex-shrink-0 sm:ml-auto">
                     <ArrowUpDown className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-500 pointer-events-none z-10" />
                     <select
                       value={sortBy}
                       onChange={(e) => setSortBy(e.target.value as SortType)}
-                      className="appearance-none bg-neutral-900 border border-neutral-800 hover:border-neutral-700 rounded-lg pl-8 pr-7 py-1.5 text-xs md:text-sm font-medium text-neutral-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 cursor-pointer transition"
+                      className="w-full sm:w-auto appearance-none bg-neutral-900 border border-neutral-800 hover:border-neutral-700 rounded-lg pl-8 pr-7 py-2 sm:py-1.5 text-sm font-medium text-neutral-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 cursor-pointer transition"
                     >
                       {sortOptions.map((opt) => (
                         <option key={opt.value} value={opt.value} className="bg-neutral-900">
