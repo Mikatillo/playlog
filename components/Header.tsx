@@ -300,16 +300,23 @@ export default function Header() {
       <header className="bg-neutral-900 border-b border-neutral-800 sticky top-0 z-40 pt-[env(safe-area-inset-top)]">
         <div className="max-w-7xl mx-auto px-4 md:px-6 py-3 flex items-center gap-3 md:gap-4">
           {/* Логотип */}
-          <Link
-            href="/"
-            className="flex items-center gap-2.5 flex-shrink-0 rounded-lg hover:opacity-80 transition"
-            aria-label="На главную"
-          >
-            <div className="w-9 h-9 bg-indigo-500 rounded-lg flex items-center justify-center">
-              <Gamepad2 className="w-5 h-5 text-white" />
-            </div>
-            <span className="font-semibold text-lg text-white hidden sm:inline">PlayLog</span>
-          </Link>
+<Link
+  href="/"
+  className="flex items-center gap-2.5 flex-shrink-0 rounded-lg hover:opacity-80 transition"
+  aria-label="На главную"
+>
+  <div className="relative w-9 h-9 rounded-lg overflow-hidden">
+    <Image
+      src="/logo.png"
+      alt="PlayLog"
+      fill
+      sizes="36px"
+      className="object-cover"
+      priority
+    />
+  </div>
+  <span className="font-semibold text-lg text-white hidden sm:inline">PlayLog</span>
+</Link>
 
           {/* Навигация */}
           <nav className="hidden lg:flex items-center gap-1 flex-shrink-0">

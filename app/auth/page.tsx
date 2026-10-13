@@ -1,9 +1,10 @@
 'use client';
 
 import { useState } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Gamepad2, Mail, Lock, User, ArrowRight, AlertCircle } from 'lucide-react';
+import { Mail, Lock, User, ArrowRight, AlertCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 export default function AuthPage() {
@@ -51,8 +52,15 @@ export default function AuthPage() {
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <div className="inline-flex items-center gap-2.5 mb-4">
-            <div className="w-10 h-10 bg-indigo-500 rounded-lg flex items-center justify-center">
-              <Gamepad2 className="w-5 h-5 text-white" />
+            <div className="relative w-10 h-10 rounded-lg overflow-hidden flex-shrink-0">
+              <Image
+                src="/logo.png"
+                alt="PlayLog"
+                fill
+                sizes="40px"
+                className="object-cover"
+                priority
+              />
             </div>
             <span className="font-semibold text-xl text-white">PlayLog</span>
           </div>
