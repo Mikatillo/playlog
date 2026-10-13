@@ -82,6 +82,14 @@ export default function GameMediaCarousel({
               }
             }}
             loading={idx === 0 ? 'eager' : 'lazy'}
+            onError={(e) => {
+              // у Steam нет header.jpg — берём запасную обложку IGDB
+              const el = e.currentTarget;
+              if (slide.type === 'cover' && game.coverAlt && el.dataset.fallback !== '1') {
+                el.dataset.fallback = '1';
+                el.src = game.coverAlt;
+              }
+            }}
           />
         </div>
       ))}

@@ -2,9 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { Calendar, Gamepad2 } from 'lucide-react';
-import Image from 'next/image';
+import GameImage from '@/components/GameImage';
 import Link from 'next/link';
-import { mapRawgGame, RawgGame } from '@/lib/rawg';
 import { Game } from '@/types/game';
 
 function formatDate(iso?: string, year?: number): string {
@@ -28,10 +27,7 @@ export default function ReleasesTicker() {
       .then((r) => r.json())
       .then((data) => {
         if (cancelled) return;
-        const mapped = (data.results || [])
-          .map((g: RawgGame) => mapRawgGame(g))
-          .filter((g: Game) => g.year > 0)
-          .slice(0, 20);
+        const mapped = ((data.results || []) as Game[]).filter((g) => g.year > 0).slice(0, 20);
         setReleases(mapped);
       })
       .catch(() => {})
@@ -87,8 +83,9 @@ export default function ReleasesTicker() {
               >
                 <div className="relative w-16 h-16 rounded-lg overflow-hidden bg-neutral-900 flex-shrink-0 ring-1 ring-neutral-700/50">
                   {game.cover ? (
-                    <Image
+                    <GameImage
                       src={game.cover}
+                      fallback={game.coverAlt}
                       alt={game.title}
                       fill
                       sizes="100px"

@@ -6,6 +6,7 @@ import {
   findSteamAppIdByTitle,
   steamHeaderUrl,
 } from '@/lib/igdb';
+import { IGDB_GAME_FIELDS } from '@/lib/igdb-shared';
 
 export async function GET(
   request: NextRequest,
@@ -21,14 +22,10 @@ export async function GET(
   try {
     const raw: IgdbGame[] = await igdbQuery(
       'games',
-      `fields name, game_type, version_parent,
-              rating, rating_count, aggregated_rating, aggregated_rating_count,
-              total_rating, total_rating_count, first_release_date,
-              cover.image_id, artworks.image_id, screenshots.image_id,
-              genres.name, platforms.name, summary, storyline, videos.video_id,
-              external_games.uid, external_games.external_game_source;
+      `${IGDB_GAME_FIELDS}
        where id = ${gameId};
        limit 1;`,
+      30 * 60 * 1000,
     );
 
     if (!raw || raw.length === 0) {
@@ -45,6 +42,7 @@ export async function GET(
       // Ищем Steam appid по названию
       const appid = await findSteamAppIdByTitle(rawGame.name);
       if (appid) {
+        game.coverAlt = game.cover || undefined;
         game.cover = steamHeaderUrl(appid);
 
         // Если в платформах нет PC — добавляем, раз игра есть в Steam

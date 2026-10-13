@@ -1,17 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { igdbQuery, mapIgdbGame, IgdbGame, findSteamAppIdByTitle, steamHeaderUrl } from '@/lib/igdb';
-
-const EDITION_PATTERNS = [
-  /\b(Collector'?s|Premium|Deluxe|Ultimate|Definitive|Gold|Complete|Enhanced|Special|Limited|Diamond|Legendary|Royal|Imperial)\s+Edition\b/i,
-  /\bGame of the Year\b/i,
-  /\bGOTY\b/i,
-  /\bRemaster(ed)?\b/i,
-  /\bRemake\b/i,
-];
-
-function isEdition(name: string): boolean {
-  return EDITION_PATTERNS.some((re) => re.test(name));
-}
+import { igdbQuery, igdbEscape, mapIgdbGame, IgdbGame, findSteamAppIdByTitle, steamHeaderUrl } from '@/lib/igdb';
+import { IGDB_GAME_FIELDS, isEdition } from '@/lib/igdb-shared';
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -22,24 +11,21 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    const term = igdbEscape(search).slice(0, 80);
+    if (term.length < 2) return NextResponse.json({ results: [], count: 0 });
+
     const raw: IgdbGame[] = await igdbQuery(
       'games',
-      `search "${search}";
-       fields name, game_type, version_parent, rating, rating_count,
-              aggregated_rating, aggregated_rating_count,
-              total_rating, total_rating_count, first_release_date,
-              cover.image_id, artworks.image_id, screenshots.image_id,
-              genres.name, platforms.name, summary, videos.video_id,
-              external_games.uid, external_games.external_game_source;
-       limit 30;`,
+      `search "${term}";
+       ${IGDB_GAME_FIELDS}
+       where game_type = 0 & cover != null & version_parent = null;
+       limit 40;`,
+      5 * 60 * 1000,
     );
 
     const filtered = raw
-      .filter((g) => g.game_type === 0)
-      .filter((g) => !g.version_parent)
       .filter((g) => !isEdition(g.name))
       .filter((g) => (g.total_rating_count || g.rating_count || 0) >= 3)
-      .filter((g) => !!g.cover?.image_id)
       .sort((a, b) => {
         const aCount = a.total_rating_count || a.rating_count || 0;
         const bCount = b.total_rating_count || b.rating_count || 0;
@@ -59,6 +45,7 @@ export async function GET(request: NextRequest) {
         // Пробуем найти Steam appid по названию
         const appid = await findSteamAppIdByTitle(g.name);
         if (appid) {
+          mapped.coverAlt = mapped.cover || undefined;
           mapped.cover = steamHeaderUrl(appid);
         }
         return mapped;

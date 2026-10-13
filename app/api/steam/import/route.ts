@@ -1,16 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireUser, serverError } from '@/lib/server-auth';
+import { igdbQuery, igdbMulti, igdbEscape } from '@/lib/igdb';
 
 // Импорт идёт порциями: клиент вызывает роут несколько раз (offset),
 // поэтому каждый запрос короткий и не обрывается на мобильной сети / лимитах хостинга.
 export const maxDuration = 60;
 
 const STEAM_API_KEY = process.env.STEAM_API_KEY;
-const RAWG_API_KEY = process.env.RAWG_API_KEY || '';
-const RAWG_BASE = 'https://api.rawg.io/api';
 
 const BATCH_SIZE = 8; // игр за один запрос
-const CONCURRENCY = 4; // параллельных поисков в RAWG
 const MAX_GAMES = 50; // максимум игр за весь импорт
 const SHORT_LINK_HOSTS = new Set(['s.team']);
 
@@ -80,48 +78,54 @@ async function fetchOwnedGames(steamId: string) {
 
 const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9а-яё]/g, '');
 
-async function findRawgGame(name: string, steamAppId: number): Promise<any | null> {
+interface SteamOwned {
+  appid: number;
+  name: string;
+  playtime_forever: number;
+}
+
+/**
+ * Steam appid → id игры в IGDB. Основной путь — таблица external_games (точное совпадение по appid),
+ * один запрос на всю пачку. Для не найденных — запасной поиск по названию (одним multiquery).
+ */
+async function matchIgdbIds(games: SteamOwned[]): Promise<Map<number, number>> {
+  const result = new Map<number, number>(); // appid → IGDB id
+  if (games.length === 0) return result;
+
   try {
-    const res = await fetch(
-      `${RAWG_BASE}/games?key=${RAWG_API_KEY}&search=${encodeURIComponent(name)}&page_size=5`,
-      { next: { revalidate: 86400 } },
+    const uids = games.map((g) => `"${g.appid}"`).join(',');
+    const ext = await igdbQuery<{ game?: number; uid: string }[]>(
+      'external_games',
+      `fields game, uid; where external_game_source = 1 & uid = (${uids}); limit 500;`,
     );
-    if (!res.ok) return null;
-    const data = await res.json();
-    const results: any[] = data.results || [];
-    if (results.length === 0) return null;
-
-    // Проверяем по Steam appid (параллельно по первым 3 результатам)
-    const details = await Promise.all(
-      results.slice(0, 3).map(async (game) => {
-        try {
-          const r = await fetch(`${RAWG_BASE}/games/${game.id}?key=${RAWG_API_KEY}`, {
-            next: { revalidate: 86400 },
-          });
-          if (!r.ok) return null;
-          return { game, detail: await r.json() };
-        } catch {
-          return null;
-        }
-      }),
-    );
-    for (const item of details) {
-      if (!item) continue;
-      const steamStore = item.detail.stores?.find((s: any) => s.store?.id === 1);
-      const match = steamStore?.url?.match(/\/app\/(\d+)/);
-      if (match && Number(match[1]) === steamAppId) return item.game;
-    }
-
-    // Запасной вариант: совпадение по названию
-    const target = normalize(name);
-    const exact = results.find((g) => normalize(g.name) === target);
-    if (exact) return exact;
-    const first = results[0];
-    if (normalize(first.name).includes(target.slice(0, 5)) && target.length >= 3) return first;
+    ext.forEach((e) => {
+      if (e.game) result.set(Number(e.uid), e.game);
+    });
   } catch (err) {
-    console.error('RAWG search error:', err);
+    console.error('IGDB external_games error:', err);
   }
-  return null;
+
+  // Запасной вариант: поиск по названию, принимаем только точное совпадение
+  const missing = games.filter((g) => !result.has(g.appid)).slice(0, 10);
+  if (missing.length > 0) {
+    try {
+      const queries = missing.map((g, i) => ({
+        name: `s${i}`,
+        endpoint: 'games',
+        body: `search "${igdbEscape(g.name).slice(0, 80)}"; fields name; where game_type = 0 & version_parent = null; limit 5;`,
+      }));
+      const found = await igdbMulti<{ id: number; name: string }>(queries);
+      missing.forEach((g, i) => {
+        const target = normalize(g.name);
+        const hit = (found[`s${i}`] || []).find((x) => normalize(x.name) === target);
+        if (hit) result.set(g.appid, hit.id);
+      });
+    } catch (err) {
+      console.error('IGDB name search error:', err);
+    }
+  }
+
+  return result;
 }
 
 export async function POST(request: NextRequest) {
@@ -131,8 +135,8 @@ export async function POST(request: NextRequest) {
       { status: 500 },
     );
   }
-  if (!RAWG_API_KEY) {
-    return NextResponse.json({ error: 'RAWG_API_KEY не настроен на сервере.' }, { status: 500 });
+  if (!process.env.IGDB_CLIENT_ID || !process.env.IGDB_CLIENT_SECRET) {
+    return NextResponse.json({ error: 'IGDB_CLIENT_ID / IGDB_CLIENT_SECRET не настроены на сервере.' }, { status: 500 });
   }
 
   const auth = await requireUser(request);
@@ -180,27 +184,21 @@ export async function POST(request: NextRequest) {
     const total = sorted.length;
     const slice = sorted.slice(offset, offset + BATCH_SIZE);
 
-    // Поиск в RAWG — по CONCURRENCY игр одновременно
-    const toImport: { rawgId: number; hours: number }[] = [];
+    // Сопоставляем с IGDB: игры Steam → id в нашей базе
+    const matched = await matchIgdbIds(slice as SteamOwned[]);
+    const toImport: { gameId: number; hours: number }[] = [];
     const notFound: string[] = [];
-    for (let i = 0; i < slice.length; i += CONCURRENCY) {
-      const chunk = slice.slice(i, i + CONCURRENCY);
-      const found = await Promise.all(chunk.map((g: any) => findRawgGame(g.name, g.appid)));
-      found.forEach((rawg, idx) => {
-        const g: any = chunk[idx];
-        if (rawg) {
-          toImport.push({ rawgId: rawg.id, hours: Math.round(g.playtime_forever / 60) });
-        } else {
-          notFound.push(g.name);
-        }
-      });
-    }
+    (slice as SteamOwned[]).forEach((g) => {
+      const gameId = matched.get(g.appid);
+      if (gameId) toImport.push({ gameId, hours: Math.round(g.playtime_forever / 60) });
+      else notFound.push(g.name);
+    });
 
     let imported = 0;
     let skipped = 0;
 
     if (toImport.length > 0) {
-      const ids = toImport.map((g) => g.rawgId);
+      const ids = toImport.map((g) => g.gameId);
       const { data: existing } = await db
         .from('user_games')
         .select('game_id')
@@ -211,13 +209,13 @@ export async function POST(request: NextRequest) {
       const seen = new Set<number>();
       const newRows = toImport
         .filter((g) => {
-          if (existingIds.has(g.rawgId) || seen.has(g.rawgId)) return false;
-          seen.add(g.rawgId);
+          if (existingIds.has(g.gameId) || seen.has(g.gameId)) return false;
+          seen.add(g.gameId);
           return true;
         })
         .map((g) => ({
           user_id: userId,
-          game_id: g.rawgId,
+          game_id: g.gameId,
           rating: 0,
           hours: Math.min(g.hours, 100000),
           review: '',

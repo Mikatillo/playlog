@@ -1,5 +1,4 @@
 import type { Game } from '@/types/game';
-import { mapRawgGame, type RawgGame } from '@/lib/rawg';
 
 // Кеш игр на клиенте: переживает переходы между страницами (память модуля)
 // и перезагрузку вкладки (sessionStorage).
@@ -46,8 +45,7 @@ export async function fetchGamesByIds(ids: number[]): Promise<Game[]> {
           const res = await fetch(`/api/games/batch?ids=${chunk.join(',')}`);
           if (!res.ok) return;
           const data = await res.json();
-          (data.results || []).forEach((raw: RawgGame) => {
-            const game = mapRawgGame(raw);
+          ((data.results || []) as Game[]).forEach((game) => {
             memory.set(game.id, game);
           });
         } catch (err) {

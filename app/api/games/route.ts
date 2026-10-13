@@ -1,21 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { igdbQuery, mapIgdbGame, IgdbGame } from '@/lib/igdb';
+import { GENRE_MAP, IGDB_GAME_FIELDS, isEdition } from '@/lib/igdb-shared';
 
-// Маппинг RAWG-slug → IGDB genre IDs (чтобы не менять фронт)
-const GENRE_MAP: Record<string, string> = {
-  action: '(4,5,8,25)',            // Fighting, Shooter, Platform, Hack&slash
-  adventure: '(31)',
-  'role-playing-games-rpg': '(12)',
-  strategy: '(15)',
-  shooter: '(5)',
-  puzzle: '(9)',
-  racing: '(10)',
-  sports: '(14)',
-  simulation: '(13)',
-  indie: '(32)',
-};
-
-// Маппинг RAWG-ordering → IGDB-сортировка
+// Маппинг ordering фронта → сортировка IGDB
 const ORDERING_MAP: Record<string, string> = {
   '-added': 'total_rating_count desc',
   '-rating': 'rating desc',
@@ -23,82 +10,55 @@ const ORDERING_MAP: Record<string, string> = {
   '-metacritic': 'aggregated_rating desc',
 };
 
-const EDITION_PATTERNS = [
-  /\b(Collector'?s|Premium|Deluxe|Ultimate|Definitive|Gold|Complete|Enhanced|Special|Limited|Diamond|Legendary|Royal|Imperial)\s+Edition\b/i,
-  /\bGame of the Year\b/i,
-  /\bGOTY\b/i,
-  /\bRemaster(ed)?\b/i,
-  /\bRemake\b/i,
-];
-
-function isEdition(name: string): boolean {
-  return EDITION_PATTERNS.some((re) => re.test(name));
-}
-
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const page = Math.max(Number(searchParams.get('page') || '1'), 1);
-  const pageSize = Math.min(Number(searchParams.get('pageSize') || '20'), 50);
+  const page = Math.max(Number(searchParams.get('page') || '1') || 1, 1);
+  const pageSize = Math.min(Math.max(Number(searchParams.get('pageSize') || '20') || 20, 1), 50);
   const orderingParam = searchParams.get('ordering') || '-added';
-  const genresParam = searchParams.get('genres') || '';
+  const genresParam = (searchParams.get('genres') || '').replace(/[^a-z0-9-]/gi, '');
 
   const offset = (page - 1) * pageSize;
 
   // IGDB ограничивает offset значением 5000
   if (offset >= 5000) {
-    return NextResponse.json({
-      count: 0,
-      next: null,
-      previous: page > 1 ? String(page - 1) : null,
-      results: [],
-    });
+    return NextResponse.json({ count: 0, next: null, previous: String(page - 1), results: [] });
   }
 
   try {
-    const whereParts: string[] = ['game_type = 0', 'cover != null'];
-
-    if (genresParam && GENRE_MAP[genresParam]) {
-      whereParts.push(`genres = ${GENRE_MAP[genresParam]}`);
-    }
+    const where: string[] = ['game_type = 0', 'cover != null', 'version_parent = null'];
+    if (genresParam && GENRE_MAP[genresParam]) where.push(`genres = ${GENRE_MAP[genresParam]}`);
 
     const sort = ORDERING_MAP[orderingParam] || 'total_rating_count desc';
 
-    const raw: IgdbGame[] = await igdbQuery(
+    // Для сортировок по оценке/дате нужен порог, иначе сверху окажутся игры с одной оценкой
+    if (orderingParam === '-rating') where.push('rating_count >= 20');
+    if (orderingParam === '-metacritic') where.push('aggregated_rating_count >= 5');
+    if (orderingParam === '-released') {
+      where.push(`first_release_date <= ${Math.floor(Date.now() / 1000)}`);
+      where.push('total_rating_count >= 3');
+    }
+    if (orderingParam === '-added') where.push('total_rating_count >= 3');
+
+    const raw = await igdbQuery<IgdbGame[]>(
       'games',
-      `fields name, game_type, version_parent, rating, rating_count,
-       aggregated_rating, aggregated_rating_count,
-       total_rating, total_rating_count, first_release_date,
-       cover.image_id, artworks.image_id, screenshots.image_id,
-       genres.name, platforms.name, summary, videos.video_id,
-       external_games.uid, external_games.external_game_source;
-       where ${whereParts.join(' & ')};
+      `${IGDB_GAME_FIELDS}
+       where ${where.join(' & ')};
        sort ${sort};
        limit ${pageSize};
        offset ${offset};`,
+      10 * 60 * 1000,
     );
 
-    // Дополнительная фильтрация (editions, пустышки)
-    const filtered = raw
-      .filter((g) => !g.version_parent)
-      .filter((g) => !isEdition(g.name))
-      .filter((g) => (g.total_rating_count || g.rating_count || 0) >= 3);
-
-    const results = filtered.map(mapIgdbGame);
-    // Если вернулось ровно pageSize — вероятно, есть следующая страница
-    const hasNext = raw.length === pageSize;
+    const results = raw.filter((g) => !isEdition(g.name)).map(mapIgdbGame);
 
     return NextResponse.json(
       {
         count: results.length,
-        next: hasNext ? String(page + 1) : null,
+        next: raw.length === pageSize ? String(page + 1) : null,
         previous: page > 1 ? String(page - 1) : null,
         results,
       },
-      {
-        headers: {
-          'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400',
-        },
-      },
+      { headers: { 'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400' } },
     );
   } catch (error) {
     console.error('[IGDB games] error:', error);

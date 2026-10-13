@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { Game, GameData } from '@/types/game';
-import { mapRawgGame, RawgGame, cleanDescription } from '@/lib/rawg';
+import { cleanDescription } from '@/lib/text';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
@@ -118,8 +118,8 @@ export default function MyGamesPage() {
     try {
       const response = await fetch(`/api/games/${game.id}?full=true`);
       if (response.ok) {
-        const data: RawgGame = await response.json();
-        return mapRawgGame(data);
+        const data: Game = await response.json();
+        return data;
       }
     } catch (err) {
       console.error('Ошибка загрузки полных данных:', err);

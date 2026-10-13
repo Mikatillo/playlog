@@ -2,6 +2,8 @@ export interface Game {
   id: number;
   title: string;
   cover: string;
+  /** Запасная обложка (IGDB), если основная — Steam header — вернёт 404 */
+  coverAlt?: string;
   year: number;
   released?: string; // ISO дата YYYY-MM-DD
   rating: number;

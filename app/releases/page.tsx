@@ -11,7 +11,8 @@ import {
 import Image from 'next/image';
 import Link from 'next/link';
 import { Game } from '@/types/game';
-import { mapRawgGame, RawgGame, cleanDescription } from '@/lib/rawg';
+import { cleanDescription } from '@/lib/text';
+import GameImage from '@/components/GameImage';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import { supabase } from '@/lib/supabase';
@@ -63,9 +64,7 @@ export default function ReleasesPage() {
       .then((r) => r.json())
       .then((data) => {
         if (cancelled) return;
-        const mapped = (data.results || [])
-          .map((g: RawgGame) => mapRawgGame(g))
-          .filter((g: Game) => g.year > 0);
+        const mapped = ((data.results || []) as Game[]).filter((g) => g.year > 0);
         setGames(mapped);
       })
       .catch(() => {})
@@ -146,8 +145,7 @@ export default function ReleasesPage() {
     try {
       const res = await fetch(`/api/games/${game.id}?full=true`);
       if (res.ok) {
-        const rawData = await res.json();
-        const fullGame = mapRawgGame(rawData);
+        const fullGame: Game = await res.json();
         setSelectedGame(fullGame);
         if (fullGame.descriptionRaw) {
           translateDescription(fullGame.descriptionRaw, game.id);
@@ -301,8 +299,9 @@ export default function ReleasesPage() {
                       >
                         <div className="relative aspect-video bg-neutral-800">
                           {game.cover ? (
-                            <Image
+                            <GameImage
                               src={game.cover}
+                              fallback={game.coverAlt}
                               alt={game.title}
                               fill
                               sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"

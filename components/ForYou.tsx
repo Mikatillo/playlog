@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Sparkles, RefreshCw } from 'lucide-react';
 import { Game } from '@/types/game';
-import { mapRawgGame, RawgGame } from '@/lib/rawg';
 import { useAuth } from '@/contexts/AuthContext';
 import { Rail, RailCard } from './Rail';
 
@@ -67,10 +66,7 @@ export default function ForYou({ onGameClick }: ForYouProps) {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
 
-        const mapped: Recommended[] = (data.results || []).map((g: RawgGame & { reason?: string }) => ({
-          ...mapRawgGame(g),
-          reason: g.reason,
-        }));
+        const mapped: Recommended[] = (data.results || []) as Recommended[];
         setRecommendations(mapped);
         setRound((r) => r + 1);
         writeSeen([...seen, ...mapped.map((g) => g.id)]);

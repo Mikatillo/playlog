@@ -10,7 +10,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { Game, GameData } from '@/types/game';
-import { mapRawgGame, RawgGame, cleanDescription } from '@/lib/rawg';
+import { cleanDescription } from '@/lib/text';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
@@ -34,7 +34,7 @@ import ReviewsSection from '@/components/ReviewsSection';
 
 type ActivityType = 'added' | 'started' | 'completed' | 'dropped' | 'rated' | 'reviewed';
 
-// Жанры RAWG — по slug (числовые id легко перепутать)
+// Жанры — по slug (в /api/games они сопоставляются с жанрами IGDB)
 const genres = [
   { id: '', name: 'Все жанры' },
   { id: 'action', name: 'Экшен' },
@@ -118,7 +118,7 @@ export default function Home() {
               `/api/steam/genre?page=${pageNum}${g ? `&genre=${encodeURIComponent(g)}` : ''}`,
             ).then((r) => r.json());
             if (stale()) return;
-            const fromApi: Game[] = (res.results || []).map((r: RawgGame) => mapRawgGame(r));
+            const fromApi: Game[] = (res.results || []) as Game[];
             if (fromApi.length > 0) {
               setGames((prev) => {
                 const base = append ? prev : [];

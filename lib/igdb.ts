@@ -39,25 +39,108 @@ export async function getIgdbToken(): Promise<string> {
   return data.access_token;
 }
 
-export async function igdbQuery<T = any>(endpoint: string, body: string): Promise<T> {
-  const token = await getIgdbToken();
+// IGDB разрешает 4 запроса в секунду — ставим запросы в очередь с паузой между стартами
+let lastStart = 0;
+let queue: Promise<void> = Promise.resolve();
 
-  const res = await fetch(`https://api.igdb.com/v4/${endpoint}`, {
-    method: 'POST',
-    headers: {
-      'Client-ID': CLIENT_ID,
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'text/plain',
-    },
-    body,
+function waitTurn(): Promise<void> {
+  const turn = queue.then(async () => {
+    const wait = Math.max(0, lastStart + 280 - Date.now());
+    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+    lastStart = Date.now();
   });
+  queue = turn.catch(() => {});
+  return turn;
+}
 
-  if (!res.ok) {
+// Небольшой кэш ответов в памяти сервера (одинаковый запрос не уходит в IGDB повторно)
+const responseCache = new Map<string, { at: number; data: any }>();
+const CACHE_LIMIT = 300;
+
+async function igdbFetch(endpoint: string, body: string): Promise<any> {
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await waitTurn();
+    const token = await getIgdbToken();
+
+    const res = await fetch(`https://api.igdb.com/v4/${endpoint}`, {
+      method: 'POST',
+      headers: {
+        'Client-ID': CLIENT_ID,
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'text/plain',
+      },
+      body,
+      cache: 'no-store',
+    });
+
+    if (res.ok) return res.json();
+
     const text = await res.text();
-    throw new Error(`IGDB query failed: ${res.status} ${text}`);
+    lastError = new Error(`IGDB query failed: ${res.status} ${text}`);
+
+    if (res.status === 401) {
+      cachedToken = null; // токен протух — получим новый и повторим
+      continue;
+    }
+    if (res.status === 429 || res.status >= 500) {
+      await new Promise((r) => setTimeout(r, 600 * (attempt + 1)));
+      continue;
+    }
+    break; // 400 и прочее — повторять бессмысленно
   }
 
-  return res.json();
+  throw lastError || new Error('IGDB query failed');
+}
+
+/**
+ * Запрос к IGDB. ttlMs — сколько держать ответ в памяти сервера (0 = не кэшировать).
+ */
+export async function igdbQuery<T = any>(endpoint: string, body: string, ttlMs = 0): Promise<T> {
+  const key = `${endpoint}::${body}`;
+  if (ttlMs > 0) {
+    const hit = responseCache.get(key);
+    if (hit && Date.now() - hit.at < ttlMs) return hit.data as T;
+  }
+
+  const data = await igdbFetch(endpoint, body);
+
+  if (ttlMs > 0) {
+    if (responseCache.size >= CACHE_LIMIT) {
+      const first = responseCache.keys().next().value;
+      if (first) responseCache.delete(first);
+    }
+    responseCache.set(key, { at: Date.now(), data });
+  }
+  return data as T;
+}
+
+/**
+ * Несколько запросов одним обращением (/multiquery, до 10 штук) — экономит лимит 4 req/sec.
+ * Возвращает карту: имя запроса → результат.
+ */
+export async function igdbMulti<T = any>(
+  queries: { name: string; endpoint: string; body: string }[],
+  ttlMs = 0,
+): Promise<Record<string, T[]>> {
+  const out: Record<string, T[]> = {};
+  for (let i = 0; i < queries.length; i += 10) {
+    const chunk = queries.slice(i, i + 10);
+    const body = chunk
+      .map((q) => `query ${q.endpoint} "${q.name}" {\n${q.body}\n};`)
+      .join('\n');
+    const data = await igdbQuery<{ name: string; result: T[] }[]>('multiquery', body, ttlMs);
+    (data || []).forEach((d) => {
+      out[d.name] = d.result || [];
+    });
+  }
+  return out;
+}
+
+/** Экранирует строку для запроса IGDB (кавычки и слэши ломают Apicalypse). */
+export function igdbEscape(s: string): string {
+  return s.replace(/\\/g, ' ').replace(/"/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
 // === Маппинг IGDB → внутренний тип Game ===
@@ -92,6 +175,8 @@ export interface IgdbGame {
   artworks?: { id: number; image_id: string }[];
   videos?: { id: number; video_id: string }[];
   game_modes?: { id: number; name: string }[];
+  themes?: { id: number; name: string }[];
+  hypes?: number;
   external_games?: IgdbExternalGame[];
 }
 
@@ -126,19 +211,20 @@ export function mapIgdbGame(raw: IgdbGame): Game {
   // 3. IGDB artwork (концепт-арт)
   // 4. IGDB cover (вертикальный постер)
   let cover = '';
+  let coverAlt: string | undefined;
+
+  // Картинка IGDB — она же запасная, если Steam header окажется 404 (у новых игр бывает)
+  const horizontalId = raw.screenshots?.[0]?.image_id || raw.artworks?.[0]?.image_id;
+  let igdbCover = '';
+  if (horizontalId) igdbCover = igdbImageUrl(horizontalId, 't_1080p');
+  else if (raw.cover?.image_id) igdbCover = igdbImageUrl(raw.cover.image_id, 't_cover_big');
 
   const steamAppId = findSteamAppId(raw);
   if (steamAppId) {
     cover = steamHeaderUrl(steamAppId);
+    coverAlt = igdbCover || undefined;
   } else {
-    const horizontalId =
-      raw.screenshots?.[0]?.image_id || raw.artworks?.[0]?.image_id;
-
-    if (horizontalId) {
-      cover = igdbImageUrl(horizontalId, 't_1080p');
-    } else if (raw.cover?.image_id) {
-      cover = igdbImageUrl(raw.cover.image_id, 't_cover_big');
-    }
+    cover = igdbCover;
   }
 
   const rating = raw.rating
@@ -151,12 +237,13 @@ export function mapIgdbGame(raw: IgdbGame): Game {
     id: raw.id,
     title: raw.name,
     cover,
+    coverAlt,
     year,
     released,
     rating,
     genre: raw.genres?.[0]?.name || 'Неизвестно',
     genres: raw.genres || [],
-    tags: [],
+    tags: (raw.themes || []).map((t) => ({ id: t.id, name: t.name })),
     description:
       (raw.summary || raw.storyline || '').substring(0, 300) ||
       'Описание отсутствует',
@@ -204,9 +291,19 @@ export async function findSteamAppIdByTitle(title: string): Promise<string | nul
     const items = data?.items || [];
     if (!items.length) return null;
 
-    // Берём первый результат (Steam сам сортирует по релевантности)
-    const first = items[0];
-    if (first?.id) return String(first.id);
+    // Берём только результат с совпадающим названием (иначе подставится чужая игра)
+    const key = (t: string) => normalizeTitle(t).toLowerCase().replace(/[^a-z0-9а-яё]/g, '');
+    const target = key(title);
+    if (target.length < 3) return null;
+
+    const match = items.find((it: any) => {
+      const k = key(String(it?.name || ''));
+      if (!k) return false;
+      if (k === target) return true;
+      const [short, long] = k.length < target.length ? [k, target] : [target, k];
+      return short.length >= 6 && long.startsWith(short);
+    });
+    if (match?.id) return String(match.id);
 
     return null;
   } catch {

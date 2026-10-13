@@ -16,7 +16,8 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import { Game, GameData } from '@/types/game';
-import { mapRawgGame, RawgGame, cleanDescription } from '@/lib/rawg';
+import { cleanDescription } from '@/lib/text';
+import GameImage from '@/components/GameImage';
 import GameCard from '@/components/GameCard';
 import GameCardSkeleton from '@/components/GameCardSkeleton';
 import GameMediaCarousel from '@/components/GameMediaCarousel';
@@ -433,8 +434,7 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
     try {
       const res = await fetch(`/api/games/${game.id}?full=true`);
       if (res.ok) {
-        const rawData = await res.json();
-        const fullGame = mapRawgGame(rawData);
+        const fullGame: Game = await res.json();
         setSelectedGame(fullGame);
         if (fullGame.descriptionRaw) {
           translateDescription(fullGame.descriptionRaw, game.id);
@@ -781,8 +781,9 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
                     >
                       <div className="relative w-[84px] sm:w-24 self-stretch min-h-[92px] rounded-xl overflow-hidden bg-neutral-800 flex-shrink-0 shadow-lg shadow-black/40">
                         {game.cover && (
-                          <Image
+                          <GameImage
                             src={game.cover}
+                            fallback={game.coverAlt}
                             alt={game.title}
                             fill
                             sizes="96px"

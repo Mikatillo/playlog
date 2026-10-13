@@ -1,6 +1,6 @@
 'use client';
 
-import Image from 'next/image';
+import GameImage from '@/components/GameImage';
 import { Star, Clock, Heart, Gamepad, Check, XCircle } from 'lucide-react';
 import { Game, GameData } from '@/types/game';
 import { getMetacriticColor, getStatusColor } from '@/lib/utils';
@@ -45,8 +45,9 @@ export default function GameCard({
       style={{ animationDelay: `${delay}ms` }}
     >
       <div className="relative aspect-video bg-neutral-800 overflow-hidden">
-        <Image
+        <GameImage
           src={game.cover || 'https://via.placeholder.com/400x225/171717/525252?text=No+Image'}
+          fallback={game.coverAlt}
           alt={game.title}
           fill
           sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, (max-width: 1280px) 33vw, 25vw"

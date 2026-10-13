@@ -1,12 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-
-const API_KEY = process.env.RAWG_API_KEY || 'demo';
-const BASE_URL = 'https://api.rawg.io/api';
-
-const FIELDS = [
-  'id', 'name', 'background_image', 'released', 'rating',
-  'metacritic', 'genres', 'tags', 'platforms', 'playtime', 'ratings_count',
-].join(',');
+import { igdbQuery, igdbMulti, mapIgdbGame, IgdbGame } from '@/lib/igdb';
+import { IGDB_GAME_FIELDS, isEdition } from '@/lib/igdb-shared';
+import type { Game } from '@/types/game';
 
 const RESULT_COUNT = 12;
 
@@ -14,18 +9,14 @@ const RESULT_COUNT = 12;
 const memCache = new Map<string, { data: Candidate[]; expiresAt: number }>();
 const CACHE_TTL = 30 * 60 * 1000;
 
-// Совсем «заезженные» игры, которые и так все знают
-const TOO_MAINSTREAM = new Set<number>([
-  3498, 4200, 3328, 13536, 4291, 12020, 5286, 5679, 3439, 278, 1942,
-]);
+// Игры с огромным числом оценок все и так знают — слегка опускаем их
+const MAINSTREAM_RATINGS = 2500;
 
-// Слишком общие теги — по ним нельзя понять вкус
-const GENERIC_TAG_LIMIT = 150000; // games_count выше — тег слишком общий
-
-type Source = 'genre-fresh' | 'genre-top' | 'tag' | 'trending' | 'gems';
+type Source = 'genre-fresh' | 'genre-top' | 'theme' | 'trending' | 'gems';
 
 interface Candidate {
-  game: any;
+  raw: IgdbGame;
+  game: Game;
   sources: Set<Source>;
   genreHits: string[];
   tagHits: string[];
@@ -55,19 +46,11 @@ function franchiseKey(name: string): string {
   return n.split(' ').slice(0, 2).join(' ');
 }
 
-function yearOf(g: any): number {
-  return Number(g.released?.split('-')[0]) || 0;
+function ratingsCount(g: IgdbGame): number {
+  return g.total_rating_count || g.rating_count || 0;
 }
 
-async function getJson(url: string, revalidate = 1800): Promise<any | null> {
-  try {
-    const res = await fetch(url, { next: { revalidate }, signal: AbortSignal.timeout(8000) });
-    if (!res.ok) return null;
-    return await res.json();
-  } catch {
-    return null;
-  }
-}
+const BASE_WHERE = 'game_type = 0 & cover != null & version_parent = null';
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -82,103 +65,124 @@ export async function GET(request: NextRequest) {
     const exclude = new Set<number>(allIds);
     const now = new Date();
     const year = now.getFullYear();
+    const nowSec = Math.floor(now.getTime() / 1000);
+    const yearSec = 365 * 24 * 3600;
 
-    const cacheKey = `pool:${[...topIds].sort().join('-')}`;
+    const cacheKey = `pool:${[...topIds].sort((a, b) => a - b).join('-')}`;
     const cached = memCache.get(cacheKey);
     let pool: Candidate[];
-    let genreNames: Record<string, string> = {};
 
     if (cached && Date.now() < cached.expiresAt) {
       pool = cached.data;
     } else {
-      // 1. Вкус: жанры и теги любимых игр
-      const genreCount = new Map<string, { n: number; name: string }>();
-      const tagCount = new Map<string, { n: number; name: string }>();
+      // 1. Вкус: жанры и темы любимых игр
+      const genreCount = new Map<number, { n: number; name: string }>();
+      const themeCount = new Map<number, { n: number; name: string }>();
 
-      const details = await Promise.all(
-        topIds.map((id) => getJson(`${BASE_URL}/games/${id}?key=${API_KEY}&fields=genres,tags`, 86400)),
-      );
-      details.forEach((d) => {
-        d?.genres?.forEach((g: any) => {
-          const e = genreCount.get(String(g.id)) || { n: 0, name: g.name };
-          e.n += 1;
-          genreCount.set(String(g.id), e);
+      if (topIds.length > 0) {
+        const liked = await igdbQuery<IgdbGame[]>(
+          'games',
+          `fields genres.name, themes.name; where id = (${topIds.join(',')}); limit ${topIds.length};`,
+          6 * 3600 * 1000,
+        );
+        liked.forEach((g) => {
+          g.genres?.forEach((x) => {
+            const e = genreCount.get(x.id) || { n: 0, name: x.name };
+            e.n += 1;
+            genreCount.set(x.id, e);
+          });
+          g.themes?.forEach((x) => {
+            const e = themeCount.get(x.id) || { n: 0, name: x.name };
+            e.n += 1;
+            themeCount.set(x.id, e);
+          });
         });
-        d?.tags?.forEach((t: any) => {
-          if (!t || (t.games_count || 0) > GENERIC_TAG_LIMIT || (t.games_count || 0) < 800) return;
-          if (t.language && t.language !== 'eng') return;
-          const e = tagCount.get(String(t.id)) || { n: 0, name: t.name };
-          e.n += 1;
-          tagCount.set(String(t.id), e);
-        });
-      });
+      }
 
       const topGenres = [...genreCount.entries()].sort((a, b) => b[1].n - a[1].n).slice(0, 3);
-      const topTags = [...tagCount.entries()].sort((a, b) => b[1].n - a[1].n).slice(0, 3);
-      topGenres.forEach(([id, v]) => (genreNames[id] = v.name));
+      const topThemes = [...themeCount.entries()].sort((a, b) => b[1].n - a[1].n).slice(0, 2);
 
-      // 2. Источники кандидатов — всё параллельно, и все свежие
-      const freshFrom = `${year - 4}-01-01`;
-      const midFrom = `${year - 9}-01-01`;
-      const yearAgo = new Date(now.getTime() - 365 * 24 * 3600 * 1000).toISOString().slice(0, 10);
-      const today = now.toISOString().slice(0, 10);
-      const lastDay = `${year}-12-31`;
+      // 2. Источники кандидатов — одним запросом /multiquery (у IGDB лимит 4 запроса в секунду)
+      const freshFrom = nowSec - 4 * yearSec;
+      const midFrom = nowSec - 9 * yearSec;
 
-      const jobs: { url: string; source: Source }[] = [];
+      const queries: { name: string; endpoint: string; body: string; source: Source }[] = [];
 
       topGenres.forEach(([id]) => {
-        jobs.push({
+        queries.push({
+          name: `genre-fresh-${id}`,
+          endpoint: 'games',
           source: 'genre-fresh',
-          url: `${BASE_URL}/games?key=${API_KEY}&genres=${id}&dates=${freshFrom},${lastDay}&ordering=-added&page_size=30&fields=${FIELDS}`,
+          body: `${IGDB_GAME_FIELDS}
+            where ${BASE_WHERE} & genres = (${id}) & first_release_date >= ${freshFrom} & first_release_date <= ${nowSec} & total_rating_count >= 15;
+            sort total_rating_count desc; limit 30;`,
         });
       });
       topGenres.slice(0, 2).forEach(([id]) => {
-        jobs.push({
+        queries.push({
+          name: `genre-top-${id}`,
+          endpoint: 'games',
           source: 'genre-top',
-          url: `${BASE_URL}/games?key=${API_KEY}&genres=${id}&dates=${midFrom},${lastDay}&metacritic=75,100&ordering=-rating&page_size=30&fields=${FIELDS}`,
+          body: `${IGDB_GAME_FIELDS}
+            where ${BASE_WHERE} & genres = (${id}) & first_release_date >= ${midFrom} & first_release_date <= ${nowSec} & aggregated_rating >= 78 & aggregated_rating_count >= 5;
+            sort aggregated_rating desc; limit 30;`,
         });
       });
-      topTags.forEach(([id]) => {
-        jobs.push({
-          source: 'tag',
-          url: `${BASE_URL}/games?key=${API_KEY}&tags=${id}&dates=${midFrom},${lastDay}&ordering=-rating&page_size=30&fields=${FIELDS}`,
+      topThemes.forEach(([id]) => {
+        queries.push({
+          name: `theme-${id}`,
+          endpoint: 'games',
+          source: 'theme',
+          body: `${IGDB_GAME_FIELDS}
+            where ${BASE_WHERE} & themes = (${id}) & first_release_date >= ${midFrom} & first_release_date <= ${nowSec} & total_rating_count >= 15;
+            sort total_rating desc; limit 30;`,
         });
       });
-      // Что выходит и растёт сейчас
-      jobs.push({
+      // Что вышло за последний год и набирает оценки
+      queries.push({
+        name: 'trending',
+        endpoint: 'games',
         source: 'trending',
-        url: `${BASE_URL}/games?key=${API_KEY}&dates=${yearAgo},${today}&ordering=-added&page_size=40&fields=${FIELDS}`,
+        body: `${IGDB_GAME_FIELDS}
+          where ${BASE_WHERE} & first_release_date >= ${nowSec - yearSec} & first_release_date <= ${nowSec} & total_rating_count >= 5;
+          sort total_rating_count desc; limit 40;`,
       });
       // Скрытые жемчужины: высокие оценки, но не мегахиты
-      jobs.push({
+      queries.push({
+        name: 'gems',
+        endpoint: 'games',
         source: 'gems',
-        url: `${BASE_URL}/games?key=${API_KEY}&dates=${midFrom},${lastDay}&metacritic=80,100&ordering=-rating&page_size=40&fields=${FIELDS}`,
+        body: `${IGDB_GAME_FIELDS}
+          where ${BASE_WHERE} & first_release_date >= ${midFrom} & first_release_date <= ${nowSec} & aggregated_rating >= 80 & total_rating_count >= 15 & total_rating_count <= 500;
+          sort aggregated_rating desc; limit 40;`,
       });
 
-      const responses = await Promise.all(jobs.map((j) => getJson(j.url)));
+      const responses = await igdbMulti<IgdbGame>(queries, CACHE_TTL);
 
       const map = new Map<number, Candidate>();
       const topGenreIds = new Set(topGenres.map(([id]) => id));
-      const topTagIds = new Map(topTags.map(([id, v]) => [id, v.name]));
+      const topThemeIds = new Set(topThemes.map(([id]) => id));
 
-      responses.forEach((data, i) => {
-        const source = jobs[i].source;
-        (data?.results || []).forEach((g: any) => {
-          if (!g?.id || !g.background_image || TOO_MAINSTREAM.has(g.id)) return;
-          const c = map.get(g.id) || { game: g, sources: new Set<Source>(), genreHits: [], tagHits: [] };
-          c.sources.add(source);
-          if (c.genreHits.length === 0) {
-            c.genreHits = (g.genres || []).filter((x: any) => topGenreIds.has(String(x.id))).map((x: any) => x.name);
+      queries.forEach((q) => {
+        (responses[q.name] || []).forEach((raw) => {
+          if (!raw?.id || isEdition(raw.name)) return;
+          let c = map.get(raw.id);
+          if (!c) {
+            c = {
+              raw,
+              game: mapIgdbGame(raw),
+              sources: new Set<Source>(),
+              genreHits: (raw.genres || []).filter((x) => topGenreIds.has(x.id)).map((x) => x.name),
+              tagHits: (raw.themes || []).filter((x) => topThemeIds.has(x.id)).map((x) => x.name),
+            };
+            map.set(raw.id, c);
           }
-          if (c.tagHits.length === 0) {
-            c.tagHits = (g.tags || []).filter((t: any) => topTagIds.has(String(t.id))).map((t: any) => t.name);
-          }
-          map.set(g.id, c);
+          c.sources.add(q.source);
         });
       });
 
       pool = [...map.values()];
-      memCache.set(cacheKey, { data: pool, expiresAt: Date.now() + CACHE_TTL });
+      if (pool.length > 0) memCache.set(cacheKey, { data: pool, expiresAt: Date.now() + CACHE_TTL });
     }
 
     // 3. Оценка кандидатов
@@ -189,23 +193,26 @@ export async function GET(request: NextRequest) {
       .filter((c) => !exclude.has(c.game.id))
       .map((c) => {
         const g = c.game;
-        const age = Math.max(0, year - (yearOf(g) || year));
+        const age = Math.max(0, year - (g.year || year));
         let score = (g.rating || 0) * 12 + (g.metacritic || 0) * 0.25;
 
         // Свежесть: новое сильно выше, старше 10 лет — штраф
         score += Math.max(0, 28 - age * 4);
-        if (age > 10) score -= g.metacritic >= 90 ? 12 : 30;
+        if (age > 10) score -= (g.metacritic || 0) >= 90 ? 12 : 30;
         if (age > 15) score -= 20;
 
         // Релевантность вкусу
         if (hasTaste) {
           score += c.genreHits.length * 9 + c.tagHits.length * 7;
-          if (c.sources.has('tag')) score += 6;
+          if (c.sources.has('theme')) score += 6;
         }
         if (c.sources.has('trending')) score += 10;
-        if (c.sources.has('gems') && (g.ratings_count || 0) < 4000) score += 6;
+        if (c.sources.has('gems')) score += 6;
         // Совпало сразу в нескольких источниках — хороший знак
         score += (c.sources.size - 1) * 4;
+
+        // Слишком заезженные хиты
+        if (ratingsCount(c.raw) > MAINSTREAM_RATINGS) score -= 15;
 
         // Уже показывали недавно — пропускаем вперёд новые
         if (seenIds.has(g.id)) score -= 45;
@@ -225,8 +232,8 @@ export async function GET(request: NextRequest) {
       let bestVal = -Infinity;
       for (let i = 0; i < remaining.length; i++) {
         const { c, score, age } = remaining[i];
-        const primary = c.game.genres?.[0]?.name || '?';
-        const fk = franchiseKey(c.game.name);
+        const primary = c.game.genre || '?';
+        const fk = franchiseKey(c.game.title);
         if (franchiseUsed.has(fk)) continue; // одна игра на франшизу
         if (age > 10 && oldCount >= 1) continue;
 
@@ -238,9 +245,9 @@ export async function GET(request: NextRequest) {
       }
       if (bestIdx < 0) break;
       const [chosen] = remaining.splice(bestIdx, 1);
-      const primary = chosen.c.game.genres?.[0]?.name || '?';
+      const primary = chosen.c.game.genre || '?';
       genreUsed.set(primary, (genreUsed.get(primary) || 0) + 1);
-      franchiseUsed.add(franchiseKey(chosen.c.game.name));
+      franchiseUsed.add(franchiseKey(chosen.c.game.title));
       if (chosen.age > 10) oldCount++;
       picked.push(chosen);
     }

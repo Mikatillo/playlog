@@ -1,10 +1,10 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import Image from 'next/image';
+import GameImage from '@/components/GameImage';
 import { ChevronLeft, ChevronRight, Layers } from 'lucide-react';
 import type { Game } from '@/types/game';
-import { mapRawgGame, rawgResize, type RawgGame } from '@/lib/rawg';
+import { thumbUrl } from '@/lib/images';
 
 interface GameSeriesProps {
   gameId: number;
@@ -13,10 +13,7 @@ interface GameSeriesProps {
 }
 
 // Кэш на время сессии: повторное открытие карточки не дёргает сеть
-type SeriesItem = Pick<RawgGame, 'id' | 'name' | 'background_image' | 'released' | 'rating'> &
-  Partial<RawgGame>;
-
-const cache = new Map<number, SeriesItem[]>();
+const cache = new Map<number, Game[]>();
 
 // Окно карточки прокручивается: после перехода на другую игру возвращаем его наверх
 function scrollModalToTop(from: HTMLElement | null) {
@@ -32,7 +29,7 @@ function scrollModalToTop(from: HTMLElement | null) {
 }
 
 export default function GameSeries({ gameId, onOpen }: GameSeriesProps) {
-  const [items, setItems] = useState<SeriesItem[]>(cache.get(gameId) || []);
+  const [items, setItems] = useState<Game[]>(cache.get(gameId) || []);
   const [canLeft, setCanLeft] = useState(false);
   const [canRight, setCanRight] = useState(false);
   const scroller = useRef<HTMLDivElement>(null);
@@ -49,7 +46,7 @@ export default function GameSeries({ gameId, onOpen }: GameSeriesProps) {
       .then((r) => (r.ok ? r.json() : { results: [] }))
       .then((data) => {
         if (cancelled) return;
-        const list: SeriesItem[] = data.results || [];
+        const list: Game[] = data.results || [];
         cache.set(gameId, list);
         setItems(list);
       })
@@ -127,15 +124,16 @@ export default function GameSeries({ gameId, onOpen }: GameSeriesProps) {
                 type="button"
                 onClick={(e) => {
                   scrollModalToTop(e.currentTarget);
-                  onOpen(mapRawgGame(g as RawgGame));
+                  onOpen(g);
                 }}
-                title={g.name}
+                title={g.title}
                 className="group snap-start flex-shrink-0 w-[132px] sm:w-[148px] text-left rounded-lg bg-neutral-900 border border-neutral-700/70 hover:border-indigo-500/60 overflow-hidden transition hover:-translate-y-0.5"
               >
                 <div className="relative aspect-video bg-neutral-800 overflow-hidden">
-                  <Image
-                    src={rawgResize(g.background_image, 420)}
-                    alt={g.name}
+                  <GameImage
+                    src={thumbUrl(g.cover)}
+                    fallback={thumbUrl(g.coverAlt)}
+                    alt={g.title}
                     fill
                     sizes="148px"
                     className="object-cover transition duration-500 group-hover:scale-105"
@@ -145,7 +143,7 @@ export default function GameSeries({ gameId, onOpen }: GameSeriesProps) {
                 </div>
                 <div className="px-2 py-1.5">
                   <div className="text-[11px] font-medium text-neutral-200 leading-tight line-clamp-1 group-hover:text-white">
-                    {g.name}
+                    {g.title}
                   </div>
                   <div className="text-[10px] text-neutral-500 mt-0.5">{year || '—'}</div>
                 </div>

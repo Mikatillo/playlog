@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Image from 'next/image';
+import GameImage from '@/components/GameImage';
 import { Flame, Play, Users } from 'lucide-react';
 import type { Game } from '@/types/game';
 import { fetchSteamTop, type SteamTopItem } from '@/lib/steam-client';
@@ -171,7 +172,7 @@ export default function SteamHero({ onGameClick }: SteamHeroProps) {
                     {s.rank}
                   </span>
                   <span className="relative w-12 h-7 sm:w-14 sm:h-8 rounded-md overflow-hidden bg-neutral-800 flex-shrink-0">
-                    <Image src={s.game.cover} alt="" fill sizes="56px" className="object-cover" unoptimized />
+                    <GameImage src={s.game.cover} fallback={s.game.coverAlt} alt="" fill sizes="56px" className="object-cover" unoptimized />
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block text-xs sm:text-sm font-medium text-white truncate">{s.game.title}</span>

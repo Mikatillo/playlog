@@ -7,6 +7,7 @@ import {
   Users, ChevronDown, Coins,
 } from 'lucide-react';
 import Image from 'next/image';
+import GameImage from '@/components/GameImage';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
@@ -257,8 +258,9 @@ export default function Header() {
               >
                 <div className="relative w-10 h-14 rounded-lg overflow-hidden bg-neutral-800 flex-shrink-0">
                   {game.cover ? (
-                    <Image
+                    <GameImage
                       src={game.cover}
+                      fallback={game.coverAlt}
                       alt={game.title}
                       fill
                       sizes="40px"

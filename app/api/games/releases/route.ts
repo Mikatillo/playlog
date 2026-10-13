@@ -1,61 +1,54 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { igdbQuery, mapIgdbGame, IgdbGame } from '@/lib/igdb';
+import { IGDB_GAME_FIELDS } from '@/lib/igdb-shared';
 
-const API_KEY = process.env.RAWG_API_KEY || 'demo';
-const BASE_URL = 'https://api.rawg.io/api';
-
-const FIELDS = [
-  'id', 'name', 'background_image', 'released', 'rating',
-  'metacritic', 'genres', 'platforms', 'tba',
-].join(',');
-
-function fmt(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+function startOfDay(y: number, m: number, d: number): number {
+  return Math.floor(Date.UTC(y, m, d) / 1000);
 }
 
+// Календарь релизов: ожидаемые игры (по «хайпу» IGDB) для будущих дат и популярные для прошедших.
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const yearParam = searchParams.get('year');
-  const monthParam = searchParams.get('month');
+  const year = Number(searchParams.get('year'));
+  const month = Number(searchParams.get('month'));
 
   try {
-    let dates: string;
+    const nowSec = Math.floor(Date.now() / 1000);
+    let from: number;
+    let to: number;
 
-    if (yearParam && monthParam) {
-      const year = Number(yearParam);
-      const month = Number(monthParam);
-      const start = `${year}-${String(month).padStart(2, '0')}-01`;
-      const lastDay = new Date(year, month, 0).getDate();
-      const end = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
-      dates = `${start},${end}`;
+    if (year >= 2000 && year <= 2100 && month >= 1 && month <= 12) {
+      from = startOfDay(year, month - 1, 1);
+      to = startOfDay(year, month, 1) - 1;
     } else {
       const today = new Date();
-      const future = new Date();
-      future.setMonth(future.getMonth() + 6);
-      dates = `${fmt(today)},${fmt(future)}`;
+      from = startOfDay(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
+      to = from + 183 * 24 * 3600;
     }
 
-    // Основной запрос
-    const primaryUrl = `${BASE_URL}/games?key=${API_KEY}&dates=${dates}&ordering=released&page_size=40&language=rus&fields=${FIELDS}`;
-    let response = await fetch(primaryUrl, { next: { revalidate: 3600 } });
+    const future = to > nowSec;
+    const notable = '(hypes >= 2 | total_rating_count >= 5 | aggregated_rating_count >= 3)';
 
-    if (!response.ok) {
-      // Резервный запрос — без dates, только сортировка по дате выхода
-      const fallbackUrl = `${BASE_URL}/games?key=${API_KEY}&ordering=-released&page_size=40&language=rus&fields=${FIELDS}`;
-      response = await fetch(fallbackUrl, { next: { revalidate: 3600 } });
-    }
+    const raw = await igdbQuery<IgdbGame[]>(
+      'games',
+      `${IGDB_GAME_FIELDS}
+       where game_type = (0,8,9) & cover != null & version_parent = null
+         & first_release_date >= ${from} & first_release_date <= ${to} & ${notable};
+       sort ${future ? 'hypes desc' : 'total_rating_count desc'};
+       limit 60;`,
+      15 * 60 * 1000,
+    );
 
-    if (!response.ok) {
-      // Второй резерв — популярные игры с датой
-      const lastResortUrl = `${BASE_URL}/games?key=${API_KEY}&ordering=-added&page_size=40&language=rus&fields=${FIELDS}`;
-      response = await fetch(lastResortUrl, { next: { revalidate: 3600 } });
-    }
+    const results = raw
+      .map(mapIgdbGame)
+      .filter((g) => g.year > 0)
+      .sort((a, b) => (a.released || '').localeCompare(b.released || ''))
+      .slice(0, 40);
 
-    if (!response.ok) {
-      return NextResponse.json({ results: [] });
-    }
-
-    const data = await response.json();
-    return NextResponse.json(data, { headers: { 'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400' } });
+    return NextResponse.json(
+      { results },
+      { headers: { 'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400' } },
+    );
   } catch (error) {
     console.error('Releases API error:', error);
     return NextResponse.json({ results: [] });

@@ -1,43 +1,34 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { igdbQuery, mapIgdbGame, IgdbGame } from '@/lib/igdb';
+import { IGDB_GAME_FIELDS } from '@/lib/igdb-shared';
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const idsParam = searchParams.get('ids') || '';
-  const ids = idsParam
+  const ids = (searchParams.get('ids') || '')
     .split(',')
     .map((s) => s.trim())
     .filter((s) => /^\d+$/.test(s))
-    .map((s) => Number(s))
+    .map(Number)
     .slice(0, 200);
 
-  if (ids.length === 0) {
-    return NextResponse.json({ results: [] });
-  }
+  if (ids.length === 0) return NextResponse.json({ results: [] });
 
   try {
-    // IGDB позволяет получить до 500 игр одним запросом через where id = (1,2,3)
-    const raw: IgdbGame[] = await igdbQuery(
+    const raw = await igdbQuery<IgdbGame[]>(
       'games',
-      `fields name, game_type, version_parent, rating, rating_count,
-       aggregated_rating, aggregated_rating_count,
-       total_rating, total_rating_count, first_release_date,
-       cover.image_id, artworks.image_id, screenshots.image_id,
-       genres.name, platforms.name, summary, videos.video_id,
-       external_games.uid, external_games.external_game_source;
+      `${IGDB_GAME_FIELDS}
        where id = (${ids.join(',')});
-       limit ${ids.length};`,
+       limit ${Math.min(ids.length, 500)};`,
+      10 * 60 * 1000,
     );
 
-    const results = raw.map(mapIgdbGame);
+    // порядок как в запросе
+    const byId = new Map(raw.map((g) => [g.id, mapIgdbGame(g)]));
+    const results = ids.map((id) => byId.get(id)).filter(Boolean);
 
     return NextResponse.json(
       { results },
-      {
-        headers: {
-          'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400',
-        },
-      },
+      { headers: { 'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400' } },
     );
   } catch (error) {
     console.error('[IGDB batch] error:', error);
