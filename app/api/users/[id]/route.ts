@@ -42,10 +42,23 @@ export async function GET(
       activeBannerId = (b as any)?.active_banner_id || null;
     } catch {}
 
+    // Оценки по аспектам — отдельным запросом: если SQL ещё не выполнен, профиль всё равно откроется
+    let userGamesRows: any[] = userGamesRes.data || [];
+    try {
+      const { data: asp, error: aspErr } = await supabase
+        .from('user_games')
+        .select('game_id, rate_gameplay, rate_story, rate_visuals, rate_music')
+        .eq('user_id', id);
+      if (!aspErr && asp) {
+        const byGame = new Map(asp.map((r: any) => [r.game_id, r]));
+        userGamesRows = userGamesRows.map((g) => ({ ...g, ...((byGame.get(g.game_id) as any) || {}) }));
+      }
+    } catch {}
+
     const profile = profileRes.data;
     const reviews = reviewsRes.data;
     const likesCount = likesRes.count;
-    const userGames = userGamesRes.data || [];
+    const userGames = userGamesRows;
 
     if (!profile) return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
 

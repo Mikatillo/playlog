@@ -1,79 +1,107 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { igdbQuery, mapIgdbGame, IgdbGame } from '@/lib/igdb';
 
-const API_KEY = process.env.RAWG_API_KEY || 'demo';
-const BASE_URL = 'https://api.rawg.io/api';
+// Маппинг RAWG-slug → IGDB genre IDs (чтобы не менять фронт)
+const GENRE_MAP: Record<string, string> = {
+  action: '(4,5,8,25)',            // Fighting, Shooter, Platform, Hack&slash
+  adventure: '(31)',
+  'role-playing-games-rpg': '(12)',
+  strategy: '(15)',
+  shooter: '(5)',
+  puzzle: '(9)',
+  racing: '(10)',
+  sports: '(14)',
+  simulation: '(13)',
+  indie: '(32)',
+};
 
-const GAME_FIELDS = [
-  'id', 'name', 'background_image', 'released', 'rating',
-  'metacritic', 'genres', 'tags', 'platforms', 'playtime',
-].join(',');
+// Маппинг RAWG-ordering → IGDB-сортировка
+const ORDERING_MAP: Record<string, string> = {
+  '-added': 'total_rating_count desc',
+  '-rating': 'rating desc',
+  '-released': 'first_release_date desc',
+  '-metacritic': 'aggregated_rating desc',
+};
 
-// Свежие игры = выпущены за последние N лет
-const MAX_AGE_YEARS = 3;
+const EDITION_PATTERNS = [
+  /\b(Collector'?s|Premium|Deluxe|Ultimate|Definitive|Gold|Complete|Enhanced|Special|Limited|Diamond|Legendary|Royal|Imperial)\s+Edition\b/i,
+  /\bGame of the Year\b/i,
+  /\bGOTY\b/i,
+  /\bRemaster(ed)?\b/i,
+  /\bRemake\b/i,
+];
+
+function isEdition(name: string): boolean {
+  return EDITION_PATTERNS.some((re) => re.test(name));
+}
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const page = searchParams.get('page') || '1';
-  const pageSize = searchParams.get('pageSize') || '20';
-  const ordering = searchParams.get('ordering') || '-added';
-  const genres = searchParams.get('genres') || '';
+  const page = Math.max(Number(searchParams.get('page') || '1'), 1);
+  const pageSize = Math.min(Number(searchParams.get('pageSize') || '20'), 50);
+  const orderingParam = searchParams.get('ordering') || '-added';
+  const genresParam = searchParams.get('genres') || '';
 
-  const currentYear = new Date().getFullYear();
-  const fromYear = currentYear - MAX_AGE_YEARS;
-  const dates = `${fromYear}-01-01,${currentYear}-12-31`;
+  const offset = (page - 1) * pageSize;
+
+  // IGDB ограничивает offset значением 5000
+  if (offset >= 5000) {
+    return NextResponse.json({
+      count: 0,
+      next: null,
+      previous: page > 1 ? String(page - 1) : null,
+      results: [],
+    });
+  }
 
   try {
-    // Запрашиваем СРАЗУ с dates + сортировкой
-    let url = `${BASE_URL}/games?key=${API_KEY}&page=${page}&page_size=${pageSize}&ordering=${ordering}&language=rus&fields=${GAME_FIELDS}&dates=${dates}`;
-    if (genres) url += `&genres=${genres}`;
+    const whereParts: string[] = ['game_type = 0', 'cover != null'];
 
-    let response = await fetch(url, { next: { revalidate: 3600 } });
-    let data = await response.json();
-
-    // Фильтруем на сервере — RAWG может вернуть игры вне диапазона
-    let results = (data.results || []).filter((g: any) => {
-      const year = Number(g.released?.split('-')[0]) || 0;
-      return year >= fromYear;
-    });
-
-    // Если пусто — пробуем другой порядок сортировки (metacritic)
-    if (results.length === 0) {
-      const altOrdering = ordering === '-added' ? '-metacritic' : '-rating';
-      let altUrl = `${BASE_URL}/games?key=${API_KEY}&page=${page}&page_size=${pageSize}&ordering=${altOrdering}&language=rus&fields=${GAME_FIELDS}&dates=${dates}`;
-      if (genres) altUrl += `&genres=${genres}`;
-
-      response = await fetch(altUrl, { next: { revalidate: 3600 } });
-      data = await response.json();
-      results = (data.results || []).filter((g: any) => {
-        const year = Number(g.released?.split('-')[0]) || 0;
-        return year >= fromYear;
-      });
+    if (genresParam && GENRE_MAP[genresParam]) {
+      whereParts.push(`genres = ${GENRE_MAP[genresParam]}`);
     }
 
-    // Если всё ещё пусто — отдаём без dates, но фильтруем на сервере
-    if (results.length === 0) {
-      let fallbackUrl = `${BASE_URL}/games?key=${API_KEY}&page=${page}&page_size=40&ordering=-released&language=rus&fields=${GAME_FIELDS}`;
-      if (genres) fallbackUrl += `&genres=${genres}`;
+    const sort = ORDERING_MAP[orderingParam] || 'total_rating_count desc';
 
-      response = await fetch(fallbackUrl, { next: { revalidate: 3600 } });
-      data = await response.json();
-      results = (data.results || []).filter((g: any) => {
-        const year = Number(g.released?.split('-')[0]) || 0;
-        return year >= fromYear;
-      });
-    }
+    const raw: IgdbGame[] = await igdbQuery(
+      'games',
+      `fields name, game_type, version_parent, rating, rating_count,
+       aggregated_rating, aggregated_rating_count,
+       total_rating, total_rating_count, first_release_date,
+       cover.image_id, artworks.image_id, screenshots.image_id,
+       genres.name, platforms.name, summary, videos.video_id,
+       external_games.uid, external_games.external_game_source;
+       where ${whereParts.join(' & ')};
+       sort ${sort};
+       limit ${pageSize};
+       offset ${offset};`,
+    );
+
+    // Дополнительная фильтрация (editions, пустышки)
+    const filtered = raw
+      .filter((g) => !g.version_parent)
+      .filter((g) => !isEdition(g.name))
+      .filter((g) => (g.total_rating_count || g.rating_count || 0) >= 3);
+
+    const results = filtered.map(mapIgdbGame);
+    // Если вернулось ровно pageSize — вероятно, есть следующая страница
+    const hasNext = raw.length === pageSize;
 
     return NextResponse.json(
       {
         count: results.length,
-        next: null,
-        previous: null,
+        next: hasNext ? String(page + 1) : null,
+        previous: page > 1 ? String(page - 1) : null,
         results,
       },
-      { headers: { 'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400' } },
+      {
+        headers: {
+          'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400',
+        },
+      },
     );
   } catch (error) {
-    console.error('Games API error:', error);
-    return NextResponse.json({ error: 'Failed to fetch' }, { status: 500 });
+    console.error('[IGDB games] error:', error);
+    return NextResponse.json({ error: 'Failed to fetch', results: [] }, { status: 500 });
   }
 }

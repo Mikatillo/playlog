@@ -18,8 +18,12 @@ export interface Game {
   playtime?: number;
 }
 
+import type { Aspects } from '@/lib/aspects';
+
 export interface GameData {
   rating: number;
+  /** Оценка по аспектам (0 = не оценено) */
+  aspects?: Aspects;
   hours: number;
   review: string;
   status: 'none' | 'want' | 'playing' | 'completed' | 'dropped';

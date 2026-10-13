@@ -1,5 +1,6 @@
 'use client';
 
+import { aspectsFromRow } from '@/lib/aspects';
 import { createContext, useContext, useEffect, useState, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { GameData, UserProfile } from '@/types/game';
@@ -133,6 +134,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             status: g.status || 'none',
             xp: 0,
             updatedAt: g.updated_at || undefined,
+            aspects: aspectsFromRow(g),
           });
         });
         setUserGames(map);

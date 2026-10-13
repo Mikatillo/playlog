@@ -1,5 +1,4 @@
 import type { Game } from '@/types/game';
-import { mapRawgGame, type RawgGame } from '@/lib/rawg';
 
 export interface SteamTopItem {
   game: Game;
@@ -16,9 +15,9 @@ export function fetchSteamTop(force = false): Promise<SteamTopItem[]> {
   const promise = fetch('/api/steam/steam-popular?limit=24')
     .then((r) => (r.ok ? r.json() : { results: [] }))
     .then((data) =>
-      ((data.results || []) as (RawgGame & { steam?: { rank: number; players: number } })[]).map(
+      ((data.results || []) as (Game & { steam?: { rank: number; players: number } })[]).map(
         (g, i) => ({
-          game: mapRawgGame(g),
+          game: g, // роут уже отдаёт готовые Game
           rank: g.steam?.rank ?? i + 1,
           players: g.steam?.players ?? 0,
         }),

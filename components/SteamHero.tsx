@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import { Flame, Play, Users } from 'lucide-react';
 import type { Game } from '@/types/game';
-import { rawgResize } from '@/lib/rawg';
 import { fetchSteamTop, type SteamTopItem } from '@/lib/steam-client';
 import SteamIcon from '@/components/SteamIcon';
 
@@ -20,9 +19,11 @@ function formatPlayers(n: number): string {
   return n.toLocaleString('ru-RU');
 }
 
-// В списке игры храним уменьшенную обложку, для героя берём крупную
-function heroImage(cover: string): string {
-  return rawgResize(cover.replace('/media/resize/640/-/', '/media/'), 1280);
+// Для героя берём крупный скриншот IGDB (Steam-обложка 460×215 на большом баннере была бы мутной)
+function heroImage(g: Game): string {
+  const shot = g.screenshots?.[0]?.image;
+  if (shot) return shot.replace('t_screenshot_big', 't_1080p');
+  return g.cover;
 }
 
 export default function SteamHero({ onGameClick }: SteamHeroProps) {
@@ -72,7 +73,7 @@ export default function SteamHero({ onGameClick }: SteamHeroProps) {
       <div className="relative min-w-0 h-[240px] sm:h-[330px] md:h-[380px] rounded-2xl md:rounded-3xl overflow-hidden border border-neutral-800 bg-neutral-900 group">
         <div key={g.id} className="absolute inset-0 hero-fade">
           <Image
-            src={heroImage(g.cover)}
+            src={heroImage(g)}
             alt=""
             fill
             sizes="(max-width: 1024px) 100vw, 900px"

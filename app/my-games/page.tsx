@@ -23,6 +23,8 @@ import GameCardSkeleton from '@/components/GameCardSkeleton';
 import GameMediaCarousel from '@/components/GameMediaCarousel';
 import SteamRating from '@/components/SteamRating';
 import GameSeries from '@/components/GameSeries';
+import AspectRatings from '@/components/AspectRatings';
+import { emptyAspects, hasAspects, aspectColumns, type Aspects } from '@/lib/aspects';
 import GameMeta from '@/components/GameMeta';
 import ReviewsSection from '@/components/ReviewsSection';
 import SteamImportModal from '@/components/SteamImportModal';
@@ -48,6 +50,7 @@ export default function MyGamesPage() {
   const [selectedGame, setSelectedGame] = useState<Game | null>(null);
   const [modalLoading, setModalLoading] = useState(false);
   const [modalRating, setModalRating] = useState(0);
+  const [modalAspects, setModalAspects] = useState<Aspects>(emptyAspects());
   const [modalHours, setModalHours] = useState(0);
   const [modalReview, setModalReview] = useState('');
   const [modalStatus, setModalStatus] = useState<
@@ -254,11 +257,13 @@ export default function MyGamesPage() {
     const data = userGames.get(game.id);
     if (data) {
       setModalRating(data.rating || 0);
+      setModalAspects(data.aspects || emptyAspects());
       setModalHours(data.hours || 0);
       setModalReview(data.review || '');
       setModalStatus(data.status || 'none');
     } else {
       setModalRating(0);
+      setModalAspects(emptyAspects());
       setModalHours(0);
       setModalReview('');
       setModalStatus('none');
@@ -285,6 +290,10 @@ export default function MyGamesPage() {
   const saveModalData = async () => {
     if (!selectedGame || !userId) return;
 
+    // Колонки аспектов пишем, только если они есть/были
+    const hadAspects = hasAspects(userGames.get(selectedGame.id)?.aspects);
+    const aspectPart = hasAspects(modalAspects) || hadAspects ? aspectColumns(modalAspects) : {};
+
     // 1. Сохраняем в user_games — это быстро
     await supabase.from('user_games').upsert(
       {
@@ -294,6 +303,7 @@ export default function MyGamesPage() {
         hours: modalHours,
         review: modalReview,
         status: modalStatus,
+        ...aspectPart,
       },
       { onConflict: 'user_id,game_id' },
     );
@@ -316,6 +326,7 @@ export default function MyGamesPage() {
         review: modalReview,
         status: modalStatus,
         xp: 0,
+        aspects: modalAspects,
         updatedAt: new Date().toISOString(),
       });
       return newMap;
@@ -718,6 +729,14 @@ export default function MyGamesPage() {
                     <span>10</span>
                   </div>
                 </div>
+
+                <AspectRatings
+                  key={selectedGame.id}
+                  value={modalAspects}
+                  overall={modalRating}
+                  onChange={setModalAspects}
+                  onSuggestOverall={setModalRating}
+                />
 
                 <div className="bg-neutral-800 rounded-xl p-4 md:p-5">
                   <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">

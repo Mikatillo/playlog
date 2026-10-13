@@ -1,6 +1,8 @@
 'use client';
 
 import ProfileStats from '@/components/ProfileStats';
+import TasteRadar from '@/components/TasteRadar';
+import { ASPECTS, aspectsFromRow, hasAspects } from '@/lib/aspects';
 import { fetchGamesByIds } from '@/lib/games-client';
 import { authFetch } from '@/lib/api-client';
 import { useEffect, useState, use, useMemo, useCallback } from 'react';
@@ -83,6 +85,10 @@ interface UserGameRow {
   review: string;
   updated_at?: string;
   favorite_order?: number | null;
+  rate_gameplay?: number | null;
+  rate_story?: number | null;
+  rate_visuals?: number | null;
+  rate_music?: number | null;
 }
 
 interface ProfileCache {
@@ -527,6 +533,7 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
         status: ug.status || 'none',
         xp: 0,
         updatedAt: ug.updated_at,
+        aspects: aspectsFromRow(ug),
       });
     });
     return map;
@@ -845,6 +852,17 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
           />
         </div>
 
+        {/* Радар вкуса: средние оценки по геймплею, сюжету, графике и музыке */}
+        <TasteRadar
+          isOwnProfile={isOwnProfile}
+          entries={userGames
+            .map((ug) => ({
+              title: games.find((g) => g.id === ug.game_id)?.title || 'Игра',
+              aspects: aspectsFromRow(ug),
+            }))
+            .filter((e) => hasAspects(e.aspects))}
+        />
+
         {/* Табы + коллекция */}
         <div className="space-y-6 min-w-0">
           <div className="flex items-center gap-2 border-b border-neutral-800 overflow-x-auto scrollbar-hide bg-neutral-900/70 backdrop-blur-md rounded-t-xl px-2">
@@ -1135,6 +1153,17 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
                         {modalGameData.rating}/10
                       </div>
                     )}
+                    {hasAspects(modalGameData.aspects) &&
+                      ASPECTS.filter((m) => (modalGameData.aspects?.[m.key] || 0) > 0).map((m) => (
+                        <div
+                          key={m.key}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-neutral-800 border border-neutral-700 text-xs font-medium text-neutral-200"
+                          title={m.hint}
+                        >
+                          <span style={{ color: m.color }}>●</span>
+                          {m.label} {modalGameData.aspects?.[m.key]}
+                        </div>
+                      ))}
                     {modalGameData.hours > 0 && (
                       <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-500/15 text-purple-400 border border-purple-500/30 text-xs font-medium">
                         <Clock className="w-3.5 h-3.5" />

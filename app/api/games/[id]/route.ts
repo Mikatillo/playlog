@@ -1,91 +1,69 @@
 import { NextRequest, NextResponse } from 'next/server';
-
-const API_KEY = process.env.RAWG_API_KEY || 'demo';
-const BASE_URL = 'https://api.rawg.io/api';
-
-// Для полных данных (модалка) нужны description и movies
-const DETAIL_FIELDS = [
-  'id',
-  'name',
-  'background_image',
-  'released',
-  'rating',
-  'metacritic',
-  'genres',
-  'tags',
-  'platforms',
-  'playtime',
-  'description',
-  'description_raw',
-  'movies',
-].join(',');
+import {
+  igdbQuery,
+  mapIgdbGame,
+  IgdbGame,
+  findSteamAppIdByTitle,
+  steamHeaderUrl,
+} from '@/lib/igdb';
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const { searchParams } = new URL(request.url);
-  const full = searchParams.get('full') === 'true';
+  const gameId = Number(id);
+
+  if (!gameId || isNaN(gameId)) {
+    return NextResponse.json({ error: 'Invalid id' }, { status: 400 });
+  }
 
   try {
-    const url = `${BASE_URL}/games/${id}?key=${API_KEY}&language=rus&fields=${DETAIL_FIELDS}`;
+    const raw: IgdbGame[] = await igdbQuery(
+      'games',
+      `fields name, game_type, version_parent,
+              rating, rating_count, aggregated_rating, aggregated_rating_count,
+              total_rating, total_rating_count, first_release_date,
+              cover.image_id, artworks.image_id, screenshots.image_id,
+              genres.name, platforms.name, summary, storyline, videos.video_id,
+              external_games.uid, external_games.external_game_source;
+       where id = ${gameId};
+       limit 1;`,
+    );
 
-    // Все три запроса к RAWG идут параллельно (раньше скриншоты и видео ждали основной запрос)
-    const detailPromise = fetch(url, { next: { revalidate: 3600 } });
-    const ssPromise = full
-      ? fetch(`${BASE_URL}/games/${id}/screenshots?key=${API_KEY}`, {
-          next: { revalidate: 86400 },
-        }).catch(() => null)
-      : Promise.resolve(null);
-    const mvPromise = full
-      ? fetch(`${BASE_URL}/games/${id}/movies?key=${API_KEY}`, {
-          next: { revalidate: 86400 },
-        }).catch(() => null)
-      : Promise.resolve(null);
-
-    const [response, ssResponse, mvResponse] = await Promise.all([
-      detailPromise,
-      ssPromise,
-      mvPromise,
-    ]);
-
-    if (!response.ok) {
+    if (!raw || raw.length === 0) {
       return NextResponse.json({ error: 'Game not found' }, { status: 404 });
     }
 
-    const data = await response.json();
+    const rawGame = raw[0];
+    const game = mapIgdbGame(rawGame);
 
-    if (!full) {
-      return NextResponse.json(data, { headers: { 'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400' } });
+    // Проверяем: обложка уже из Steam?
+    const hasSteamCover = game.cover.includes('steamstatic.com');
+
+    if (!hasSteamCover) {
+      // Ищем Steam appid по названию
+      const appid = await findSteamAppIdByTitle(rawGame.name);
+      if (appid) {
+        game.cover = steamHeaderUrl(appid);
+
+        // Если в платформах нет PC — добавляем, раз игра есть в Steam
+        const hasPC = game.platforms.some((p) =>
+          /PC|Windows/i.test(p)
+        );
+        if (!hasPC) {
+          game.platforms = ['PC (Microsoft Windows)', ...game.platforms];
+        }
+      }
     }
 
-    let screenshots: any[] = [];
-    let movies: any[] = [];
-
-    if (ssResponse?.ok) {
-      try {
-        const ssData = await ssResponse.json();
-        screenshots = ssData.results || [];
-      } catch {}
-    }
-    if (mvResponse?.ok) {
-      try {
-        const mvData = await mvResponse.json();
-        movies = mvData.results || [];
-      } catch {}
-    }
-
-    return NextResponse.json(
-      {
-        ...data,
-        screenshots,
-        movies,
+    return NextResponse.json(game, {
+      headers: {
+        'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400',
       },
-      { headers: { 'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400' } },
-    );
-  } catch (error) {
-    console.error('Error:', error);
+    });
+  } catch (error: any) {
+    console.error('[IGDB game by id] error:', error);
     return NextResponse.json({ error: 'Failed to fetch' }, { status: 500 });
   }
 }

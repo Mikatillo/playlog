@@ -1,12 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-
-const API_KEY = process.env.RAWG_API_KEY || 'demo';
-const BASE_URL = 'https://api.rawg.io/api';
-
-const GAME_FIELDS = [
-  'id', 'name', 'background_image', 'released', 'rating',
-  'metacritic', 'genres', 'tags', 'platforms', 'playtime',
-].join(',');
+import { igdbQuery, mapIgdbGame, IgdbGame } from '@/lib/igdb';
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -15,6 +8,7 @@ export async function GET(request: NextRequest) {
     .split(',')
     .map((s) => s.trim())
     .filter((s) => /^\d+$/.test(s))
+    .map((s) => Number(s))
     .slice(0, 200);
 
   if (ids.length === 0) {
@@ -22,31 +16,23 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Параллельно, но с ограничением — по 16 игр за раз
-    const results: any[] = [];
-    const concurrency = 16;
+    // IGDB позволяет получить до 500 игр одним запросом через where id = (1,2,3)
+    const raw: IgdbGame[] = await igdbQuery(
+      'games',
+      `fields name, game_type, version_parent, rating, rating_count,
+       aggregated_rating, aggregated_rating_count,
+       total_rating, total_rating_count, first_release_date,
+       cover.image_id, artworks.image_id, screenshots.image_id,
+       genres.name, platforms.name, summary, videos.video_id,
+       external_games.uid, external_games.external_game_source;
+       where id = (${ids.join(',')});
+       limit ${ids.length};`,
+    );
 
-    for (let i = 0; i < ids.length; i += concurrency) {
-      const batch = ids.slice(i, i + concurrency);
-      const batchResults = await Promise.all(
-        batch.map(async (id) => {
-          try {
-            const res = await fetch(
-              `${BASE_URL}/games/${id}?key=${API_KEY}&language=rus&fields=${GAME_FIELDS}`,
-              { next: { revalidate: 3600 } },
-            );
-            if (!res.ok) return null;
-            return await res.json();
-          } catch {
-            return null;
-          }
-        }),
-      );
-      results.push(...batchResults);
-    }
+    const results = raw.map(mapIgdbGame);
 
     return NextResponse.json(
-      { results: results.filter(Boolean) },
+      { results },
       {
         headers: {
           'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400',
@@ -54,7 +40,7 @@ export async function GET(request: NextRequest) {
       },
     );
   } catch (error) {
-    console.error('Batch error:', error);
-    return NextResponse.json({ error: 'Failed to fetch' }, { status: 500 });
+    console.error('[IGDB batch] error:', error);
+    return NextResponse.json({ error: 'Failed to fetch', results: [] }, { status: 500 });
   }
 }

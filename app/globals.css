@@ -260,3 +260,12 @@ body {
   padding-left: env(safe-area-inset-left);
   padding-right: env(safe-area-inset-right);
 }
+
+/* Радар вкуса: многоугольник «вырастает» из центра */
+@keyframes radarIn {
+  from { transform: scale(0.15); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+.radar-in {
+  animation: radarIn 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+}

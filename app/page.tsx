@@ -6,7 +6,7 @@ import {
   Zap, Loader2, Lock, Check, Heart, Gamepad, Save,
   ChevronDown, ChevronUp, XCircle, Compass, Tag, ArrowUpDown,
 } from 'lucide-react';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { Game, GameData } from '@/types/game';
@@ -27,6 +27,8 @@ import HomeWelcome from '@/components/HomeWelcome';
 import GameMediaCarousel from '@/components/GameMediaCarousel';
 import SteamRating from '@/components/SteamRating';
 import GameSeries from '@/components/GameSeries';
+import AspectRatings from '@/components/AspectRatings';
+import { emptyAspects, hasAspects, aspectColumns, aspectsFromRow, type Aspects } from '@/lib/aspects';
 import GameMeta from '@/components/GameMeta';
 import ReviewsSection from '@/components/ReviewsSection';
 
@@ -65,6 +67,7 @@ export default function Home() {
   const [sortBy, setSortBy] = useState<string>('steam');
   const [selectedGame, setSelectedGame] = useState<Game | null>(null);
   const [userRating, setUserRating] = useState(0);
+  const [userAspects, setUserAspects] = useState<Aspects>(emptyAspects());
   const [userHours, setUserHours] = useState(0);
   const [review, setReview] = useState('');
   const [gameStatus, setGameStatus] = useState<'none' | 'want' | 'playing' | 'completed' | 'dropped'>('none');
@@ -82,6 +85,10 @@ export default function Home() {
 
   const searchMode = searchQuery ? 'results' : 'browse';
 
+  // Защита от гонок: поздний ответ каталога не должен затирать результаты поиска (и наоборот)
+  const requestRef = useRef(0);
+  const searchActiveRef = useRef(false);
+
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -97,6 +104,8 @@ export default function Home() {
 
   const loadGames = useCallback(
     async (pageNum: number, append: boolean = false, genre?: string, sort?: string) => {
+      const myReq = ++requestRef.current;
+      const stale = () => myReq !== requestRef.current;
       setLoading(true);
       try {
         const g = genre !== undefined ? genre : selectedGenre;
@@ -108,6 +117,7 @@ export default function Home() {
             const res = await fetch(
               `/api/steam/genre?page=${pageNum}${g ? `&genre=${encodeURIComponent(g)}` : ''}`,
             ).then((r) => r.json());
+            if (stale()) return;
             const fromApi: Game[] = (res.results || []).map((r: RawgGame) => mapRawgGame(r));
             if (fromApi.length > 0) {
               setGames((prev) => {
@@ -129,35 +139,41 @@ export default function Home() {
         if (g) url += `&genres=${g}`;
         const response = await fetch(url);
         const data = await response.json();
+        if (stale()) return;
         if (data.results) {
-          const mappedGames = data.results.map((g: RawgGame) => mapRawgGame(g));
+          // /api/games уже возвращает готовые Game (IGDB внутри)
+          const mappedGames = data.results;
           setGames((prev) => (append ? [...prev, ...mappedGames] : mappedGames));
           setHasMore(data.next !== null);
         }
       } catch (error) {
         console.error('Ошибка загрузки:', error);
-        showToast('Не удалось загрузить игры', 'error');
+        if (!stale()) showToast('Не удалось загрузить игры', 'error');
       }
-      setLoading(false);
+      if (!stale()) setLoading(false);
     },
     [selectedGenre, sortBy, showToast],
   );
 
   const performSearch = useCallback(
     async (q: string) => {
+      const myReq = ++requestRef.current;
+      searchActiveRef.current = true;
       setLoading(true);
       try {
-        const res = await fetch(`/api/games/search?search=${encodeURIComponent(q)}`);
+ const res = await fetch(`/api/games/search?search=${encodeURIComponent(q)}`);
         const data = await res.json();
+        if (myReq !== requestRef.current) return;
         if (data.results) {
-          setGames(data.results.map((g: RawgGame) => mapRawgGame(g)));
+          // API уже возвращает готовые объекты Game (IGDB → mapIgdbGame внутри роута)
+          setGames(data.results);
           setHasMore(false);
         }
       } catch (error) {
         console.error('Ошибка поиска:', error);
-        showToast('Ошибка поиска', 'error');
+        if (myReq === requestRef.current) showToast('Ошибка поиска', 'error');
       }
-      setLoading(false);
+      if (myReq === requestRef.current) setLoading(false);
     },
     [showToast],
   );
@@ -173,10 +189,12 @@ export default function Home() {
     const cached = userGames.get(game.id);
     if (cached) {
       setUserRating(cached.rating || 0);
+      setUserAspects(cached.aspects || emptyAspects());
       setUserHours(cached.hours || 0);
       setReview(cached.review || '');
       setGameStatus(cached.status || 'none');
     } else {
+      setUserAspects(emptyAspects());
       setUserRating(0);
       setUserHours(0);
       setReview('');
@@ -189,12 +207,13 @@ export default function Home() {
         try {
           const { data } = await supabase
             .from('user_games')
-            .select('rating, hours, review, status')
+            .select('rating, hours, review, status, rate_gameplay, rate_story, rate_visuals, rate_music')
             .eq('user_id', userId)
             .eq('game_id', game.id)
             .maybeSingle();
           if (data) {
             setUserRating(data.rating || 0);
+            setUserAspects(aspectsFromRow(data));
             setUserHours(data.hours || 0);
             setReview(data.review || '');
             setGameStatus(data.status || 'none');
@@ -205,11 +224,10 @@ export default function Home() {
       })();
     }
 
-    fetch(`/api/games/${game.id}?full=true`)
+fetch(`/api/games/${game.id}?full=true`)
       .then((r) => (r.ok ? r.json() : null))
-      .then((rawData) => {
-        if (!rawData) return;
-        const fullGame = mapRawgGame(rawData);
+      .then((fullGame) => {
+        if (!fullGame) return;
         setSelectedGame(fullGame);
         if (fullGame.descriptionRaw) {
           translateDescription(fullGame.descriptionRaw, game.id);
@@ -226,6 +244,7 @@ export default function Home() {
         setPage(1);
         performSearch(q);
       } else {
+        searchActiveRef.current = false;
         setSearchQuery('');
         setPage(1);
         loadGames(1, false, '', 'steam');
@@ -236,6 +255,7 @@ export default function Home() {
     const pending = sessionStorage.getItem('pendingSearch');
     if (pending) {
       sessionStorage.removeItem('pendingSearch');
+      searchActiveRef.current = true;
       setSearchQuery(pending);
       performSearch(pending);
     } else {
@@ -260,16 +280,16 @@ export default function Home() {
       const gameId = Number(openId);
       if (!isNaN(gameId)) {
         window.history.replaceState({}, '', '/');
-        fetch(`/api/games/${gameId}?full=true`)
+fetch(`/api/games/${gameId}?full=true`)
           .then((r) => (r.ok ? r.json() : null))
-          .then((rawData) => {
-            if (!rawData) return;
-            const game = mapRawgGame(rawData);
+          .then((game) => {
+            if (!game) return;
             setSelectedGame(game);
 
             const data = userGames.get(gameId);
             if (data) {
               setUserRating(data.rating || 0);
+              setUserAspects(data.aspects || emptyAspects());
               setUserHours(data.hours || 0);
               setReview(data.review || '');
               setGameStatus(data.status || 'none');
@@ -298,7 +318,7 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (searchMode === 'browse' && !searchQuery) {
+    if (searchMode === 'browse' && !searchQuery && !searchActiveRef.current) {
       loadGames(1, false, selectedGenre, sortBy);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -437,8 +457,12 @@ export default function Home() {
       review: newReview,
       status: newStatus,
       xp: 0,
+      aspects: userAspects,
     };
     if (!selectedGame || !userId) return newData;
+    // Колонки аспектов пишем, только если они есть/были: сохранение не зависит от SQL, пока аспекты не используются
+    const hadAspects = hasAspects(userGames.get(selectedGame.id)?.aspects);
+    const aspectPart = hasAspects(userAspects) || hadAspects ? aspectColumns(userAspects) : {};
 
     await supabase.from('user_games').upsert(
       {
@@ -448,6 +472,7 @@ export default function Home() {
         hours: newHours,
         review: newReview,
         status: newStatus,
+        ...aspectPart,
       },
       { onConflict: 'user_id,game_id' },
     );
@@ -544,6 +569,7 @@ export default function Home() {
   };
 
   const handleReset = () => {
+    searchActiveRef.current = false;
     setSearchQuery('');
     setSelectedGenre('');
     setPage(1);
@@ -734,6 +760,14 @@ export default function Home() {
                     <span>10</span>
                   </div>
                 </div>
+
+                <AspectRatings
+                  key={selectedGame.id}
+                  value={userAspects}
+                  overall={userRating}
+                  onChange={setUserAspects}
+                  onSuggestOverall={setUserRating}
+                />
 
                 <div className="bg-neutral-800 rounded-xl p-4 md:p-5">
                   <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">

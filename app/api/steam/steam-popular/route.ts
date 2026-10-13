@@ -1,31 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
-
-const RAWG_API_KEY = process.env.RAWG_API_KEY || 'demo';
-const RAWG_BASE = 'https://api.rawg.io/api';
-
-const RAWG_FIELDS = [
-  'id', 'name', 'background_image', 'released', 'rating',
-  'metacritic', 'genres', 'tags', 'platforms', 'playtime',
-].join(',');
+import { igdbQuery, mapIgdbGame, IgdbGame } from '@/lib/igdb';
+import { IGDB_GAME_FIELDS, isEdition } from '@/lib/igdb-shared';
+import type { Game } from '@/types/game';
 
 interface SteamEntry {
   appid: number;
   name: string;
-  players: number; // пик игроков онлайн (если известен)
+  players: number;
 }
+
+type SteamGame = Game & { steam: { appid: number; players: number; rank: number } };
 
 // ----- Кэш в памяти сервера -----
 const CACHE_TTL = 10 * 60 * 1000; // список и онлайн обновляем каждые 10 минут
-let listCache: { data: any[]; expiresAt: number } | null = null;
-const rawgMatchCache = new Map<string, any | null>(); // название → игра RAWG (живёт долго)
-
-function norm(s: string): string {
-  return s
-    .toLowerCase()
-    .replace(/[™®©]/g, '')
-    .replace(/[^a-z0-9а-яё]+/g, ' ')
-    .trim();
-}
+let listCache: { data: SteamGame[]; expiresAt: number } | null = null;
 
 async function getJson(url: string, revalidate: number): Promise<any | null> {
   try {
@@ -41,7 +29,7 @@ async function getJson(url: string, revalidate: number): Promise<any | null> {
   }
 }
 
-// Источник 1: раздел Steam «Популярные новинки» (то же, что во вкладке «Новое и популярное»)
+// Источник: раздел Steam «Популярные новинки»
 async function fromSteamNewPopular(limit: number): Promise<SteamEntry[]> {
   const data = await getJson(
     `https://store.steampowered.com/search/results/?query&start=0&count=${limit + 10}&filter=popularnew&category1=998&json=1&cc=us&l=english`,
@@ -69,46 +57,64 @@ async function currentPlayers(appid: number): Promise<number> {
   return Number(data?.response?.player_count) || 0;
 }
 
-// Запасной вариант: пик игроков за сутки из чарта Steam — подставляем тем новинкам, которые в него попали
+// Запасной вариант: пик игроков за сутки из чарта Steam
 async function playersFromChart(): Promise<Map<number, number>> {
   const data = await getJson(
     'https://api.steampowered.com/ISteamChartsService/GetMostPlayedGames/v1/',
     600,
   );
   const map = new Map<number, number>();
-  (data?.response?.ranks || []).forEach((r: any) => map.set(Number(r.appid), Number(r.peak_in_game) || 0));
+  (data?.response?.ranks || []).forEach((r: any) =>
+    map.set(Number(r.appid), Number(r.peak_in_game) || 0),
+  );
   return map;
 }
 
-// Запасной источник: популярные игры из Steam, вышедшие за последние ~4 месяца (по данным RAWG)
-async function fromRawgRecent(limit: number): Promise<any[]> {
-  const now = new Date();
-  const from = new Date(now.getTime() - 120 * 24 * 3600 * 1000).toISOString().slice(0, 10);
-  const to = now.toISOString().slice(0, 10);
-  const data = await getJson(
-    `${RAWG_BASE}/games?key=${RAWG_API_KEY}&dates=${from},${to}&stores=1&ordering=-added&exclude_additions=true&page_size=${limit}&fields=${RAWG_FIELDS}`,
-    3600,
+// Steam appid → игра IGDB. Два запроса: external_games (appid → id игры), затем games.
+async function matchIgdb(entries: SteamEntry[]): Promise<Map<number, Game>> {
+  const out = new Map<number, Game>();
+  if (entries.length === 0) return out;
+
+  const uids = entries.map((e) => `"${e.appid}"`).join(',');
+  const ext = await igdbQuery<{ game?: number; uid: string }[]>(
+    'external_games',
+    `fields game, uid; where external_game_source = 1 & uid = (${uids}); limit 500;`,
   );
-  return (data?.results || []).filter((g: any) => g?.background_image);
+
+  const gameIdByApp = new Map<number, number>();
+  ext.forEach((e) => {
+    if (e.game) gameIdByApp.set(Number(e.uid), e.game);
+  });
+
+  const ids = [...new Set(gameIdByApp.values())];
+  if (ids.length === 0) return out;
+
+  const raw = await igdbQuery<IgdbGame[]>(
+    'games',
+    `${IGDB_GAME_FIELDS} where id = (${ids.join(',')}); limit ${ids.length};`,
+  );
+  const byId = new Map(raw.map((g) => [g.id, mapIgdbGame(g)]));
+
+  gameIdByApp.forEach((gameId, appid) => {
+    const g = byId.get(gameId);
+    if (g) out.set(appid, g);
+  });
+  return out;
 }
 
-// Находим игру в RAWG по названию — нужна, чтобы карточка открывалась как обычная игра PlayLog
-async function matchRawg(entry: SteamEntry): Promise<any | null> {
-  const key = norm(entry.name);
-  if (rawgMatchCache.has(key)) return rawgMatchCache.get(key) ?? null;
-
-  const url = `${RAWG_BASE}/games?key=${RAWG_API_KEY}&search=${encodeURIComponent(entry.name)}&search_precise=true&page_size=5&fields=${RAWG_FIELDS}`;
-  const data = await getJson(url, 86400);
-  const results: any[] = data?.results || [];
-  if (results.length === 0) return null; // не кэшируем «пусто»: возможно, сбой сети
-
-  const best =
-    results.find((g) => norm(g.name) === key) ||
-    results.find((g) => norm(g.name).startsWith(key) || key.startsWith(norm(g.name))) ||
-    results[0];
-
-  rawgMatchCache.set(key, best || null);
-  return best || null;
+// Запасной источник: популярные игры со Steam-страницей, вышедшие за последние ~4 месяца
+async function fromIgdbRecent(limit: number): Promise<Game[]> {
+  const now = Math.floor(Date.now() / 1000);
+  const from = now - 120 * 24 * 3600;
+  const raw = await igdbQuery<IgdbGame[]>(
+    'games',
+    `${IGDB_GAME_FIELDS}
+     where game_type = 0 & cover != null & first_release_date >= ${from} & first_release_date <= ${now}
+       & external_games.external_game_source = 1;
+     sort total_rating_count desc;
+     limit ${limit};`,
+  );
+  return raw.filter((g) => !g.version_parent && !isEdition(g.name)).map(mapIgdbGame);
 }
 
 export async function GET(request: NextRequest) {
@@ -124,25 +130,29 @@ export async function GET(request: NextRequest) {
 
   try {
     const entries = await fromSteamNewPopular(limit);
-    const out: any[] = [];
+    const out: SteamGame[] = [];
 
     if (entries.length > 0) {
-      const players = await playersFromChart();
+      const [players, matched] = await Promise.all([
+        playersFromChart(),
+        matchIgdb(entries).catch((err) => {
+          console.error('Steam popular: IGDB match error:', err);
+          return new Map<number, Game>();
+        }),
+      ]);
+
       const seen = new Set<number>();
-      const minYear = new Date().getFullYear() - 2; // защита от неверного совпадения с старой игрой
-      for (let i = 0; i < entries.length; i += 6) {
-        const batch = entries.slice(i, i + 6);
-        const matched = await Promise.all(batch.map((e) => matchRawg(e)));
-        matched.forEach((g, idx) => {
-          if (!g || seen.has(g.id) || !g.background_image) return;
-          if ((Number(g.released?.split('-')[0]) || 9999) < minYear) return;
-          seen.add(g.id);
-          const e = batch[idx];
-          out.push({ ...g, steam: { appid: e.appid, players: 0, rank: out.length + 1 } });
-        });
+      const minYear = new Date().getFullYear() - 2; // защита от неверного совпадения со старой игрой
+
+      for (const e of entries) {
+        const g = matched.get(e.appid);
+        if (!g || seen.has(g.id) || !g.cover) continue;
+        if ((g.year || 9999) < minYear) continue;
+        seen.add(g.id);
+        out.push({ ...g, steam: { appid: e.appid, players: 0, rank: out.length + 1 } });
       }
 
-      // Онлайн для КАЖДОЙ игры: сначала живой счётчик Steam, если его нет — пик из чарта
+      // Онлайн для каждой игры: сначала живой счётчик Steam, если его нет — пик из чарта
       await Promise.all(
         out.map(async (g) => {
           const live = await currentPlayers(g.steam.appid);
@@ -151,9 +161,9 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Steam не ответил или совпадений мало — берём популярные новинки из RAWG
+    // Steam не ответил или совпадений мало — берём популярные новинки из IGDB
     if (out.length < 8) {
-      const recent = await fromRawgRecent(limit);
+      const recent = await fromIgdbRecent(limit).catch(() => [] as Game[]);
       const seen = new Set(out.map((g) => g.id));
       recent.forEach((g) => {
         if (seen.has(g.id)) return;
