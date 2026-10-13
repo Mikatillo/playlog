@@ -5,6 +5,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { ToastProvider } from "@/contexts/ToastContext";
 import Header from "@/components/Header";
 import MobileNav from "@/components/MobileNav";
+import PwaSetup from "@/components/PwaSetup";
 
 const inter = Inter({ subsets: ["latin", "cyrillic"] });
 
@@ -18,6 +19,20 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
+  applicationName: "PlayLog",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    title: "PlayLog",
+    statusBarStyle: "black-translucent",
+  },
+  icons: {
+    icon: [
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+  },
   title: "PlayLog — Твоя игровая библиотека",
   description: "Отслеживай пройденные игры, ставь оценки и делись мнением",
   openGraph: {
@@ -42,6 +57,7 @@ export default function RootLayout({
             {/* Отступ снизу под мобильную навигацию */}
             <div className="pb-[calc(3.75rem+env(safe-area-inset-bottom))] lg:pb-0">{children}</div>
             <MobileNav />
+            <PwaSetup />
           </AuthProvider>
         </ToastProvider>
       </body>
