@@ -66,7 +66,7 @@ export default function AchievementsModal({ isOpen, onClose, stats }: Achievemen
         <button
           onClick={onClose}
           aria-label="Закрыть"
-          className="sticky top-3 float-right mr-3 mt-3 w-10 h-10 bg-neutral-800/90 hover:bg-neutral-700 rounded-full flex items-center justify-center transition z-20 hover:rotate-90"
+          className="sticky top-[calc(0.75rem+env(safe-area-inset-top))] float-right mr-3 mt-3 w-10 h-10 bg-neutral-800/90 hover:bg-neutral-700 rounded-full flex items-center justify-center transition z-20 hover:rotate-90"
         >
           <X className="w-5 h-5 text-neutral-300" />
         </button>

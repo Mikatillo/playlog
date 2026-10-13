@@ -570,7 +570,7 @@ export default function MyGamesPage() {
           >
             <button
               onClick={closeGame}
-              className="fixed md:absolute top-3 right-3 w-10 h-10 bg-black/60 hover:bg-black/80 backdrop-blur-sm rounded-full flex items-center justify-center transition z-40"
+              className="fixed md:absolute top-[calc(0.75rem+env(safe-area-inset-top))] md:top-3 right-3 w-10 h-10 bg-black/60 hover:bg-black/80 backdrop-blur-sm rounded-full flex items-center justify-center transition z-40"
             >
               <X className="w-5 h-5 text-white" />
             </button>
@@ -865,7 +865,7 @@ export default function MyGamesPage() {
         >
           <button
             onClick={() => setSelectedScreenshot(null)}
-            className="absolute top-4 right-4 w-12 h-12 bg-neutral-800 hover:bg-neutral-700 rounded-full flex items-center justify-center transition z-10"
+            className="absolute top-[calc(1rem+env(safe-area-inset-top))] right-4 w-12 h-12 bg-neutral-800 hover:bg-neutral-700 rounded-full flex items-center justify-center transition z-10"
           >
             <X className="w-6 h-6 text-white" />
           </button>

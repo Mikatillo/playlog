@@ -10,7 +10,7 @@ import PwaSetup from "@/components/PwaSetup";
 const inter = Inter({ subsets: ["latin", "cyrillic"] });
 
 export const viewport: Viewport = {
-  themeColor: "#6366f1",
+  themeColor: "#171717",
   width: "device-width",
   initialScale: 1,
   maximumScale: 5,

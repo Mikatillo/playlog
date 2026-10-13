@@ -251,3 +251,12 @@ main > *:nth-child(3) { animation-delay: 120ms; }
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
+
+/* ===== Установленное приложение: вырез/«чёлка» и жесты ===== */
+html {
+  background: #0a0a0a;
+}
+body {
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
