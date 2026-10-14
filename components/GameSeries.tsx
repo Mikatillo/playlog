@@ -129,7 +129,7 @@ export default function GameSeries({ gameId, onOpen }: GameSeriesProps) {
                 title={g.title}
                 className="group snap-start flex-shrink-0 w-[132px] sm:w-[148px] text-left rounded-lg bg-neutral-900 border border-neutral-700/70 hover:border-indigo-500/60 overflow-hidden transition hover:-translate-y-0.5"
               >
-                <div className="relative aspect-video bg-neutral-800 overflow-hidden">
+                <div className="relative aspect-[460/215] bg-neutral-800 overflow-hidden">
                   <GameImage
                     src={thumbUrl(g.cover)}
                     fallback={thumbUrl(g.coverAlt)}

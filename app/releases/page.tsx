@@ -297,7 +297,7 @@ export default function ReleasesPage() {
                         onClick={() => openGame(game)}
                         className="card-glow group cursor-pointer bg-neutral-900 rounded-xl border border-neutral-800 overflow-hidden flex flex-col"
                       >
-                        <div className="relative aspect-video bg-neutral-800 overflow-hidden">
+                        <div className="relative aspect-[460/215] bg-neutral-800 overflow-hidden">
                           {game.cover ? (
                             <GameImage
                               src={game.cover}

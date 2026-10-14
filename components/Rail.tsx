@@ -111,7 +111,7 @@ export function RailCard({ game, onClick, badge, meta, userData, priority }: Rai
       onClick={onClick}
       className="group snap-start flex-shrink-0 w-[236px] md:w-[272px] text-left rounded-2xl overflow-hidden bg-neutral-900 border border-neutral-800 hover:border-indigo-500/50 transition hover:-translate-y-1 hover:shadow-xl hover:shadow-indigo-500/10"
     >
-      <div className="relative aspect-video bg-neutral-800 overflow-hidden">
+      <div className="relative aspect-[460/215] bg-neutral-800 overflow-hidden">
         <GameImage
           src={game.cover || 'https://via.placeholder.com/400x225/171717/525252?text=No+Image'}
           fallback={game.coverAlt}

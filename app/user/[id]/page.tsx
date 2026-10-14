@@ -797,7 +797,7 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
                       onClick={() => openGameModal(game)}
                       className="group relative flex-1 min-h-[88px] lg:max-h-[190px] flex items-center gap-3 sm:gap-4 p-2.5 rounded-2xl bg-neutral-800/40 hover:bg-neutral-800/80 border border-neutral-800 hover:border-neutral-700 overflow-hidden transition text-left"
                     >
-                      <div className="relative w-[128px] sm:w-[168px] aspect-video self-center rounded-xl overflow-hidden bg-neutral-800 flex-shrink-0 shadow-lg shadow-black/40">
+                      <div className="relative w-[128px] sm:w-[168px] aspect-[460/215] self-center rounded-xl overflow-hidden bg-neutral-800 flex-shrink-0 shadow-lg shadow-black/40">
                         {game.cover && (
                           <GameImage
                             src={game.cover}

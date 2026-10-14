@@ -1,7 +1,7 @@
 export default function GameCardSkeleton() {
   return (
     <div className="bg-neutral-900 rounded-xl border border-neutral-800 overflow-hidden">
-      <div className="aspect-video bg-neutral-800 animate-pulse" />
+      <div className="aspect-[460/215] bg-neutral-800 animate-pulse" />
       <div className="p-3 space-y-2">
         <div className="flex flex-wrap gap-1">
           <div className="h-4 w-14 bg-neutral-800 rounded animate-pulse" />
