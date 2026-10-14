@@ -4,6 +4,8 @@ export interface Game {
   cover: string;
   /** Запасная обложка (IGDB), если основная — Steam header — вернёт 404 */
   coverAlt?: string;
+  /** Крупная картинка (промо-арт IGDB 1080p) для большого окна игры */
+  coverHD?: string;
   year: number;
   released?: string; // ISO дата YYYY-MM-DD
   rating: number;

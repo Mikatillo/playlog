@@ -11,6 +11,8 @@ export interface TasteEntry {
 interface TasteRadarProps {
   entries: TasteEntry[];
   isOwnProfile: boolean;
+  /** Компактный вид внутри другого блока (без рамки и крупного заголовка) */
+  embedded?: boolean;
 }
 
 const CX = 140;
@@ -31,11 +33,18 @@ const point = (i: number, value: number) => {
   return { x: CX + d.x * r, y: CY + d.y * r };
 };
 
-export default function TasteRadar({ entries, isOwnProfile }: TasteRadarProps) {
+export default function TasteRadar({ entries, isOwnProfile, embedded = false }: TasteRadarProps) {
   const summary = summarizeTaste(entries.map((e) => e.aspects));
 
   if (summary.gamesCount === 0) {
     if (!isOwnProfile) return null;
+    if (embedded) {
+      return (
+        <p className="text-sm text-neutral-500">
+          Оцени игры по геймплею, сюжету, графике и музыке (в карточке игры), и здесь появится радар вкуса.
+        </p>
+      );
+    }
     return (
       <section className="bg-neutral-900/80 backdrop-blur-md border border-neutral-800 rounded-2xl p-5 flex items-center gap-4">
         <span className="w-11 h-11 rounded-xl bg-indigo-500/15 flex items-center justify-center flex-shrink-0">
@@ -67,21 +76,27 @@ export default function TasteRadar({ entries, isOwnProfile }: TasteRadarProps) {
     return top as { title: string; v: number } | null;
   });
 
+  const Wrapper = embedded ? 'div' : 'section';
+
   return (
-    <section className="bg-neutral-900/80 backdrop-blur-md border border-neutral-800 rounded-2xl p-5">
-      <div className="flex items-center justify-between gap-3 mb-4">
-        <h3 className="font-semibold text-white flex items-center gap-2">
-          <span className="w-7 h-7 rounded-lg bg-indigo-500/15 flex items-center justify-center">
-            <RadarIcon className="w-4 h-4 text-indigo-400" />
-          </span>
-          Радар вкуса
-        </h3>
+    <Wrapper className={embedded ? '' : 'bg-neutral-900/80 backdrop-blur-md border border-neutral-800 rounded-2xl p-5'}>
+      <div className={`flex items-center justify-between gap-3 ${embedded ? 'mb-2' : 'mb-4'}`}>
+        {embedded ? (
+          <div className="text-xs font-medium text-neutral-400 uppercase tracking-wider">Радар вкуса</div>
+        ) : (
+          <h3 className="font-semibold text-white flex items-center gap-2">
+            <span className="w-7 h-7 rounded-lg bg-indigo-500/15 flex items-center justify-center">
+              <RadarIcon className="w-4 h-4 text-indigo-400" />
+            </span>
+            Радар вкуса
+          </h3>
+        )}
         <span className="text-xs text-neutral-500">по {summary.gamesCount} {pluralGames(summary.gamesCount)}</span>
       </div>
 
-      <div className="grid md:grid-cols-[300px_1fr] gap-5 md:gap-8 items-center">
+      <div className={embedded ? 'flex flex-col gap-4' : 'grid md:grid-cols-[300px_1fr] gap-5 md:gap-8 items-center'}>
         {/* Радар */}
-        <div className="mx-auto w-full max-w-[300px]">
+        <div className={`mx-auto w-full ${embedded ? 'max-w-[220px]' : 'max-w-[300px]'}`}>
           <svg viewBox="0 0 280 236" className="w-full h-auto" role="img" aria-label="Радар вкуса">
             <defs>
               <linearGradient id="radarFill" x1="0" y1="0" x2="1" y2="1">
@@ -145,7 +160,7 @@ export default function TasteRadar({ entries, isOwnProfile }: TasteRadarProps) {
                       style={{ width: `${avg * 10}%`, background: m.color }}
                     />
                   </div>
-                  {b && (
+                  {b && !embedded && (
                     <div className="text-[11px] text-neutral-500 mt-1 truncate">
                       Лучше всего: <span className="text-neutral-300">{b.title}</span> · {b.v}/10
                     </div>
@@ -156,7 +171,7 @@ export default function TasteRadar({ entries, isOwnProfile }: TasteRadarProps) {
           </ul>
         </div>
       </div>
-    </section>
+    </Wrapper>
   );
 }
 

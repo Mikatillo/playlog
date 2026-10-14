@@ -26,7 +26,8 @@ export default function GameMediaCarousel({
   const [paused, setPaused] = useState(false);
 
   const slides: Slide[] = [
-    { type: 'cover', image: game.cover },
+    // В большом окне показываем самую качественную картинку: промо-арт IGDB (1080p), иначе обложку
+    { type: 'cover', image: game.coverHD || game.cover },
     ...(game.screenshots || []).map((s) => ({
       type: 'screenshot' as const,
       image: s.image,
@@ -85,9 +86,13 @@ export default function GameMediaCarousel({
             onError={(e) => {
               // у Steam нет header.jpg — берём запасную обложку IGDB
               const el = e.currentTarget;
-              if (slide.type === 'cover' && game.coverAlt && el.dataset.fallback !== '1') {
-                el.dataset.fallback = '1';
-                el.src = game.coverAlt;
+              if (slide.type !== 'cover') return;
+              // цепочка запасных вариантов: промо-арт → обложка Steam → картинка IGDB
+              const chain = [game.cover, game.coverAlt].filter((u): u is string => !!u && u !== slide.image);
+              const step = Number(el.dataset.fallback || '0');
+              if (step < chain.length) {
+                el.dataset.fallback = String(step + 1);
+                el.src = chain[step];
               }
             }}
           />

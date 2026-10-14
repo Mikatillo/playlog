@@ -295,13 +295,14 @@ export default function ReleasesPage() {
                       <div
                         key={game.id}
                         onClick={() => openGame(game)}
-                        className="group cursor-pointer bg-neutral-900 rounded-xl border border-neutral-800 overflow-hidden hover:border-neutral-700 hover:-translate-y-1 transition-all duration-200 flex flex-col"
+                        className="card-glow group cursor-pointer bg-neutral-900 rounded-xl border border-neutral-800 overflow-hidden flex flex-col"
                       >
-                        <div className="relative aspect-video bg-neutral-800">
+                        <div className="relative aspect-video bg-neutral-800 overflow-hidden">
                           {game.cover ? (
                             <GameImage
                               src={game.cover}
                               fallback={game.coverAlt}
+                              smart
                               alt={game.title}
                               fill
                               sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"

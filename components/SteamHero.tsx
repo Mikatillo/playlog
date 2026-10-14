@@ -71,7 +71,7 @@ export default function SteamHero({ onGameClick }: SteamHeroProps) {
       onMouseLeave={() => setPaused(false)}
     >
       {/* Большой баннер */}
-      <div className="relative min-w-0 h-[240px] sm:h-[330px] md:h-[380px] rounded-2xl md:rounded-3xl overflow-hidden border border-neutral-800 bg-neutral-900 group">
+      <div className="relative min-w-0 h-[240px] sm:h-[330px] md:h-[380px] lg:h-auto lg:min-h-[380px] rounded-2xl md:rounded-3xl overflow-hidden border border-neutral-800 bg-neutral-900 group">
         <div key={g.id} className="absolute inset-0 hero-fade">
           <Image
             src={heroImage(g)}

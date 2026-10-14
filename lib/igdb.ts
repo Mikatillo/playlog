@@ -238,6 +238,7 @@ export function mapIgdbGame(raw: IgdbGame): Game {
     title: raw.name,
     cover,
     coverAlt,
+    coverHD: raw.artworks?.[0]?.image_id ? igdbImageUrl(raw.artworks[0].image_id, 't_1080p') : undefined,
     year,
     released,
     rating,

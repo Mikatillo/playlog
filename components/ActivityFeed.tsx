@@ -139,10 +139,10 @@ export default function ActivityFeed({
 
             <Link
               href={`/?open=${a.game_id}`}
-              className="flex-shrink-0 relative w-10 h-14 rounded-lg overflow-hidden bg-neutral-800"
+              className="flex-shrink-0 relative w-[72px] aspect-video rounded-lg overflow-hidden bg-neutral-800"
             >
               {a.game_cover ? (
-                <Image src={a.game_cover} alt={a.game_title} fill sizes="40px" className="object-cover" unoptimized />
+                <Image src={a.game_cover} alt={a.game_title} fill sizes="72px" className="object-cover" unoptimized />
               ) : (
                 <div className="w-full h-full flex items-center justify-center">
                   <Gamepad className="w-4 h-4 text-neutral-600" />

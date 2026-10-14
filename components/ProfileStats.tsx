@@ -1,6 +1,7 @@
 'use client';
 
 import { useId, useState } from 'react';
+import TasteRadar, { type TasteEntry } from '@/components/TasteRadar';
 import {
   BarChart3, Clock, Star, Trophy, Gamepad2, Flame, ChevronDown, Hourglass,
 } from 'lucide-react';
@@ -11,6 +12,9 @@ interface ProfileStatsProps {
   totalHours: number;
   averageRating: number | null;
   totalGames: number;
+  /** Оценки по аспектам для радара вкуса */
+  tasteEntries?: TasteEntry[];
+  isOwnProfile?: boolean;
 }
 
 const STATUS_SEGMENTS = [
@@ -77,6 +81,8 @@ export default function ProfileStats({
   totalHours,
   averageRating,
   totalGames,
+  tasteEntries = [],
+  isOwnProfile = false,
 }: ProfileStatsProps) {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const panelId = useId();
@@ -131,7 +137,7 @@ export default function ProfileStats({
         >
           <span className="flex items-center gap-2 text-sm font-medium text-neutral-200">
             <Flame className="w-4 h-4 text-amber-400" />
-            Интересы и статистика
+            Интересы
           </span>
           <span className="flex items-center gap-2 text-xs text-neutral-500 group-hover:text-neutral-300 transition">
             {detailsOpen ? 'Свернуть' : 'Показать'}
@@ -175,6 +181,9 @@ export default function ProfileStats({
                   </ul>
                 </div>
               </div>
+
+              {/* Радар вкуса: средние оценки по аспектам */}
+              <TasteRadar embedded entries={tasteEntries} isOwnProfile={isOwnProfile} />
 
               {/* Любимые жанры */}
               <div>

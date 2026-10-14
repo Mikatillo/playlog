@@ -1,14 +1,13 @@
 'use client';
 
 import ProfileStats from '@/components/ProfileStats';
-import TasteRadar from '@/components/TasteRadar';
 import { ASPECTS, aspectsFromRow, hasAspects } from '@/lib/aspects';
 import { fetchGamesByIds } from '@/lib/games-client';
 import { authFetch } from '@/lib/api-client';
 import { useEffect, useState, use, useMemo, useCallback } from 'react';
 import {
   Loader2, Star, Check, Gamepad, XCircle, MessageSquare, ArrowLeft,
-  Heart, ChevronDown, ChevronUp, ArrowUpDown, Pencil, X, Clock,
+  Heart, ChevronDown, ChevronUp, ArrowUpDown, Pencil, X, Clock, LayoutGrid, Square,
 } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -170,6 +169,24 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
   const [activeTab, setActiveTab] = useState<TopTab>('games');
   const [gameTab, setGameTab] = useState<GameTab>('all');
   const [sortBy, setSortBy] = useState<SortType>('newest');
+
+  // Размер карточек в коллекции: крупные (1–3 в ряд) или компактные (4 на ПК, 2 на телефоне)
+  const [cardSize, setCardSize] = useState<'large' | 'compact'>('large');
+  useEffect(() => {
+    try {
+      if (localStorage.getItem('playlog:profile-card-size') === 'compact') setCardSize('compact');
+    } catch {}
+  }, []);
+  const changeCardSize = (v: 'large' | 'compact') => {
+    setCardSize(v);
+    try {
+      localStorage.setItem('playlog:profile-card-size', v);
+    } catch {}
+  };
+  const gridClass =
+    cardSize === 'compact'
+      ? 'grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-3'
+      : 'grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4';
 
   const [selectedGame, setSelectedGame] = useState<Game | null>(null);
   const [gameModalLoading, setGameModalLoading] = useState(false);
@@ -777,16 +794,17 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
                     <button
                       key={game.id}
                       onClick={() => openGameModal(game)}
-                      className="group relative flex-1 min-h-[112px] lg:max-h-[190px] flex items-stretch gap-4 p-2.5 rounded-2xl bg-neutral-800/40 hover:bg-neutral-800/80 border border-neutral-800 hover:border-neutral-700 overflow-hidden transition text-left"
+                      className="group relative flex-1 min-h-[88px] lg:max-h-[190px] flex items-center gap-3 sm:gap-4 p-2.5 rounded-2xl bg-neutral-800/40 hover:bg-neutral-800/80 border border-neutral-800 hover:border-neutral-700 overflow-hidden transition text-left"
                     >
-                      <div className="relative w-[84px] sm:w-24 self-stretch min-h-[92px] rounded-xl overflow-hidden bg-neutral-800 flex-shrink-0 shadow-lg shadow-black/40">
+                      <div className="relative w-[128px] sm:w-[168px] aspect-video self-center rounded-xl overflow-hidden bg-neutral-800 flex-shrink-0 shadow-lg shadow-black/40">
                         {game.cover && (
                           <GameImage
                             src={game.cover}
                             fallback={game.coverAlt}
+                            smart
                             alt={game.title}
                             fill
-                            sizes="96px"
+                            sizes="168px"
                             className="object-cover transition duration-500 group-hover:scale-105"
                             unoptimized
                           />
@@ -850,20 +868,15 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
             totalHours={profileTotalHours}
             averageRating={profileAverageRating}
             totalGames={collectionGames.length}
+            isOwnProfile={isOwnProfile}
+            tasteEntries={userGames
+              .map((ug) => ({
+                title: games.find((g) => g.id === ug.game_id)?.title || 'Игра',
+                aspects: aspectsFromRow(ug),
+              }))
+              .filter((e) => hasAspects(e.aspects))}
           />
         </div>
-
-        {/* Радар вкуса: средние оценки по геймплею, сюжету, графике и музыке */}
-        <TasteRadar
-          isOwnProfile={isOwnProfile}
-          entries={userGames
-            .map((ug) => ({
-              title: games.find((g) => g.id === ug.game_id)?.title || 'Игра',
-              aspects: aspectsFromRow(ug),
-            }))
-            .filter((e) => hasAspects(e.aspects))}
-        />
-
         {/* Табы + коллекция */}
         <div className="space-y-6 min-w-0">
           <div className="flex items-center gap-2 border-b border-neutral-800 overflow-x-auto scrollbar-hide bg-neutral-900/70 backdrop-blur-md rounded-t-xl px-2">
@@ -927,7 +940,32 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
                       );
                     })}
                   </div>
-                  <div className="relative w-full sm:w-auto sm:flex-shrink-0 sm:ml-auto">
+                  <div className="flex items-center gap-2 sm:flex-shrink-0 sm:ml-auto">
+                  <div
+                    role="group"
+                    aria-label="Размер карточек"
+                    className="flex flex-shrink-0 rounded-lg border border-neutral-800 bg-neutral-900 p-0.5"
+                  >
+                    {([
+                      { id: 'large', label: 'Крупные карточки', icon: Square },
+                      { id: 'compact', label: 'Компактные карточки', icon: LayoutGrid },
+                    ] as const).map(({ id: sizeId, label, icon: SizeIcon }) => (
+                      <button
+                        key={sizeId}
+                        type="button"
+                        onClick={() => changeCardSize(sizeId)}
+                        aria-label={label}
+                        aria-pressed={cardSize === sizeId}
+                        title={label}
+                        className={`w-9 h-8 sm:h-7 rounded-md flex items-center justify-center transition ${
+                          cardSize === sizeId ? 'bg-indigo-500 text-white' : 'text-neutral-400 hover:text-white'
+                        }`}
+                      >
+                        <SizeIcon className="w-4 h-4" />
+                      </button>
+                    ))}
+                  </div>
+                  <div className="relative flex-1 sm:flex-none sm:w-auto">
                     <ArrowUpDown className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-500 pointer-events-none z-10" />
                     <select
                       value={sortBy}
@@ -942,11 +980,12 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
                     </select>
                     <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-neutral-500 pointer-events-none" />
                   </div>
+                  </div>
                 </div>
               )}
 
               {gamesLoading ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+                <div className={gridClass}>
                   {Array.from({ length: 6 }).map((_, i) => (
                     <GameCardSkeleton key={i} />
                   ))}
@@ -963,7 +1002,7 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
                   </p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+                <div className={gridClass}>
                   {filteredCollectionGames.map((game, idx) => (
                     <GameCard
                       key={game.id}
@@ -972,6 +1011,7 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
                       userGameData={userGamesData.get(game.id)}
                       isAuthenticated={true}
                       index={idx}
+                      compact={cardSize === 'compact'}
                     />
                   ))}
                 </div>
@@ -982,7 +1022,7 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
           {activeTab === 'wishlist' && (
             <div className="space-y-4">
               {gamesLoading ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+                <div className={gridClass}>
                   {Array.from({ length: 6 }).map((_, i) => (
                     <GameCardSkeleton key={i} />
                   ))}
@@ -1001,7 +1041,7 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
                   )}
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+                <div className={gridClass}>
                   {wishlistGames.map((game, idx) => (
                     <GameCard
                       key={game.id}
@@ -1010,6 +1050,7 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
                       userGameData={userGamesData.get(game.id)}
                       isAuthenticated={true}
                       index={idx}
+                      compact={cardSize === 'compact'}
                     />
                   ))}
                 </div>

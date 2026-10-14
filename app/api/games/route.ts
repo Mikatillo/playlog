@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { igdbQuery, mapIgdbGame, IgdbGame } from '@/lib/igdb';
 import { GENRE_MAP, IGDB_GAME_FIELDS, isEdition } from '@/lib/igdb-shared';
+import { matchesGenre } from '@/lib/genre-rules';
 
 // Маппинг ordering фронта → сортировка IGDB
 const ORDERING_MAP: Record<string, string> = {
@@ -37,7 +38,12 @@ export async function GET(request: NextRequest) {
       where.push(`first_release_date <= ${Math.floor(Date.now() / 1000)}`);
       where.push('total_rating_count >= 3');
     }
-    if (orderingParam === '-added') where.push('total_rating_count >= 3');
+    // «Популярные»: только свежее (последние ~6 лет), а не хиты десятилетней давности
+    if (orderingParam === '-added') {
+      where.push('total_rating_count >= 5');
+      where.push(`first_release_date >= ${Math.floor(Date.now() / 1000) - 6 * 365 * 24 * 3600}`);
+      where.push(`first_release_date <= ${Math.floor(Date.now() / 1000)}`);
+    }
 
     const raw = await igdbQuery<IgdbGame[]>(
       'games',
@@ -49,7 +55,10 @@ export async function GET(request: NextRequest) {
       10 * 60 * 1000,
     );
 
-    const results = raw.filter((g) => !isEdition(g.name)).map(mapIgdbGame);
+    // Для жанра оставляем игры, которые действительно про него (без «шутеров с гонками» вроде GTA)
+    const results = raw
+      .filter((g) => !isEdition(g.name) && (!genresParam || matchesGenre(g, genresParam)))
+      .map(mapIgdbGame);
 
     return NextResponse.json(
       {

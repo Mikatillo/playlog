@@ -13,6 +13,8 @@ interface GameCardProps {
   isAuthenticated?: boolean;
   index?: number;
   hideSteam?: boolean;
+  /** Компактный вид: меньше текста, чтобы в ряд помещалось больше карточек */
+  compact?: boolean;
 }
 
 const statusIcon = {
@@ -33,6 +35,7 @@ export default function GameCard({
   isAuthenticated = false,
   index = 0,
   hideSteam = false,
+  compact = false,
 }: GameCardProps) {
   const showUserData = isAuthenticated && userGameData;
   const delay = Math.min(index * 40, 400);
@@ -48,6 +51,7 @@ export default function GameCard({
         <GameImage
           src={game.cover || 'https://via.placeholder.com/400x225/171717/525252?text=No+Image'}
           fallback={game.coverAlt}
+          smart
           alt={game.title}
           fill
           sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, (max-width: 1280px) 33vw, 25vw"
@@ -67,7 +71,7 @@ export default function GameCard({
               <span className="text-[9px] opacity-70">MC</span>
             </div>
           )}
-          {!hideSteam && <SteamRating gameTitle={game.title} variant="badge" />}
+          {!hideSteam && !compact && <SteamRating gameTitle={game.title} variant="badge" />}
         </div>
 
         {showUserData && showUserData.status !== 'none' && (
@@ -79,15 +83,15 @@ export default function GameCard({
         )}
 
         <div className="absolute bottom-2 left-2 right-2">
-          <h3 className="font-semibold text-sm text-white line-clamp-1 drop-shadow-lg">
+          <h3 className={`font-semibold text-white line-clamp-1 drop-shadow-lg ${compact ? 'text-xs' : 'text-sm'}`}>
             {game.title}
           </h3>
         </div>
       </div>
 
-      <div className="p-3 space-y-2">
-        <div className="flex flex-wrap gap-1">
-          {game.genres?.slice(0, 3).map((g) => (
+      <div className={compact ? 'px-2.5 py-2 space-y-1.5' : 'p-3 space-y-2'}>
+        <div className={`flex flex-wrap gap-1 ${compact ? 'max-h-[18px] overflow-hidden' : ''}`}>
+          {game.genres?.slice(0, compact ? 1 : 3).map((g) => (
             <span
               key={g.id}
               className="text-[10px] text-neutral-400 bg-neutral-800 px-1.5 py-0.5 rounded"
@@ -99,9 +103,11 @@ export default function GameCard({
 
         <div className="flex items-center justify-between text-xs text-neutral-500">
           <span>{game.year}</span>
-          <span className="truncate ml-2">
-            {game.platforms?.slice(0, 2).join(', ') || 'PC'}
-          </span>
+          {!compact && (
+            <span className="truncate ml-2">
+              {game.platforms?.slice(0, 2).join(', ') || 'PC'}
+            </span>
+          )}
         </div>
 
         {showUserData && (showUserData.rating > 0 || showUserData.hours > 0) && (

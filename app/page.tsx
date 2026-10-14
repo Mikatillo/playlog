@@ -76,6 +76,8 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
+  // Поиск без фильтров («показать все результаты»): старые и редкие игры, которые обычный поиск скрывает
+  const [searchAll, setSearchAll] = useState(false);
   const [selectedScreenshot, setSelectedScreenshot] = useState<string | null>(null);
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
   const [translating, setTranslating] = useState(false);
@@ -156,12 +158,13 @@ export default function Home() {
   );
 
   const performSearch = useCallback(
-    async (q: string) => {
+    async (q: string, all = false) => {
       const myReq = ++requestRef.current;
       searchActiveRef.current = true;
+      setSearchAll(all);
       setLoading(true);
       try {
- const res = await fetch(`/api/games/search?search=${encodeURIComponent(q)}`);
+        const res = await fetch(`/api/games/search?search=${encodeURIComponent(q)}${all ? '&all=1' : ''}`);
         const data = await res.json();
         if (myReq !== requestRef.current) return;
         if (data.results) {
@@ -975,8 +978,18 @@ fetch(`/api/games/${gameId}?full=true`)
                 <Compass className="w-16 h-16 text-neutral-600 mx-auto mb-4" />
                 <p className="text-neutral-400 mb-2">Ничего не найдено</p>
                 <p className="text-sm text-neutral-500 mb-6">
-                  Попробуй изменить фильтры или поискать другой жанр
+                  {searchMode === 'results' && !searchAll
+                    ? 'Старые и редкие игры обычный поиск скрывает — попробуй показать все результаты'
+                    : 'Попробуй изменить фильтры или поискать другой жанр'}
                 </p>
+                {searchMode === 'results' && !searchAll && (
+                  <button
+                    onClick={() => performSearch(searchQuery, true)}
+                    className="inline-block mb-3 mr-2 px-6 py-3 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-white font-medium rounded-lg transition"
+                  >
+                    Показать все результаты
+                  </button>
+                )}
                 {(selectedGenre || searchMode === 'results') && (
                   <button
                     onClick={handleReset}
@@ -1000,6 +1013,18 @@ fetch(`/api/games/${gameId}?full=true`)
                     />
                   ))}
                 </div>
+                {searchMode === 'results' && !searchAll && (
+                  <div className="text-center mt-8">
+                    <p className="text-sm text-neutral-500 mb-3">Нет нужной игры?</p>
+                    <button
+                      onClick={() => performSearch(searchQuery, true)}
+                      disabled={loading}
+                      className="px-6 py-3 bg-neutral-900 border border-neutral-800 rounded-lg text-sm font-medium text-neutral-300 hover:bg-neutral-800 disabled:opacity-50 transition"
+                    >
+                      Показать все результаты
+                    </button>
+                  </div>
+                )}
                 {hasMore && searchMode === 'browse' && (
                   <div className="text-center mt-8">
                     <button

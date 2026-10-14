@@ -115,6 +115,7 @@ export function RailCard({ game, onClick, badge, meta, userData, priority }: Rai
         <GameImage
           src={game.cover || 'https://via.placeholder.com/400x225/171717/525252?text=No+Image'}
           fallback={game.coverAlt}
+          smart
           alt={game.title}
           fill
           sizes="272px"
