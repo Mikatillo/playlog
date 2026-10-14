@@ -32,8 +32,9 @@ export default function GameImage({ src, fallback, smart = false, onError, onLoa
       const img = e.currentTarget as HTMLImageElement;
       if (img.naturalWidth && img.naturalHeight) {
         const ratio = img.naturalWidth / img.naturalHeight;
-        // 16:9 ≈ 1.78. Всё, что заметно уже или шире (квадрат, постер, панорама), вписываем целиком
-        setContain(ratio < 1.5 || ratio > 2.3);
+        // 16:9 ≈ 1.78. Обрезаем (cover) только почти точные 16:9 (±8%).
+        // Steam header.jpg = 460×215 ≈ 2.14 — при cover терял бы ~17% по бокам (режет названия), поэтому вписываем целиком
+        setContain(ratio < 1.64 || ratio > 1.92);
       }
     }
     onLoad?.(e);
