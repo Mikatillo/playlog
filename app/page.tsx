@@ -30,6 +30,7 @@ import GameSeries from '@/components/GameSeries';
 import AspectRatings from '@/components/AspectRatings';
 import { emptyAspects, hasAspects, aspectColumns, aspectsFromRow, type Aspects } from '@/lib/aspects';
 import GameMeta from '@/components/GameMeta';
+import ScreenshotViewer from '@/components/ScreenshotViewer';
 import ReviewsSection from '@/components/ReviewsSection';
 
 type ActivityType = 'added' | 'started' | 'completed' | 'dropped' | 'rated' | 'reviewed';
@@ -869,23 +870,12 @@ fetch(`/api/games/${gameId}?full=true`)
   ) : null;
 
   const screenshotModal = selectedScreenshot ? (
-    <div
-      className="fixed inset-0 bg-black/95 z-[10000] flex items-center justify-center p-4 cursor-pointer"
-      onClick={() => setSelectedScreenshot(null)}
-    >
-      <button
-        onClick={() => setSelectedScreenshot(null)}
-        className="absolute top-[calc(1rem+env(safe-area-inset-top))] right-4 w-12 h-12 bg-neutral-800 hover:bg-neutral-700 rounded-full flex items-center justify-center transition z-10"
-      >
-        <X className="w-6 h-6 text-white" />
-      </button>
-      <img
-        src={selectedScreenshot}
-        alt="Screenshot"
-        className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      />
-    </div>
+    <ScreenshotViewer
+      images={(selectedGame?.screenshots || []).map((x) => x.image)}
+      current={selectedScreenshot}
+      onChange={setSelectedScreenshot}
+      onClose={() => setSelectedScreenshot(null)}
+    />
   ) : null;
 
   return (
