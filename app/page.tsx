@@ -597,7 +597,7 @@ fetch(`/api/games/${gameId}?full=true`)
             <X className="w-5 h-5 text-white" />
           </button>
 
-          <div className="p-4 md:p-6 lg:p-8 space-y-4 md:space-y-6">
+          <div className="p-4 pt-[calc(1rem+env(safe-area-inset-top))] md:p-6 lg:p-8 space-y-4 md:space-y-6">
             <GameMediaCarousel
               game={selectedGame}
               onScreenshotClick={setSelectedScreenshot}

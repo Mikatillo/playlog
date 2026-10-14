@@ -8,7 +8,7 @@ export const maxDuration = 60;
 
 const STEAM_API_KEY = process.env.STEAM_API_KEY;
 
-const BATCH_SIZE = 10; // игр за один запрос
+const BATCH_SIZE = 8; // игр за один запрос
 const MAX_GAMES = 200; // максимум игр за весь импорт
 const SHORT_LINK_HOSTS = new Set(['s.team']);
 

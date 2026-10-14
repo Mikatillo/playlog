@@ -1158,7 +1158,7 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
                 <span className="ml-3 text-neutral-400">Загрузка данных...</span>
               </div>
             ) : (
-              <div className="p-4 md:p-6 lg:p-8 space-y-4 md:space-y-6">
+              <div className="p-4 pt-[calc(1rem+env(safe-area-inset-top))] md:p-6 lg:p-8 space-y-4 md:space-y-6">
                 <GameMediaCarousel
                   game={selectedGame}
                   onScreenshotClick={setSelectedScreenshot}
