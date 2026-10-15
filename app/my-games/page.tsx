@@ -26,6 +26,7 @@ import GameSeries from '@/components/GameSeries';
 import AspectRatings from '@/components/AspectRatings';
 import { emptyAspects, hasAspects, aspectColumns, type Aspects } from '@/lib/aspects';
 import GameMeta from '@/components/GameMeta';
+import TimeToBeat from '@/components/TimeToBeat';
 import ScreenshotViewer from '@/components/ScreenshotViewer';
 import ReviewsSection from '@/components/ReviewsSection';
 import SteamImportModal from '@/components/SteamImportModal';
@@ -745,11 +746,7 @@ export default function MyGamesPage() {
                       <Clock className="w-4 h-4 text-indigo-500" />
                       Часов наиграно
                     </h3>
-                    {selectedGame.playtime && (
-                      <span className="text-[11px] text-neutral-400 bg-neutral-900/50 px-2 py-1 rounded-md border border-neutral-700">
-                        ⏱ ~{selectedGame.playtime} ч. среднее
-                      </span>
-                    )}
+                    <TimeToBeat gameId={selectedGame.id} fallbackPlaytime={selectedGame.playtime} />
                   </div>
                   <div className="flex items-center gap-2">
                     <input
