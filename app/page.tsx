@@ -894,7 +894,7 @@ fetch(`/api/games/${gameId}?full=true`)
         onCreated={(game) => {
           setCreateOpen(false);
           setGames((prev) => [game, ...prev.filter((g) => g.id !== game.id)]);
-          showToast('Карточка создана', 'success');
+          showToast('Карточка создана. Другие пользователи увидят её после одобрения', 'success');
           openGame(game);
         }}
       />

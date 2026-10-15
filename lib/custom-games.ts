@@ -16,6 +16,7 @@ export interface CustomGameRow {
   genres: string[] | null;
   platforms: string[] | null;
   created_at: string;
+  approved?: boolean;
 }
 
 export function mapCustomGame(row: CustomGameRow): Game {
@@ -50,6 +51,7 @@ export async function searchCustomGames(term: string): Promise<Game[]> {
   const { data, error } = await supabase
     .from('custom_games')
     .select('*')
+    .eq('approved', true)
     .ilike('title', `%${safe}%`)
     .order('created_at', { ascending: false })
     .limit(10);
