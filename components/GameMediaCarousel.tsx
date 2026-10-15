@@ -241,8 +241,18 @@ export default function GameMediaCarousel({
 
     {!isDesktop && (
       <div className="mt-3">
-        {metaBlock}
-        <div className="flex items-center gap-1.5 mt-2 empty:hidden">{badges}</div>
+        <h1 className="text-xl font-bold text-white line-clamp-2">{game.title}</h1>
+        <div className="flex items-start justify-between gap-3 mt-2">
+          <div className="flex flex-wrap gap-1.5 min-w-0">
+            {game.genres?.slice(0, 3).map((g) => (
+              <span key={g.id} className="px-2 py-0.5 bg-white/15 text-white rounded text-[11px] font-medium">
+                {g.name}
+              </span>
+            ))}
+            <span className="px-2 py-0.5 bg-white/15 text-white rounded text-[11px] font-medium">{game.year}</span>
+          </div>
+          <div className="flex items-center gap-1.5 flex-shrink-0">{badges}</div>
+        </div>
       </div>
     )}
     </>

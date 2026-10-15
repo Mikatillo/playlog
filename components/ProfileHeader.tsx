@@ -4,7 +4,7 @@ import SteamIcon from '@/components/SteamIcon';
 import { useEffect, useState } from 'react';
 import {
   Pencil, MapPin, ExternalLink, UserPlus, UserCheck, Quote,
-  Gamepad2, Trophy, Clock, MessageSquare, Users,
+  Gamepad2, Trophy, Clock, MessageSquare, ThumbsUp, Users,
 } from 'lucide-react';
 import Image from 'next/image';
 import { calculateLevel } from '@/types/game';
@@ -207,6 +207,8 @@ export default function ProfileHeader({
       {/* ===== Основной блок ===== */}
       <div className="relative px-4 sm:px-6 md:px-8 pb-5 sm:pb-7">
         <div className="flex flex-col sm:flex-row sm:items-end gap-4 sm:gap-6 -mt-14 sm:-mt-20 md:-mt-24">
+          {/* На телефоне: аватар слева, справа — подписчики, Steam и XP (на ПК этот ряд «растворяется») */}
+          <div className="flex items-end gap-4 sm:contents">
           {/* Аватар с уровнем */}
           <div className="relative flex-shrink-0 self-start group">
             <div className="absolute -inset-1 rounded-[1.75rem] bg-gradient-to-br from-indigo-500 via-fuchsia-500 to-amber-400 opacity-70 blur-md group-hover:opacity-100 transition" />
@@ -234,6 +236,44 @@ export default function ProfileHeader({
             </div>
           </div>
 
+
+          {/* Телефон: справа от аватара */}
+          <div className="sm:hidden flex-1 min-w-0 pb-2 flex flex-col gap-2.5">
+            <div className="flex items-center gap-2">
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-neutral-800/70 border border-neutral-700/80 text-sm" title="Подписчики">
+                <ThumbsUp className="w-4 h-4 text-indigo-300" />
+                <b className="text-white">{followersCount}</b>
+              </div>
+              {profile.steam_url && (
+                <a
+                  href={profile.steam_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-neutral-800/70 border border-neutral-700/80 text-neutral-200 text-sm"
+                >
+                  <SteamIcon className="w-4 h-4 text-[#66c0f4]" />
+                  Steam
+                  <ExternalLink className="w-3 h-3 text-neutral-500" />
+                </a>
+              )}
+            </div>
+            <div>
+              <div className="flex items-center justify-between text-[11px] text-neutral-400 mb-1.5">
+                <span>До ур. {levelInfo.level + 1}</span>
+                <span className="text-neutral-300 font-medium">
+                  {levelInfo.xpInLevel} / {levelInfo.xpToNext} XP
+                </span>
+              </div>
+              <div className="h-2 rounded-full bg-neutral-800 overflow-hidden ring-1 ring-white/5">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-indigo-500 via-violet-500 to-fuchsia-400"
+                  style={{ width: `${Math.max(xpPercent, levelInfo.xpInLevel > 0 ? 3 : 0)}%` }}
+                />
+              </div>
+            </div>
+          </div>
+          </div>
+
           {/* Имя, звание и прогресс */}
           <div className="flex-1 min-w-0 sm:pb-1">
             <div className="flex items-center gap-2.5 flex-wrap">
@@ -256,7 +296,7 @@ export default function ProfileHeader({
             </div>
 
             {/* Прогресс до следующего уровня */}
-            <div className="mt-3 max-w-md">
+            <div className="mt-3 max-w-md hidden sm:block">
               <div className="flex items-center justify-between text-[11px] text-neutral-400 mb-1.5">
                 <span>До уровня {levelInfo.level + 1}</span>
                 <span className="text-neutral-300 font-medium">
@@ -274,9 +314,9 @@ export default function ProfileHeader({
         </div>
 
         {/* Ссылки и действия */}
-        <div className="flex flex-wrap items-center gap-2 mt-5">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-neutral-800/70 border border-neutral-700/80 text-neutral-300 text-xs sm:text-sm">
-            <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-300" />
+        <div className={`${isOwnProfile ? 'hidden sm:flex' : 'flex'} flex-wrap items-center gap-2 mt-5`}>
+          <div className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-neutral-800/70 border border-neutral-700/80 text-neutral-300 text-sm">
+            <Users className="w-4 h-4 text-indigo-300" />
             <b className="text-white">{followersCount}</b> {pluralFollowers(followersCount)}
           </div>
 
@@ -285,7 +325,7 @@ export default function ProfileHeader({
               href={profile.steam_url}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-neutral-800/70 hover:bg-[#1b6ca8]/30 border border-neutral-700/80 hover:border-[#66c0f4]/50 text-neutral-200 text-xs sm:text-sm transition hover:-translate-y-0.5"
+              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-neutral-800/70 hover:bg-[#1b6ca8]/30 border border-neutral-700/80 hover:border-[#66c0f4]/50 text-neutral-200 text-xs sm:text-sm transition hover:-translate-y-0.5"
             >
               <SteamIcon className="w-4 h-4 text-[#66c0f4]" />
               Steam

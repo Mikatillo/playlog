@@ -168,6 +168,9 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
   const [notFound, setNotFound] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<TopTab>('games');
+  // На телефоне блоки «Любимые игры» и «Лента активности» сворачиваются (на ПК всегда раскрыты)
+  const [favOpen, setFavOpen] = useState(false);
+  const [feedOpen, setFeedOpen] = useState(false);
   const [gameTab, setGameTab] = useState<GameTab>('all');
   const [sortBy, setSortBy] = useState<SortType>('newest');
 
@@ -776,10 +779,19 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {/* Любимые игры */}
           <div className="bg-neutral-900/80 backdrop-blur-md border border-neutral-800 rounded-2xl p-5 flex flex-col">
-            <h3 className="font-semibold text-white mb-4 flex items-center gap-2">
-              <Star className="w-4 h-4 text-yellow-500" />
-              Мои любимые игры
-            </h3>
+            <button
+              type="button"
+              onClick={() => setFavOpen((v) => !v)}
+              aria-expanded={favOpen}
+              className={`w-full flex items-center justify-between gap-2 text-left font-semibold text-white lg:mb-4 lg:cursor-default ${favOpen ? 'mb-4' : ''}`}
+            >
+              <span className="flex items-center gap-2">
+                <Star className="w-4 h-4 text-yellow-500" />
+                Мои любимые игры
+              </span>
+              <ChevronDown className={`w-4 h-4 text-neutral-500 lg:hidden transition-transform duration-300 ${favOpen ? 'rotate-180' : ''}`} />
+            </button>
+            <div className={`${favOpen ? 'contents' : 'hidden lg:contents'}`}>
             {favoriteGames.length === 0 ? (
               <div className="text-sm text-neutral-500 py-4">
                 {isOwnProfile
@@ -840,14 +852,24 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
                 })}
               </div>
             )}
+            </div>
           </div>
 
           {/* Лента активности */}
           <div className="bg-neutral-900/80 backdrop-blur-md border border-neutral-800 rounded-2xl p-5 flex flex-col">
-            <h3 className="font-semibold text-white mb-4 flex items-center gap-2">
-              <MessageSquare className="w-4 h-4 text-indigo-500" />
-              Лента активности
-            </h3>
+            <button
+              type="button"
+              onClick={() => setFeedOpen((v) => !v)}
+              aria-expanded={feedOpen}
+              className={`w-full flex items-center justify-between gap-2 text-left font-semibold text-white lg:mb-4 lg:cursor-default ${feedOpen ? 'mb-4' : ''}`}
+            >
+              <span className="flex items-center gap-2">
+                <MessageSquare className="w-4 h-4 text-indigo-500" />
+                Лента активности
+              </span>
+              <ChevronDown className={`w-4 h-4 text-neutral-500 lg:hidden transition-transform duration-300 ${feedOpen ? 'rotate-180' : ''}`} />
+            </button>
+            <div className={`${feedOpen ? 'contents' : 'hidden lg:contents'}`}>
             {/* Высота ленты равна соседним блокам; внутри — прокрутка (на десктопе), на телефоне — фиксированные ~5 событий */}
             <div className="relative h-[470px] lg:h-auto lg:flex-1 lg:min-h-[320px]">
               <div className="absolute inset-0 overflow-y-auto pr-1 activity-scroll">
@@ -859,6 +881,7 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
                   emptyText="Пока нет активности"
                 />
               </div>
+            </div>
             </div>
           </div>
 
@@ -880,6 +903,7 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
         </div>
         {/* Табы + коллекция */}
         <div className="space-y-6 min-w-0">
+          {statusCounts.want > 0 && (
           <div className="flex items-center gap-2 border-b border-neutral-800 overflow-x-auto scrollbar-hide bg-neutral-900/70 backdrop-blur-md rounded-t-xl px-2">
             <button
               onClick={() => setActiveTab('games')}
@@ -904,17 +928,8 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
                 Лист ожидания ({statusCounts.want})
               </button>
             )}
-            <button
-              onClick={() => setActiveTab('reviews')}
-              className={`px-4 py-2.5 text-sm font-medium transition border-b-2 -mb-px whitespace-nowrap ${
-                activeTab === 'reviews'
-                  ? 'text-indigo-400 border-indigo-500'
-                  : 'text-neutral-400 border-transparent hover:text-white'
-              }`}
-            >
-              Рецензии ({reviews.length})
-            </button>
           </div>
+          )}
 
           {activeTab === 'games' && (
             <div className="space-y-4">

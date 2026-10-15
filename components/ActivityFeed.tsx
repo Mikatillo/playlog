@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Loader2, Gamepad, Check, XCircle, Star, MessageSquare, Clock } from 'lucide-react';
+import { Loader2, Gamepad, Check, XCircle, Star, MessageSquare } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 
@@ -26,20 +26,6 @@ interface ActivityFeedProps {
   showAvatars?: boolean;
   limit?: number;
   emptyText?: string;
-}
-
-function timeAgo(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  const min = Math.floor(diff / 60000);
-  if (min < 1) return 'только что';
-  if (min < 60) return `${min} мин`;
-  const hours = Math.floor(min / 60);
-  if (hours < 24) return `${hours} ч`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `${days} дн`;
-  const months = Math.floor(days / 30);
-  if (months < 12) return `${months} мес`;
-  return `${Math.floor(months / 12)} г`;
 }
 
 function getActivityText(a: Activity): string {
@@ -177,11 +163,6 @@ export default function ActivityFeed({
                   «{a.preview}»
                 </div>
               )}
-
-              <div className="text-[11px] text-neutral-500 mt-1 flex items-center gap-1">
-                <Clock className="w-3 h-3" />
-                {timeAgo(a.created_at)}
-              </div>
             </div>
           </div>
         );
