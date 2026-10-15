@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 import { Check, ChevronDown, Loader2, UserPlus, Users, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
@@ -173,8 +174,14 @@ export default function GameMeta({ gameId, platforms, ownerId }: GameMetaProps) 
                       key={t.id}
                       className="inline-flex items-center gap-1.5 pl-1 pr-1.5 py-0.5 rounded-full bg-neutral-800 border border-neutral-700 text-xs text-neutral-200"
                     >
-                      <Avatar friend={t} size={20} />
-                      <span className="max-w-[90px] truncate">{t.nickname}</span>
+                      <Link
+                        href={`/user/${t.id}`}
+                        title={`Профиль ${t.nickname}`}
+                        className="inline-flex items-center gap-1.5 hover:text-white hover:underline underline-offset-2 transition"
+                      >
+                        <Avatar friend={t} size={20} />
+                        <span className="max-w-[90px] truncate">{t.nickname}</span>
+                      </Link>
                       {canEdit && (
                         <button
                           type="button"

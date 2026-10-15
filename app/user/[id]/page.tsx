@@ -4,10 +4,11 @@ import ProfileStats from '@/components/ProfileStats';
 import { ASPECTS, aspectsFromRow, hasAspects } from '@/lib/aspects';
 import { fetchGamesByIds } from '@/lib/games-client';
 import { authFetch } from '@/lib/api-client';
+import { supabase } from '@/lib/supabase';
 import { useEffect, useState, use, useMemo, useCallback } from 'react';
 import {
   Loader2, Star, Check, Gamepad, XCircle, MessageSquare, ArrowLeft,
-  Heart, ChevronDown, ChevronUp, ArrowUpDown, Pencil, X, Clock, LayoutGrid, Square,
+  Heart, Plus, ChevronDown, ChevronUp, ArrowUpDown, Pencil, X, Clock, LayoutGrid, Square,
 } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -198,6 +199,46 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
   const [descriptionRu, setDescriptionRu] = useState<string | null>(null);
   const [translating, setTranslating] = useState(false);
   const [selectedScreenshot, setSelectedScreenshot] = useState<string | null>(null);
+  // «Добавить к себе»: есть ли уже эта игра у меня
+  const [mineStatus, setMineStatus] = useState<'unknown' | 'has' | 'no'>('unknown');
+  const [addingMine, setAddingMine] = useState(false);
+  // Переход к другому пользователю (например, по тиммейту) — закрываем открытую карточку
+  useEffect(() => {
+    setSelectedGame(null);
+    setSelectedScreenshot(null);
+  }, [id]);
+  useEffect(() => {
+    setMineStatus('unknown');
+    if (!selectedGame || !userId || userId === id) return;
+    let cancelled = false;
+    supabase
+      .from('user_games')
+      .select('game_id')
+      .eq('user_id', userId)
+      .eq('game_id', selectedGame.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!cancelled) setMineStatus(data ? 'has' : 'no');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedGame?.id, userId, id]);
+  const addToMine = async () => {
+    if (!selectedGame || !userId || addingMine) return;
+    setAddingMine(true);
+    const { error } = await supabase.from('user_games').upsert(
+      { user_id: userId, game_id: selectedGame.id, rating: 0, hours: 0, review: '', status: 'want' },
+      { onConflict: 'user_id,game_id', ignoreDuplicates: true },
+    );
+    setAddingMine(false);
+    if (error) {
+      showToast('Не удалось добавить игру', 'error');
+      return;
+    }
+    setMineStatus('has');
+    showToast('Игра добавлена в твой лист ожидания', 'success');
+  };
   const [savedTick] = useState(0);
 
   // Фон страницы из магазина
@@ -1294,6 +1335,33 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
                 <GameMeta gameId={selectedGame.id} platforms={selectedGame.platforms} ownerId={id} />
 
                 <GameSeries gameId={selectedGame.id} onOpen={openGameModal} />
+
+                {!isOwnProfile && (
+                  <div>
+                    {!userId ? (
+                      <Link
+                        href="/auth"
+                        className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-neutral-200 font-medium rounded-lg transition text-sm"
+                      >
+                        Войди, чтобы добавить к себе
+                      </Link>
+                    ) : mineStatus === 'has' ? (
+                      <div className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-medium rounded-lg text-sm">
+                        <Check className="w-4 h-4" />
+                        Уже в твоей коллекции
+                      </div>
+                    ) : (
+                      <button
+                        onClick={addToMine}
+                        disabled={addingMine || mineStatus === 'unknown'}
+                        className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 text-white font-medium rounded-lg transition text-sm"
+                      >
+                        <Plus className="w-4 h-4" />
+                        {addingMine ? 'Добавляю…' : 'Добавить к себе в коллекцию'}
+                      </button>
+                    )}
+                  </div>
+                )}
 
                 {isOwnProfile && userGamesData.get(selectedGame.id) && (
                   <div>
