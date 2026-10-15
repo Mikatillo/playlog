@@ -26,6 +26,7 @@ const PLATFORMS = [
 ];
 
 const MAX_FILE = 5 * 1024 * 1024;
+const MAX_SHOTS = 5;
 
 export default function CreateGameModal({ userId, initialTitle = '', onClose, onCreated }: CreateGameModalProps) {
   const [title, setTitle] = useState(initialTitle);
@@ -39,6 +40,32 @@ export default function CreateGameModal({ userId, initialTitle = '', onClose, on
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
+  const shotsRef = useRef<HTMLInputElement>(null);
+  const [shots, setShots] = useState<{ file: File; url: string }[]>([]);
+
+  const addShots = (list: FileList | null) => {
+    if (!list) return;
+    setError('');
+    const next = [...shots];
+    for (const f of Array.from(list)) {
+      if (next.length >= MAX_SHOTS) {
+        setError(`Скриншотов может быть не больше ${MAX_SHOTS}`);
+        break;
+      }
+      if (!f.type.startsWith('image/')) {
+        setError('Скриншоты должны быть картинками');
+        continue;
+      }
+      if (f.size > MAX_FILE) {
+        setError('Скриншот больше 5 МБ пропущен');
+        continue;
+      }
+      next.push({ file: f, url: URL.createObjectURL(f) });
+    }
+    setShots(next);
+    if (shotsRef.current) shotsRef.current.value = '';
+  };
+  const removeShot = (i: number) => setShots((prev) => prev.filter((_, idx) => idx !== i));
 
   const toggle = (list: string[], set: (v: string[]) => void, value: string) =>
     set(list.includes(value) ? list.filter((x) => x !== value) : [...list, value]);
@@ -74,6 +101,18 @@ export default function CreateGameModal({ userId, initialTitle = '', onClose, on
         finalCover = supabase.storage.from('game-covers').getPublicUrl(path).data.publicUrl;
       }
 
+      const shotUrls: string[] = [];
+      for (let i = 0; i < shots.length; i++) {
+        const f = shots[i].file;
+        const ext = (f.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+        const path = `${userId}/${Date.now()}-s${i}.${ext}`;
+        const { error: shotErr } = await supabase.storage
+          .from('game-covers')
+          .upload(path, f, { cacheControl: '31536000', contentType: f.type });
+        if (shotErr) throw new Error('Не удалось загрузить скриншот: ' + shotErr.message);
+        shotUrls.push(supabase.storage.from('game-covers').getPublicUrl(path).data.publicUrl);
+      }
+
       const { data, error: insErr } = await supabase
         .from('custom_games')
         .insert({
@@ -84,6 +123,7 @@ export default function CreateGameModal({ userId, initialTitle = '', onClose, on
           description: description.trim() || null,
           genres,
           platforms,
+          screenshots: shotUrls,
         })
         .select()
         .single();
@@ -171,6 +211,43 @@ export default function CreateGameModal({ userId, initialTitle = '', onClose, on
               </div>
             </div>
             <p className="text-[11px] text-neutral-500 mt-1.5">Лучше всего подходит горизонтальная картинка, как у Steam (460×215)</p>
+          </div>
+
+          <div>
+            <label className="block text-xs text-neutral-400 mb-1.5">Скриншоты (до {MAX_SHOTS})</label>
+            <input
+              ref={shotsRef}
+              type="file"
+              accept="image/*"
+              multiple
+              className="hidden"
+              onChange={(e) => addShots(e.target.files)}
+            />
+            <div className="flex flex-wrap gap-2">
+              {shots.map((sh, i) => (
+                <div key={sh.url} className="relative w-24 aspect-video rounded-lg overflow-hidden bg-neutral-800 border border-neutral-700">
+                  <Image src={sh.url} alt="" fill sizes="96px" className="object-cover" unoptimized />
+                  <button
+                    type="button"
+                    onClick={() => removeShot(i)}
+                    aria-label="Убрать скриншот"
+                    className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/70 hover:bg-black text-white flex items-center justify-center"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+              {shots.length < MAX_SHOTS && (
+                <button
+                  type="button"
+                  onClick={() => shotsRef.current?.click()}
+                  className="w-24 aspect-video rounded-lg border border-dashed border-neutral-600 hover:border-indigo-500/60 text-neutral-400 hover:text-white flex flex-col items-center justify-center gap-1 text-[11px] transition"
+                >
+                  <ImagePlus className="w-4 h-4" />
+                  Загрузить скриншоты
+                </button>
+              )}
+            </div>
           </div>
 
           <div>

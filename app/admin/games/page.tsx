@@ -91,7 +91,7 @@ export default function AdminGamesPage() {
                 <div className="flex-1 min-w-0">
                   <div className="font-semibold text-white truncate">{r.title}</div>
                   <div className="text-xs text-neutral-400 mt-0.5">
-                    {r.year || '—'} · {(r.genres || []).join(', ') || 'без жанра'}
+                    {r.year || '—'} · {(r.genres || []).join(', ') || 'без жанра'} · скриншотов: {(r.screenshots || []).length}
                   </div>
                   {r.description && <p className="text-xs text-neutral-500 mt-1.5 line-clamp-3">{r.description}</p>}
                   <Link href={`/user/${r.created_by}`} target="_blank" className="text-[11px] text-indigo-400 hover:underline mt-1.5 inline-block">

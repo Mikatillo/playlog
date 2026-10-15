@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import {
   Gamepad2, Menu, X, LogOut, Award, Pencil, AlertTriangle,
   User as UserIcon, Home, Library, Search, Calendar, Loader2, ShoppingBag,
-  Users, ChevronDown, Coins,
+  Users, ChevronDown, Coins, ShieldCheck,
 } from 'lucide-react';
 import Image from 'next/image';
 import GameImage from '@/components/GameImage';
@@ -58,6 +58,29 @@ export default function Header() {
       .then((r) => r.json())
       .then((data) => setNewFollowersCount(data.count || 0))
       .catch(() => {});
+  }, [userId]);
+
+  // Админ: ссылка на модерацию карточек со счётчиком ожидающих
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [pendingCards, setPendingCards] = useState(0);
+  useEffect(() => {
+    setIsAdmin(false);
+    setPendingCards(0);
+    if (!userId) return;
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase.from('admins').select('user_id').eq('user_id', userId).maybeSingle();
+      if (cancelled || !data) return;
+      setIsAdmin(true);
+      const { count } = await supabase
+        .from('custom_games')
+        .select('id', { count: 'exact', head: true })
+        .eq('approved', false);
+      if (!cancelled) setPendingCards(count || 0);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [userId]);
 
   const handleLogout = async () => {
@@ -468,6 +491,24 @@ export default function Header() {
                       Магазин
                     </Link>
 
+                    {isAdmin && (
+                      <Link
+                        href="/admin/games"
+                        onClick={() => setUserMenuOpen(false)}
+                        className="w-full px-4 py-2.5 text-left text-sm text-neutral-300 hover:bg-neutral-800 hover:text-white transition flex items-center justify-between"
+                      >
+                        <span className="flex items-center gap-2">
+                          <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                          Модерация карточек
+                        </span>
+                        {pendingCards > 0 && (
+                          <span className="px-1.5 py-0.5 rounded-full bg-amber-500 text-black text-[10px] font-bold min-w-[20px] text-center">
+                            {pendingCards}
+                          </span>
+                        )}
+                      </Link>
+                    )}
+
                     <button
                       onClick={() => {
                         setUserMenuOpen(false);
@@ -644,6 +685,24 @@ export default function Header() {
                     </span>
                   )}
                 </Link>
+
+                {isAdmin && (
+                  <Link
+                    href="/admin/games"
+                    onClick={() => setMenuOpen(false)}
+                    className="w-full text-left text-sm font-medium text-neutral-300 hover:text-white hover:bg-neutral-800 transition py-2.5 px-3 rounded-lg flex items-center justify-between"
+                  >
+                    <span className="flex items-center gap-2">
+                      <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                      Модерация карточек
+                    </span>
+                    {pendingCards > 0 && (
+                      <span className="px-1.5 py-0.5 rounded-full bg-amber-500 text-black text-[10px] font-bold">
+                        {pendingCards}
+                      </span>
+                    )}
+                  </Link>
+                )}
 
                 <button
                   onClick={() => {

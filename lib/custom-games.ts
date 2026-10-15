@@ -15,6 +15,7 @@ export interface CustomGameRow {
   description: string | null;
   genres: string[] | null;
   platforms: string[] | null;
+  screenshots?: string[] | null;
   created_at: string;
   approved?: boolean;
 }
@@ -32,7 +33,7 @@ export function mapCustomGame(row: CustomGameRow): Game {
     description: row.description || '',
     descriptionRaw: undefined,
     platforms: row.platforms || [],
-    screenshots: [],
+    screenshots: (row.screenshots || []).map((image, i) => ({ id: i + 1, image })),
   };
 }
 
