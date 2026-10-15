@@ -201,7 +201,6 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
   const [selectedScreenshot, setSelectedScreenshot] = useState<string | null>(null);
   // «Добавить к себе»: есть ли уже эта игра у меня
   const [mineStatus, setMineStatus] = useState<'unknown' | 'has' | 'no'>('unknown');
-  const [addingMine, setAddingMine] = useState(false);
   // Переход к другому пользователю (например, по тиммейту) — закрываем открытую карточку
   useEffect(() => {
     setSelectedGame(null);
@@ -224,21 +223,6 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
       cancelled = true;
     };
   }, [selectedGame?.id, userId, id]);
-  const addToMine = async () => {
-    if (!selectedGame || !userId || addingMine) return;
-    setAddingMine(true);
-    const { error } = await supabase.from('user_games').upsert(
-      { user_id: userId, game_id: selectedGame.id, rating: 0, hours: 0, review: '', status: 'want' },
-      { onConflict: 'user_id,game_id', ignoreDuplicates: true },
-    );
-    setAddingMine(false);
-    if (error) {
-      showToast('Не удалось добавить игру', 'error');
-      return;
-    }
-    setMineStatus('has');
-    showToast('Игра добавлена в твой лист ожидания', 'success');
-  };
   const [savedTick] = useState(0);
 
   // Фон страницы из магазина
@@ -1346,19 +1330,21 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
                         Войди, чтобы добавить к себе
                       </Link>
                     ) : mineStatus === 'has' ? (
-                      <div className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-medium rounded-lg text-sm">
+                      <Link
+                        href={`/?open=${selectedGame.id}`}
+                        className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 font-medium rounded-lg transition text-sm"
+                      >
                         <Check className="w-4 h-4" />
-                        Уже в твоей коллекции
-                      </div>
+                        Уже в твоей коллекции — открыть
+                      </Link>
                     ) : (
-                      <button
-                        onClick={addToMine}
-                        disabled={addingMine || mineStatus === 'unknown'}
-                        className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 text-white font-medium rounded-lg transition text-sm"
+                      <Link
+                        href={`/?open=${selectedGame.id}`}
+                        className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-indigo-500 hover:bg-indigo-600 text-white font-medium rounded-lg transition text-sm"
                       >
                         <Plus className="w-4 h-4" />
-                        {addingMine ? 'Добавляю…' : 'Добавить к себе в коллекцию'}
-                      </button>
+                        Добавить к себе в коллекцию
+                      </Link>
                     )}
                   </div>
                 )}
