@@ -31,6 +31,7 @@ import AspectRatings from '@/components/AspectRatings';
 import { emptyAspects, hasAspects, aspectColumns, aspectsFromRow, type Aspects } from '@/lib/aspects';
 import GameMeta from '@/components/GameMeta';
 import TimeToBeat from '@/components/TimeToBeat';
+import CreateGameModal from '@/components/CreateGameModal';
 import ScreenshotViewer from '@/components/ScreenshotViewer';
 import ReviewsSection from '@/components/ReviewsSection';
 
@@ -80,6 +81,15 @@ export default function Home() {
   const [hasMore, setHasMore] = useState(true);
   // Поиск без фильтров («показать все результаты»): старые и редкие игры, которые обычный поиск скрывает
   const [searchAll, setSearchAll] = useState(false);
+  // Создание своей карточки игры
+  const [createOpen, setCreateOpen] = useState(false);
+  const openCreate = () => {
+    if (!userId) {
+      showToast('Войди, чтобы создавать карточки', 'info');
+      return;
+    }
+    setCreateOpen(true);
+  };
   const [selectedScreenshot, setSelectedScreenshot] = useState<string | null>(null);
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
   const [translating, setTranslating] = useState(false);
@@ -875,6 +885,21 @@ fetch(`/api/games/${gameId}?full=true`)
     />
   ) : null;
 
+  const createModal =
+    createOpen && userId ? (
+      <CreateGameModal
+        userId={userId}
+        initialTitle={searchQuery}
+        onClose={() => setCreateOpen(false)}
+        onCreated={(game) => {
+          setCreateOpen(false);
+          setGames((prev) => [game, ...prev.filter((g) => g.id !== game.id)]);
+          showToast('Карточка создана', 'success');
+          openGame(game);
+        }}
+      />
+    ) : null;
+
   return (
     <div className="min-h-screen bg-[#0a0a0a]">
       {xpGain && (
@@ -977,6 +1002,14 @@ fetch(`/api/games/${gameId}?full=true`)
                     Показать все результаты
                   </button>
                 )}
+                {searchMode === 'results' && (
+                  <button
+                    onClick={openCreate}
+                    className="inline-block mb-3 mr-2 px-6 py-3 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-white font-medium rounded-lg transition"
+                  >
+                    Создать карточку самому
+                  </button>
+                )}
                 {(selectedGenre || searchMode === 'results') && (
                   <button
                     onClick={handleReset}
@@ -1000,16 +1033,26 @@ fetch(`/api/games/${gameId}?full=true`)
                     />
                   ))}
                 </div>
-                {searchMode === 'results' && !searchAll && (
+                {searchMode === 'results' && (
                   <div className="text-center mt-8">
                     <p className="text-sm text-neutral-500 mb-3">Нет нужной игры?</p>
-                    <button
-                      onClick={() => performSearch(searchQuery, true)}
-                      disabled={loading}
-                      className="px-6 py-3 bg-neutral-900 border border-neutral-800 rounded-lg text-sm font-medium text-neutral-300 hover:bg-neutral-800 disabled:opacity-50 transition"
-                    >
-                      Показать все результаты
-                    </button>
+                    <div className="flex flex-wrap items-center justify-center gap-2">
+                      {!searchAll && (
+                        <button
+                          onClick={() => performSearch(searchQuery, true)}
+                          disabled={loading}
+                          className="px-6 py-3 bg-neutral-900 border border-neutral-800 rounded-lg text-sm font-medium text-neutral-300 hover:bg-neutral-800 disabled:opacity-50 transition"
+                        >
+                          Показать все результаты
+                        </button>
+                      )}
+                      <button
+                        onClick={openCreate}
+                        className="px-6 py-3 bg-neutral-900 border border-neutral-800 rounded-lg text-sm font-medium text-neutral-300 hover:bg-neutral-800 transition"
+                      >
+                        Создать карточку самому
+                      </button>
+                    </div>
                   </div>
                 )}
                 {hasMore && searchMode === 'browse' && (
@@ -1031,6 +1074,7 @@ fetch(`/api/games/${gameId}?full=true`)
 
       {mounted && gameModal ? createPortal(gameModal, document.body) : null}
       {mounted && screenshotModal ? createPortal(screenshotModal, document.body) : null}
+      {mounted && createModal ? createPortal(createModal, document.body) : null}
     </div>
   );
 }

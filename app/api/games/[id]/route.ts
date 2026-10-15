@@ -7,6 +7,7 @@ import {
   steamHeaderUrl,
 } from '@/lib/igdb';
 import { IGDB_GAME_FIELDS } from '@/lib/igdb-shared';
+import { fetchCustomGames, isCustomId } from '@/lib/custom-games';
 
 export async function GET(
   request: NextRequest,
@@ -17,6 +18,12 @@ export async function GET(
 
   if (!gameId || isNaN(gameId)) {
     return NextResponse.json({ error: 'Invalid id' }, { status: 400 });
+  }
+
+  if (isCustomId(gameId)) {
+    const [custom] = await fetchCustomGames([gameId]);
+    if (!custom) return NextResponse.json({ error: 'Game not found' }, { status: 404 });
+    return NextResponse.json(custom);
   }
 
   try {
