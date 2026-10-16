@@ -8,7 +8,7 @@ import { supabase } from '@/lib/supabase';
 import { useEffect, useState, use, useMemo, useCallback } from 'react';
 import {
   Loader2, Star, Check, Gamepad, XCircle, MessageSquare, ArrowLeft,
-  Heart, Plus, ChevronDown, ChevronUp, ArrowUpDown, Pencil, X, Clock, LayoutGrid, Square,
+  Heart, Plus, BarChart3, ChevronDown, ChevronUp, ArrowUpDown, Pencil, X, Clock, LayoutGrid, Square,
 } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -172,9 +172,8 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
   const [notFound, setNotFound] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<TopTab>('games');
-  // На телефоне блоки «Любимые игры» и «Лента активности» сворачиваются (на ПК всегда раскрыты)
-  const [favOpen, setFavOpen] = useState(false);
-  const [feedOpen, setFeedOpen] = useState(false);
+  // На телефоне «Любимые игры», «Лента активности» и статистика собраны в один сворачиваемый блок (на ПК всегда раскрыт)
+  const [profOpen, setProfOpen] = useState(false);
   const [gameTab, setGameTab] = useState<GameTab>('all');
   const [sortBy, setSortBy] = useState<SortType>('newest');
 
@@ -803,23 +802,30 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
           reviewsCount={stats?.reviewsCount || 0}
         />
 
-        {/* 3 колонки: любимые игры / лента / интересы */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Телефон: один сворачиваемый блок «Статистика профиля» со всем содержимым; ПК: 3 колонки */}
+        <div>
+          <button
+            type="button"
+            onClick={() => setProfOpen((v) => !v)}
+            aria-expanded={profOpen}
+            className="lg:hidden w-full flex items-center justify-between gap-2 text-left font-semibold text-white bg-neutral-900/80 backdrop-blur-md border border-neutral-800 rounded-2xl p-5"
+          >
+            <span className="flex items-center gap-2">
+              <span className="w-7 h-7 rounded-lg bg-indigo-500/15 flex items-center justify-center">
+                <BarChart3 className="w-4 h-4 text-indigo-400" />
+              </span>
+              Статистика профиля
+            </span>
+            <ChevronDown className={`w-4 h-4 text-neutral-500 transition-transform duration-300 ${profOpen ? 'rotate-180' : ''}`} />
+          </button>
+        <div className={`${profOpen ? 'grid mt-4' : 'hidden'} lg:grid grid-cols-1 lg:grid-cols-3 gap-4`}>
           {/* Любимые игры */}
           <div className="bg-neutral-900/80 backdrop-blur-md border border-neutral-800 rounded-2xl p-5 flex flex-col">
-            <button
-              type="button"
-              onClick={() => setFavOpen((v) => !v)}
-              aria-expanded={favOpen}
-              className={`w-full flex items-center justify-between gap-2 text-left font-semibold text-white lg:mb-4 lg:cursor-default ${favOpen ? 'mb-4' : ''}`}
-            >
-              <span className="flex items-center gap-2">
-                <Star className="w-4 h-4 text-yellow-500" />
-                Мои любимые игры
-              </span>
-              <ChevronDown className={`w-4 h-4 text-neutral-500 lg:hidden transition-transform duration-300 ${favOpen ? 'rotate-180' : ''}`} />
-            </button>
-            <div className={`${favOpen ? 'contents' : 'hidden lg:contents'}`}>
+            <h3 className="font-semibold text-white mb-4 flex items-center gap-2">
+              <Star className="w-4 h-4 text-yellow-500" />
+              Мои любимые игры
+            </h3>
+            <div className="contents">
             {favoriteGames.length === 0 ? (
               <div className="text-sm text-neutral-500 py-4">
                 {isOwnProfile
@@ -885,19 +891,11 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
 
           {/* Лента активности */}
           <div className="bg-neutral-900/80 backdrop-blur-md border border-neutral-800 rounded-2xl p-5 flex flex-col">
-            <button
-              type="button"
-              onClick={() => setFeedOpen((v) => !v)}
-              aria-expanded={feedOpen}
-              className={`w-full flex items-center justify-between gap-2 text-left font-semibold text-white lg:mb-4 lg:cursor-default ${feedOpen ? 'mb-4' : ''}`}
-            >
-              <span className="flex items-center gap-2">
-                <MessageSquare className="w-4 h-4 text-indigo-500" />
-                Лента активности
-              </span>
-              <ChevronDown className={`w-4 h-4 text-neutral-500 lg:hidden transition-transform duration-300 ${feedOpen ? 'rotate-180' : ''}`} />
-            </button>
-            <div className={`${feedOpen ? 'contents' : 'hidden lg:contents'}`}>
+            <h3 className="font-semibold text-white mb-4 flex items-center gap-2">
+              <MessageSquare className="w-4 h-4 text-indigo-500" />
+              Лента активности
+            </h3>
+            <div className="contents">
             {/* Высота ленты равна соседним блокам; внутри — прокрутка (на десктопе), на телефоне — фиксированные ~5 событий */}
             <div className="relative h-[470px] lg:h-auto lg:flex-1 lg:min-h-[320px]">
               <div className="absolute inset-0 overflow-y-auto pr-1 activity-scroll">
@@ -928,6 +926,7 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
               }))
               .filter((e) => hasAspects(e.aspects))}
           />
+        </div>
         </div>
         {/* Табы + коллекция */}
         <div className="space-y-6 min-w-0">

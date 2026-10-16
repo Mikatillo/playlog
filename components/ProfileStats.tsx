@@ -85,8 +85,6 @@ export default function ProfileStats({
   isOwnProfile = false,
 }: ProfileStatsProps) {
   const [detailsOpen, setDetailsOpen] = useState(false);
-  // На телефоне весь блок сворачивается (на ПК всегда раскрыт)
-  const [blockOpen, setBlockOpen] = useState(false);
   const panelId = useId();
 
   const tracked = statusCounts.completed + statusCounts.playing + statusCounts.dropped;
@@ -104,22 +102,15 @@ export default function ProfileStats({
   ];
 
   return (
-    <div className={`bg-neutral-900/80 backdrop-blur-md border border-neutral-800 rounded-2xl p-5 flex flex-col ${blockOpen ? 'gap-5' : 'gap-0 lg:gap-5'}`}>
-      <button
-        type="button"
-        onClick={() => setBlockOpen((v) => !v)}
-        aria-expanded={blockOpen}
-        className="w-full flex items-center justify-between gap-2 text-left font-semibold text-white lg:cursor-default"
-      >
-        <span className="flex items-center gap-2">
-          <span className="w-7 h-7 rounded-lg bg-indigo-500/15 flex items-center justify-center">
-            <BarChart3 className="w-4 h-4 text-indigo-400" />
-          </span>
-          Статистика профиля
+    <div className="bg-neutral-900/80 backdrop-blur-md border border-neutral-800 rounded-2xl p-5 flex flex-col gap-5">
+      <h3 className="font-semibold text-white flex items-center gap-2">
+        <span className="w-7 h-7 rounded-lg bg-indigo-500/15 flex items-center justify-center">
+          <BarChart3 className="w-4 h-4 text-indigo-400" />
         </span>
-        <ChevronDown className={`w-4 h-4 text-neutral-500 lg:hidden transition-transform duration-300 ${blockOpen ? 'rotate-180' : ''}`} />
-      </button>
-      <div className={blockOpen ? 'contents' : 'hidden lg:contents'}>
+        <span className="lg:hidden">Статистика</span>
+        <span className="hidden lg:inline">Статистика профиля</span>
+      </h3>
+      <div className="contents">
 
       {/* Статистика профиля: всегда на виду */}
       <div className="grid grid-cols-2 gap-2.5">
