@@ -645,9 +645,9 @@ export default function MyGamesPage() {
                       <Loader2 className="w-5 h-5 text-indigo-400 animate-spin" />
                       <div>
                         <div className="text-sm text-white font-medium">
-                          Переводим описание...
+                          
                         </div>
-                        <div className="text-xs text-neutral-400 mt-0.5">Google Translate</div>
+                        <div className="text-xs text-neutral-400 mt-0.5"></div>
                       </div>
                     </div>
                   ) : descriptionRu ? (

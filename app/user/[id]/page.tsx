@@ -931,7 +931,7 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
         {/* Табы + коллекция */}
         <div className="space-y-6 min-w-0">
           {statusCounts.want > 0 && (
-          <div className="flex items-center gap-2 border-b border-neutral-800 overflow-x-auto scrollbar-hide bg-neutral-900/70 backdrop-blur-md rounded-t-xl px-2">
+          <div className="flex items-center gap-2 border-b border-neutral-800 scrollbar-hide bg-neutral-900/70 backdrop-blur-md rounded-t-xl px-2">
             <button
               onClick={() => setActiveTab('games')}
               className={`px-4 py-2.5 text-sm font-medium transition border-b-2 -mb-px whitespace-nowrap ${
@@ -1263,8 +1263,8 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
                     <div className="flex items-center gap-3 p-3 md:p-4 bg-neutral-800 rounded-lg">
                       <Loader2 className="w-5 h-5 text-indigo-400 animate-spin" />
                       <div>
-                        <div className="text-sm text-white font-medium">Переводим описание...</div>
-                        <div className="text-xs text-neutral-400 mt-0.5">Google Translate</div>
+                        <div className="text-sm text-white font-medium"></div>
+                        <div className="text-xs text-neutral-400 mt-0.5"></div>
                       </div>
                     </div>
                   ) : descriptionRu ? (
