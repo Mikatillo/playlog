@@ -4,6 +4,9 @@ import { useEffect, useState } from 'react';
 import { Loader2, Gamepad, Check, XCircle, Star, MessageSquare } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
+import GameImage from '@/components/GameImage';
+import { fetchGamesByIds } from '@/lib/games-client';
+import type { Game } from '@/types/game';
 
 interface Activity {
   id: string;
@@ -70,6 +73,8 @@ export default function ActivityFeed({
 }: ActivityFeedProps) {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
+  // Свежие данные игр: обложка, сохранённая в момент события, могла устареть (у Steam нет header.jpg у новинок)
+  const [gameMap, setGameMap] = useState<Map<number, Game>>(new Map());
 
   useEffect(() => {
     let cancelled = false;
@@ -77,9 +82,15 @@ export default function ActivityFeed({
 
     fetch(`/api/activity?user_id=${userId}&scope=${scope}`)
       .then((r) => r.json())
-      .then((data) => {
+      .then(async (data) => {
         if (cancelled) return;
-        setActivities((data.activities || []).slice(0, limit));
+        const list: Activity[] = (data.activities || []).slice(0, limit);
+        try {
+          const ids = Array.from(new Set(list.map((a) => a.game_id)));
+          const games = await fetchGamesByIds(ids);
+          if (!cancelled) setGameMap(new Map(games.map((g) => [g.id, g])));
+        } catch {}
+        if (!cancelled) setActivities(list);
       })
       .catch(() => {})
       .finally(() => {
@@ -107,6 +118,9 @@ export default function ActivityFeed({
     <div className="space-y-2">
       {activities.map((a) => {
         const initials = a.nickname.substring(0, 2).toUpperCase();
+        const g = gameMap.get(a.game_id);
+        const cover = g?.cover || a.game_cover;
+        const coverFallback = [g?.coverAlt, g?.coverHD, a.game_cover].find((u) => u && u !== cover) || undefined;
         return (
           <div
             key={a.id}
@@ -127,8 +141,16 @@ export default function ActivityFeed({
               href={`/?open=${a.game_id}`}
               className="flex-shrink-0 relative w-[72px] aspect-[460/215] rounded-lg overflow-hidden bg-neutral-800"
             >
-              {a.game_cover ? (
-                <Image src={a.game_cover} alt={a.game_title} fill sizes="72px" className="object-cover" unoptimized />
+              {cover ? (
+                <GameImage
+                  src={cover}
+                  fallback={coverFallback}
+                  alt={a.game_title}
+                  fill
+                  sizes="72px"
+                  className="object-cover"
+                  unoptimized
+                />
               ) : (
                 <div className="w-full h-full flex items-center justify-center">
                   <Gamepad className="w-4 h-4 text-neutral-600" />
