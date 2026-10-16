@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { igdbQuery, mapIgdbGame, IgdbGame } from '@/lib/igdb';
 import { IGDB_GAME_FIELDS, isEdition } from '@/lib/igdb-shared';
+import { applyOverrides } from '@/lib/overrides';
 
 // Простые рекомендации по жанрам первых пяти игр пользователя (основной блок — /api/games/for-you)
 export async function GET(request: NextRequest) {
@@ -37,10 +38,12 @@ export async function GET(request: NextRequest) {
     );
 
     const excludeSet = new Set(excludeIds);
-    const results = raw
-      .filter((g) => !excludeSet.has(g.id) && !isEdition(g.name))
-      .slice(0, 8)
-      .map(mapIgdbGame);
+    const results = await applyOverrides(
+      raw
+        .filter((g) => !excludeSet.has(g.id) && !isEdition(g.name))
+        .slice(0, 8)
+        .map(mapIgdbGame),
+    );
 
     return NextResponse.json(
       { results },

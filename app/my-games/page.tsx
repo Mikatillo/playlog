@@ -26,6 +26,7 @@ import GameSeries from '@/components/GameSeries';
 import AspectRatings from '@/components/AspectRatings';
 import { emptyAspects, hasAspects, aspectColumns, type Aspects } from '@/lib/aspects';
 import GameMeta from '@/components/GameMeta';
+import AdminEditButton from '@/components/AdminEditButton';
 import TimeToBeat from '@/components/TimeToBeat';
 import ScreenshotViewer from '@/components/ScreenshotViewer';
 import ReviewsSection from '@/components/ReviewsSection';
@@ -702,6 +703,8 @@ export default function MyGamesPage() {
                 </div>
 
                 <GameMeta gameId={selectedGame.id} platforms={selectedGame.platforms} />
+
+                <AdminEditButton game={selectedGame} userId={userId} onSaved={(g) => setSelectedGame(g)} />
 
                 <div className="bg-neutral-800 rounded-xl p-4 md:p-5">
                   <div className="flex items-center justify-between mb-3">

@@ -30,6 +30,7 @@ import GameSeries from '@/components/GameSeries';
 import AspectRatings from '@/components/AspectRatings';
 import { emptyAspects, hasAspects, aspectColumns, aspectsFromRow, type Aspects } from '@/lib/aspects';
 import GameMeta from '@/components/GameMeta';
+import AdminEditButton from '@/components/AdminEditButton';
 import TimeToBeat from '@/components/TimeToBeat';
 import CreateGameModal from '@/components/CreateGameModal';
 import ScreenshotViewer from '@/components/ScreenshotViewer';
@@ -744,6 +745,8 @@ fetch(`/api/games/${gameId}?full=true`)
             </div>
 
             <GameMeta gameId={selectedGame.id} platforms={selectedGame.platforms} />
+
+            <AdminEditButton game={selectedGame} userId={userId} onSaved={(g) => setSelectedGame(g)} />
 
             {userId && (
               <>

@@ -3,6 +3,7 @@ import { igdbQuery, mapIgdbGame, IgdbGame } from '@/lib/igdb';
 import { IGDB_GAME_FIELDS } from '@/lib/igdb-shared';
 import { fetchCustomGames, isCustomId } from '@/lib/custom-games';
 import type { Game } from '@/types/game';
+import { applyOverrides } from '@/lib/overrides';
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -36,11 +37,21 @@ export async function GET(request: NextRequest) {
 
     // порядок как в запросе
     const byId = new Map(raw.map((g) => [g.id, mapIgdbGame(g)]));
-    const results = ids.map((id) => byId.get(id) || customById.get(id)).filter(Boolean);
+    const results = await applyOverrides(
+      ids.map((id) => byId.get(id) || customById.get(id)).filter((g): g is Game => !!g),
+    );
 
     return NextResponse.json(
       { results },
-      { headers: { 'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400' } },
+      {
+        headers: {
+          // Если среди игр есть пользовательские карточки, их правки должны быстро доходить до всех
+          'Cache-Control':
+            customIds.length > 0
+              ? 'no-store'
+              : 'public, s-maxage=60, stale-while-revalidate=300',
+        },
+      },
     );
   } catch (error) {
     console.error('[IGDB batch] error:', error);

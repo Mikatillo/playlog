@@ -58,3 +58,11 @@ export async function fetchGamesByIds(ids: number[]): Promise<Game[]> {
 
   return ids.map((id) => memory.get(id)).filter((g): g is Game => !!g);
 }
+
+
+/** Сбрасывает закешированную игру (например, после правки пользовательской карточки). */
+export function invalidateGame(id: number) {
+  hydrate();
+  memory.delete(id);
+  persist();
+}

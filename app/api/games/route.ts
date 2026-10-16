@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { igdbQuery, mapIgdbGame, IgdbGame } from '@/lib/igdb';
 import { GENRE_MAP, IGDB_GAME_FIELDS, isEdition } from '@/lib/igdb-shared';
 import { matchesGenre } from '@/lib/genre-rules';
+import { applyOverrides } from '@/lib/overrides';
 
 // Маппинг ordering фронта → сортировка IGDB
 const ORDERING_MAP: Record<string, string> = {
@@ -56,9 +57,11 @@ export async function GET(request: NextRequest) {
     );
 
     // Для жанра оставляем игры, которые действительно про него (без «шутеров с гонками» вроде GTA)
-    const results = raw
-      .filter((g) => !isEdition(g.name) && (!genresParam || matchesGenre(g, genresParam)))
-      .map(mapIgdbGame);
+    const results = await applyOverrides(
+      raw
+        .filter((g) => !isEdition(g.name) && (!genresParam || matchesGenre(g, genresParam)))
+        .map(mapIgdbGame),
+    );
 
     return NextResponse.json(
       {

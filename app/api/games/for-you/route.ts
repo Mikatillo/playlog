@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { igdbQuery, igdbMulti, mapIgdbGame, IgdbGame } from '@/lib/igdb';
 import { IGDB_GAME_FIELDS, isEdition } from '@/lib/igdb-shared';
 import type { Game } from '@/types/game';
+import { applyOverrides } from '@/lib/overrides';
 
 const RESULT_COUNT = 12;
 
@@ -252,7 +253,7 @@ export async function GET(request: NextRequest) {
       picked.push(chosen);
     }
 
-    const results = picked.map(({ c, age }) => {
+    const results0 = picked.map(({ c, age }) => {
       let reason = 'Хорошая оценка игроков';
       if (c.tagHits.length > 0) reason = `Тебе близко: ${c.tagHits[0]}`;
       else if (c.genreHits.length > 0) reason = `Любимый жанр: ${c.genreHits[0]}`;
@@ -261,6 +262,7 @@ export async function GET(request: NextRequest) {
       else if (c.sources.has('trending')) reason = 'В тренде';
       return { ...c.game, reason };
     });
+    const results = await applyOverrides(results0);
 
     return NextResponse.json(
       { results, poolSize: pool.length },

@@ -4,6 +4,7 @@ import { IGDB_GAME_FIELDS } from '@/lib/igdb-shared';
 import { matchSteamApps } from '@/lib/igdb-steam';
 import { GENRE_IDS, STEAM_TAGS, matchesGenre, isFreshEnough } from '@/lib/genre-rules';
 import type { Game } from '@/types/game';
+import { applyOverrides } from '@/lib/overrides';
 
 // Страница каталога «Популярные в Steam». Берём настоящий список Steam («Лидеры продаж»,
 // внутри жанра — по его тегу), сверяем с IGDB и оставляем только свежие игры нужного жанра.
@@ -117,6 +118,7 @@ export async function GET(request: NextRequest) {
       next = results.length >= 20;
     }
 
+    results = await applyOverrides(results);
     const body = { results, next };
     if (results.length > 0) cache.set(key, { at: Date.now(), body });
     return NextResponse.json(body, { headers: { 'Cache-Control': 'public, s-maxage=900, stale-while-revalidate=3600' } });

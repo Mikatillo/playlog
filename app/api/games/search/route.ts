@@ -3,6 +3,7 @@ import { igdbQuery, igdbEscape, mapIgdbGame, IgdbGame, findSteamAppIdByTitle, st
 import { IGDB_GAME_FIELDS, isEdition } from '@/lib/igdb-shared';
 import { searchCustomGames } from '@/lib/custom-games';
 import type { Game } from '@/types/game';
+import { applyOverrides } from '@/lib/overrides';
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -66,7 +67,7 @@ export async function GET(request: NextRequest) {
 
     // Карточки, созданные пользователями, показываем первыми
     const custom = await searchCustomGames(search).catch(() => [] as Game[]);
-    const merged = [...custom, ...results];
+    const merged = [...custom, ...(await applyOverrides(results))];
 
     return NextResponse.json(
       { results: merged, count: merged.length },

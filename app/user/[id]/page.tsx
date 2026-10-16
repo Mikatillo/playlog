@@ -26,6 +26,7 @@ import ReviewsSection from '@/components/ReviewsSection';
 import EditProfileModal from '@/components/EditProfileModal';
 import ProfileHeader from '@/components/ProfileHeader';
 import GameMeta from '@/components/GameMeta';
+import AdminEditButton from '@/components/AdminEditButton';
 import ScreenshotViewer from '@/components/ScreenshotViewer';
 import GameSeries from '@/components/GameSeries';
 import ActivityFeed from '@/components/ActivityFeed';
@@ -1317,6 +1318,8 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
                 </div>
 
                 <GameMeta gameId={selectedGame.id} platforms={selectedGame.platforms} ownerId={id} />
+
+                <AdminEditButton game={selectedGame} userId={userId} onSaved={(g) => setSelectedGame(g)} />
 
                 <GameSeries gameId={selectedGame.id} onOpen={openGameModal} />
 

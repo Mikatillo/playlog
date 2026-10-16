@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { igdbQuery, mapIgdbGame, IgdbGame } from '@/lib/igdb';
 import { IGDB_GAME_FIELDS } from '@/lib/igdb-shared';
+import { applyOverrides } from '@/lib/overrides';
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -37,8 +38,7 @@ export async function GET(
       DAY,
     );
 
-    const results = raw
-      .map(mapIgdbGame)
+    const results = (await applyOverrides(raw.map(mapIgdbGame)))
       // по порядку выхода: 1, 2, 3...
       .sort((a, b) => (a.released || '9999').localeCompare(b.released || '9999'));
 

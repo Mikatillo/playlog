@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { igdbQuery, mapIgdbGame, IgdbGame } from '@/lib/igdb';
 import { IGDB_GAME_FIELDS } from '@/lib/igdb-shared';
+import { applyOverrides } from '@/lib/overrides';
 
 function startOfDay(y: number, m: number, d: number): number {
   return Math.floor(Date.UTC(y, m, d) / 1000);
@@ -39,8 +40,7 @@ export async function GET(request: NextRequest) {
       15 * 60 * 1000,
     );
 
-    const results = raw
-      .map(mapIgdbGame)
+    const results = (await applyOverrides(raw.map(mapIgdbGame)))
       .filter((g) => g.year > 0)
       .sort((a, b) => (a.released || '').localeCompare(b.released || ''))
       .slice(0, 40);

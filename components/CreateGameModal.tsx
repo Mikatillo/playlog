@@ -1,14 +1,21 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import { ImagePlus, Loader2, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { mapCustomGame, type CustomGameRow } from '@/lib/custom-games';
+import { applyOverride, type OverrideRow } from '@/lib/overrides';
 import type { Game } from '@/types/game';
 
 interface CreateGameModalProps {
   userId: string;
+  /** Если задано — режим редактирования существующей карточки (для админа) */
+  editId?: number;
+  /** Правка карточки из IGDB: правки сохраняются отдельно поверх данных IGDB (только админ) */
+  baseGame?: Game;
+  /** Вызывается после «Сбросить к оригиналу» */
+  onReset?: () => void;
   initialTitle?: string;
   onClose: () => void;
   onCreated: (game: Game) => void;
@@ -28,7 +35,10 @@ const PLATFORMS = [
 const MAX_FILE = 5 * 1024 * 1024;
 const MAX_SHOTS = 5;
 
-export default function CreateGameModal({ userId, initialTitle = '', onClose, onCreated }: CreateGameModalProps) {
+export default function CreateGameModal({ userId, editId, baseGame, onReset, initialTitle = '', onClose, onCreated }: CreateGameModalProps) {
+  const overriding = !!baseGame;
+  const editing = editId !== undefined || overriding;
+  const [loadingRow, setLoadingRow] = useState(editId !== undefined);
   const [title, setTitle] = useState(initialTitle);
   const [year, setYear] = useState('');
   const [description, setDescription] = useState('');
@@ -41,7 +51,7 @@ export default function CreateGameModal({ userId, initialTitle = '', onClose, on
   const [error, setError] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
   const shotsRef = useRef<HTMLInputElement>(null);
-  const [shots, setShots] = useState<{ file: File; url: string }[]>([]);
+  const [shots, setShots] = useState<{ file?: File; url: string }[]>([]);
 
   const addShots = (list: FileList | null) => {
     if (!list) return;
@@ -66,6 +76,48 @@ export default function CreateGameModal({ userId, initialTitle = '', onClose, on
     if (shotsRef.current) shotsRef.current.value = '';
   };
   const removeShot = (i: number) => setShots((prev) => prev.filter((_, idx) => idx !== i));
+
+  // Режим редактирования: подгружаем карточку и заполняем форму
+  useEffect(() => {
+    if (!baseGame) return;
+    setTitle(baseGame.title);
+    setYear(baseGame.year ? String(baseGame.year) : '');
+    setDescription(baseGame.description || '');
+    setGenres((baseGame.genres || []).map((g) => g.name));
+    setPlatforms(baseGame.platforms || []);
+    setCoverUrl(baseGame.cover || '');
+    setShots((baseGame.screenshots || []).slice(0, MAX_SHOTS).map((x) => ({ url: x.image })));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [baseGame?.id]);
+
+  useEffect(() => {
+    if (editId === undefined) return;
+    let cancelled = false;
+    supabase
+      .from('custom_games')
+      .select('*')
+      .eq('id', editId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (cancelled) return;
+        if (!data) {
+          setError('Не удалось загрузить карточку');
+        } else {
+          const r = data as CustomGameRow;
+          setTitle(r.title);
+          setYear(r.year ? String(r.year) : '');
+          setDescription(r.description || '');
+          setGenres(r.genres || []);
+          setPlatforms(r.platforms || []);
+          setCoverUrl(r.cover_url || '');
+          setShots((r.screenshots || []).map((url) => ({ url })));
+        }
+        setLoadingRow(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [editId]);
 
   const toggle = (list: string[], set: (v: string[]) => void, value: string) =>
     set(list.includes(value) ? list.filter((x) => x !== value) : [...list, value]);
@@ -104,6 +156,10 @@ export default function CreateGameModal({ userId, initialTitle = '', onClose, on
       const shotUrls: string[] = [];
       for (let i = 0; i < shots.length; i++) {
         const f = shots[i].file;
+        if (!f) {
+          shotUrls.push(shots[i].url); // уже загруженный скриншот
+          continue;
+        }
         const ext = (f.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
         const path = `${userId}/${Date.now()}-s${i}.${ext}`;
         const { error: shotErr } = await supabase.storage
@@ -113,20 +169,45 @@ export default function CreateGameModal({ userId, initialTitle = '', onClose, on
         shotUrls.push(supabase.storage.from('game-covers').getPublicUrl(path).data.publicUrl);
       }
 
-      const { data, error: insErr } = await supabase
-        .from('custom_games')
-        .insert({
-          created_by: userId,
-          title: t,
-          cover_url: finalCover,
-          year: y,
-          description: description.trim() || null,
-          genres,
-          platforms,
-          screenshots: shotUrls,
-        })
-        .select()
-        .single();
+      const fields = {
+        title: t,
+        cover_url: finalCover,
+        year: y,
+        description: description.trim() || null,
+        genres,
+        platforms,
+        screenshots: shotUrls,
+      };
+      // Правка карточки из IGDB: сохраняем в game_overrides только то, что отличается от оригинала
+      if (baseGame) {
+        const same = (a: string[], b: string[]) => a.join('|') === b.join('|');
+        const baseShots = (baseGame.screenshots || []).map((x) => x.image);
+        const baseGenres = (baseGame.genres || []).map((g) => g.name);
+        const row = {
+          game_id: baseGame.id,
+          title: t !== baseGame.title ? t : null,
+          cover_url: finalCover && finalCover !== baseGame.cover ? finalCover : null,
+          year: y !== null && y !== baseGame.year ? y : null,
+          description: description.trim() && description.trim() !== (baseGame.description || '').trim() ? description.trim() : null,
+          genres: genres.length > 0 && !same(genres, baseGenres) ? genres : null,
+          platforms: platforms.length > 0 && !same(platforms, baseGame.platforms || []) ? platforms : null,
+          screenshots: shotUrls.length > 0 && !same(shotUrls, baseShots) ? shotUrls : null,
+          updated_by: userId,
+          updated_at: new Date().toISOString(),
+        };
+        const { error: ovErr } = await supabase.from('game_overrides').upsert(row, { onConflict: 'game_id' });
+        if (ovErr) throw new Error(ovErr.message);
+        onCreated(applyOverride(baseGame, row as OverrideRow));
+        return;
+      }
+
+      const { data, error: insErr } = editing
+        ? await supabase.from('custom_games').update(fields).eq('id', editId).select().single()
+        : await supabase
+            .from('custom_games')
+            .insert({ created_by: userId, ...fields })
+            .select()
+            .single();
       if (insErr || !data) throw new Error(insErr?.message || 'Не удалось создать карточку');
 
       onCreated(mapCustomGame(data as CustomGameRow));
@@ -155,12 +236,17 @@ export default function CreateGameModal({ userId, initialTitle = '', onClose, on
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-bold text-white">Создать карточку игры</h2>
+          <h2 className="text-lg font-bold text-white">{editing ? 'Редактировать карточку' : 'Создать карточку игры'}</h2>
           <button onClick={onClose} aria-label="Закрыть" className="p-2 -mr-2 text-neutral-400 hover:text-white">
             <X className="w-5 h-5" />
           </button>
         </div>
 
+        {loadingRow ? (
+          <div className="flex justify-center py-16">
+            <Loader2 className="w-6 h-6 text-indigo-400 animate-spin" />
+          </div>
+        ) : (
         <div className="space-y-4">
           <div>
             <label className="block text-xs text-neutral-400 mb-1.5">Название *</label>
@@ -304,13 +390,34 @@ export default function CreateGameModal({ userId, initialTitle = '', onClose, on
               className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-indigo-500 hover:bg-indigo-600 disabled:opacity-60 text-white font-medium rounded-lg transition text-sm"
             >
               {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-              {saving ? 'Создаю…' : 'Создать и открыть'}
+              {saving ? 'Сохраняю…' : editing ? 'Сохранить' : 'Создать и открыть'}
             </button>
             <button onClick={onClose} className="px-4 py-3 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded-lg transition text-sm">
               Отмена
             </button>
           </div>
+          {overriding && (
+            <button
+              type="button"
+              disabled={saving}
+              onClick={async () => {
+                if (!baseGame || !confirm('Убрать все правки и вернуть данные из IGDB?')) return;
+                setSaving(true);
+                const { error: delErr } = await supabase.from('game_overrides').delete().eq('game_id', baseGame.id);
+                if (delErr) {
+                  setError(delErr.message);
+                  setSaving(false);
+                  return;
+                }
+                onReset?.();
+              }}
+              className="w-full text-xs text-neutral-500 hover:text-rose-400 transition pt-1"
+            >
+              Сбросить к оригиналу (IGDB)
+            </button>
+          )}
         </div>
+        )}
       </div>
     </div>
   );
