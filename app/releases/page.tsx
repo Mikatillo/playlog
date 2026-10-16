@@ -18,6 +18,7 @@ import { useToast } from '@/contexts/ToastContext';
 import { supabase } from '@/lib/supabase';
 import GameMediaCarousel from '@/components/GameMediaCarousel';
 import ReviewsSection from '@/components/ReviewsSection';
+import { useGameUpdates, patchGameInList } from '@/lib/game-events';
 
 function formatDay(iso?: string, year?: number): string {
   if (!iso && !year) return 'Дата не объявлена';
@@ -46,6 +47,7 @@ export default function ReleasesPage() {
   const { showToast } = useToast();
 
   const [games, setGames] = useState<Game[]>([]);
+  useGameUpdates((g) => setGames((prev) => patchGameInList(prev, g)));
   const [loading, setLoading] = useState(true);
   const [selectedGame, setSelectedGame] = useState<Game | null>(null);
   const [modalLoading, setModalLoading] = useState(false);

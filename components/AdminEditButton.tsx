@@ -7,6 +7,7 @@ import CreateGameModal from '@/components/CreateGameModal';
 import { useIsAdmin } from '@/lib/use-admin';
 import { isCustomId } from '@/lib/custom-games';
 import { invalidateGame } from '@/lib/games-client';
+import { emitGameUpdated } from '@/lib/game-events';
 import type { Game } from '@/types/game';
 
 interface AdminEditButtonProps {
@@ -45,13 +46,18 @@ export default function AdminEditButton({ game, userId, onSaved }: AdminEditButt
               setOpen(false);
               try {
                 const res = await fetch(`/api/games/${game.id}?t=${Date.now()}`, { cache: 'no-store' });
-                if (res.ok) onSaved(await res.json());
+                if (res.ok) {
+                  const fresh = await res.json();
+                  emitGameUpdated(fresh);
+                  onSaved(fresh);
+                }
               } catch {}
             }}
             onClose={() => setOpen(false)}
             onCreated={(updated) => {
               invalidateGame(updated.id);
               setOpen(false);
+              emitGameUpdated(updated);
               onSaved(updated);
             }}
           />,

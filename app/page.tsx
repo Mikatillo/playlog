@@ -35,6 +35,7 @@ import TimeToBeat from '@/components/TimeToBeat';
 import CreateGameModal from '@/components/CreateGameModal';
 import ScreenshotViewer from '@/components/ScreenshotViewer';
 import ReviewsSection from '@/components/ReviewsSection';
+import { useGameUpdates, patchGameInList } from '@/lib/game-events';
 
 type ActivityType = 'added' | 'started' | 'completed' | 'dropped' | 'rated' | 'reviewed';
 
@@ -77,6 +78,7 @@ export default function Home() {
   const [gameStatus, setGameStatus] = useState<'none' | 'want' | 'playing' | 'completed' | 'dropped'>('none');
   const [xpGain, setXpGain] = useState<number | null>(null);
   const [games, setGames] = useState<Game[]>([]);
+  useGameUpdates((g) => setGames((prev) => patchGameInList(prev, g)));
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);

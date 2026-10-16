@@ -5,6 +5,7 @@ import GameImage from '@/components/GameImage';
 import { ChevronLeft, ChevronRight, Layers } from 'lucide-react';
 import type { Game } from '@/types/game';
 import { thumbUrl } from '@/lib/images';
+import { useGameUpdates, patchGameInList } from '@/lib/game-events';
 
 interface GameSeriesProps {
   gameId: number;
@@ -30,6 +31,7 @@ function scrollModalToTop(from: HTMLElement | null) {
 
 export default function GameSeries({ gameId, onOpen }: GameSeriesProps) {
   const [items, setItems] = useState<Game[]>(cache.get(gameId) || []);
+  useGameUpdates((g) => setItems((prev) => patchGameInList(prev, g)));
   const [canLeft, setCanLeft] = useState(false);
   const [canRight, setCanRight] = useState(false);
   const scroller = useRef<HTMLDivElement>(null);

@@ -30,6 +30,7 @@ import AdminEditButton from '@/components/AdminEditButton';
 import ScreenshotViewer from '@/components/ScreenshotViewer';
 import GameSeries from '@/components/GameSeries';
 import ActivityFeed from '@/components/ActivityFeed';
+import { useGameUpdates, patchGameInList } from '@/lib/game-events';
 
 type TopTab = 'games' | 'wishlist' | 'reviews';
 type GameTab = 'all' | 'playing' | 'completed' | 'dropped';
@@ -163,6 +164,7 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
   const [reviews, setReviews] = useState<ProfileReview[]>([]);
   const [userGames, setUserGames] = useState<UserGameRow[]>([]);
   const [games, setGames] = useState<Game[]>([]);
+  useGameUpdates((g) => setGames((prev) => patchGameInList(prev, g)));
   const [gamesLoading, setGamesLoading] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
   const [followersCount, setFollowersCount] = useState(0);

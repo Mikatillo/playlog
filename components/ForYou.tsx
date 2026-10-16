@@ -5,6 +5,7 @@ import { Sparkles, RefreshCw } from 'lucide-react';
 import { Game } from '@/types/game';
 import { useAuth } from '@/contexts/AuthContext';
 import { Rail, RailCard } from './Rail';
+import { useGameUpdates, patchGameInList } from '@/lib/game-events';
 
 interface ForYouProps {
   onGameClick: (game: Game) => void;
@@ -34,6 +35,7 @@ function writeSeen(ids: number[]) {
 export default function ForYou({ onGameClick }: ForYouProps) {
   const { userId, userGames } = useAuth();
   const [recommendations, setRecommendations] = useState<Recommended[]>([]);
+  useGameUpdates((g) => setRecommendations((prev) => patchGameInList(prev, g)));
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);

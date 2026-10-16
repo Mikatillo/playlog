@@ -31,6 +31,7 @@ import TimeToBeat from '@/components/TimeToBeat';
 import ScreenshotViewer from '@/components/ScreenshotViewer';
 import ReviewsSection from '@/components/ReviewsSection';
 import SteamImportModal from '@/components/SteamImportModal';
+import { useGameUpdates, patchGameInList } from '@/lib/game-events';
 
 type TabType = 'all' | 'want' | 'playing' | 'completed' | 'dropped';
 type SortType = 'newest' | 'oldest' | 'no-rating' | 'hours-desc' | 'hours-asc';
@@ -49,6 +50,7 @@ export default function MyGamesPage() {
 
   const [activeTab, setActiveTab] = useState<TabType>('all');
   const [games, setGames] = useState<Game[]>([]);
+  useGameUpdates((g) => setGames((prev) => patchGameInList(prev, g)));
   const [loading, setLoading] = useState(true);
   const [selectedGame, setSelectedGame] = useState<Game | null>(null);
   const [modalLoading, setModalLoading] = useState(false);

@@ -6,10 +6,12 @@ import type { Game } from '@/types/game';
 import { useAuth } from '@/contexts/AuthContext';
 import { fetchGamesByIds } from '@/lib/games-client';
 import { Rail, RailCard } from './Rail';
+import { useGameUpdates, patchGameInList } from '@/lib/game-events';
 
 export default function ContinuePlaying({ onGameClick }: { onGameClick: (g: Game) => void }) {
   const { userId, userGames } = useAuth();
   const [games, setGames] = useState<Game[]>([]);
+  useGameUpdates((g) => setGames((prev) => patchGameInList(prev, g)));
 
   const ids = useMemo(
     () =>
