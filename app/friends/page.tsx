@@ -8,11 +8,12 @@ import Image from 'next/image';
 import Link from 'next/link';
 import {
   UserPlus, UserMinus, Users, Loader2, User as UserIcon,
-  Crown, Gamepad2, Search,
+  Crown, Gamepad2, Search, MessageSquare,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import { calculateLevel } from '@/types/game';
+import ActivityFeed from '@/components/ActivityFeed';
 
 interface FriendUser {
   id: string;
@@ -23,7 +24,7 @@ interface FriendUser {
   followed_at?: string;
 }
 
-type TabType = 'following' | 'followers';
+type TabType = 'following' | 'followers' | 'feed';
 
 function timeAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -141,7 +142,7 @@ function FriendsPageContent() {
   }, []);
 
   const loadUsers = useCallback(async () => {
-    if (!userId) return;
+    if (!userId || activeTab === 'feed') return;
     setLoading(true);
     try {
       const res = await fetch(`/api/follows/list?user_id=${userId}&type=${activeTab}`);
@@ -342,8 +343,19 @@ function FriendsPageContent() {
           <>
             <div className="flex gap-2 mb-6">
               <button
+                onClick={() => handleTabChange('feed')}
+                className={`flex-1 flex items-center justify-center gap-2 px-2 sm:px-4 py-3 rounded-xl font-medium text-sm sm:text-base transition ${
+                  activeTab === 'feed'
+                    ? 'bg-indigo-500/15 text-indigo-400 ring-1 ring-indigo-500/30'
+                    : 'bg-neutral-900 text-neutral-400 hover:text-white hover:bg-neutral-800 border border-neutral-800'
+                }`}
+              >
+                <MessageSquare className="w-4 h-4" />
+                Лента
+              </button>
+              <button
                 onClick={() => handleTabChange('following')}
-                className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-medium transition ${
+                className={`flex-1 flex items-center justify-center gap-2 px-2 sm:px-4 py-3 rounded-xl font-medium text-sm sm:text-base transition ${
                   activeTab === 'following'
                     ? 'bg-indigo-500/15 text-indigo-400 ring-1 ring-indigo-500/30'
                     : 'bg-neutral-900 text-neutral-400 hover:text-white hover:bg-neutral-800 border border-neutral-800'
@@ -359,7 +371,7 @@ function FriendsPageContent() {
               </button>
               <button
                 onClick={() => handleTabChange('followers')}
-                className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-medium transition ${
+                className={`flex-1 flex items-center justify-center gap-2 px-2 sm:px-4 py-3 rounded-xl font-medium text-sm sm:text-base transition ${
                   activeTab === 'followers'
                     ? 'bg-indigo-500/15 text-indigo-400 ring-1 ring-indigo-500/30'
                     : 'bg-neutral-900 text-neutral-400 hover:text-white hover:bg-neutral-800 border border-neutral-800'
@@ -375,7 +387,15 @@ function FriendsPageContent() {
               </button>
             </div>
 
-            {loading ? (
+            {activeTab === 'feed' ? (
+              <ActivityFeed
+                userId={userId}
+                scope="following"
+                showAvatars
+                limit={30}
+                emptyText="Пока тишина: подпишитесь на друзей, и здесь появятся их новые игры, оценки и рецензии"
+              />
+            ) : loading ? (
               <div className="flex items-center justify-center py-20">
                 <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
                 <span className="ml-3 text-neutral-400">Загрузка...</span>

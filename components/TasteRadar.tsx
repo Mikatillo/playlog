@@ -1,6 +1,6 @@
 'use client';
 
-import { Radar as RadarIcon, Sparkles } from 'lucide-react';
+import { Radar as RadarIcon } from 'lucide-react';
 import { ASPECTS, summarizeTaste, type Aspects } from '@/lib/aspects';
 
 export interface TasteEntry {
@@ -130,17 +130,6 @@ export default function TasteRadar({ entries, isOwnProfile, embedded = false }: 
 
         {/* Расшифровка */}
         <div className="min-w-0 space-y-4">
-          {summary.archetype && (
-            <div className="rounded-xl bg-gradient-to-r from-indigo-500/15 to-fuchsia-500/10 border border-indigo-500/25 p-3.5 flex items-start gap-3">
-              <Sparkles className="w-5 h-5 text-amber-300 flex-shrink-0 mt-0.5" />
-              <div>
-                <div className="text-sm text-neutral-400 leading-none">Тип игрока</div>
-                <div className="text-lg font-extrabold text-white mt-1">{summary.archetype.title}</div>
-                <div className="text-xs text-neutral-400 mt-0.5">{summary.archetype.hint}</div>
-              </div>
-            </div>
-          )}
-
           <ul className="space-y-3">
             {ASPECTS.map((m, i) => {
               const avg = summary.averages[m.key];

@@ -130,10 +130,10 @@ export default function ProfileHeader({
   const location = [profile.city, profile.region].filter(Boolean).join(', ');
 
   const stats = [
-    { icon: Gamepad2, value: profile.totalGames.toLocaleString('ru-RU'), label: 'Игр', hint: 'в коллекции', tint: 'text-indigo-300 bg-indigo-500/15' },
-    { icon: Trophy, value: profile.completedGames.toLocaleString('ru-RU'), label: 'Пройдено', hint: `${completionPercent}% библиотеки`, tint: 'text-emerald-300 bg-emerald-500/15' },
-    { icon: Clock, value: profile.totalHours.toLocaleString('ru-RU'), label: 'Часов', hint: 'в играх', tint: 'text-sky-300 bg-sky-500/15' },
-    { icon: MessageSquare, value: reviewsCount.toLocaleString('ru-RU'), label: 'Рецензий', hint: 'опубликовано', tint: 'text-amber-300 bg-amber-500/15' },
+    { icon: Gamepad2, value: profile.totalGames.toLocaleString('ru-RU'), label: 'Игр', hint: 'в коллекции', tint: 'text-indigo-300 bg-indigo-500/15', glow: '99,102,241' },
+    { icon: Trophy, value: profile.completedGames.toLocaleString('ru-RU'), label: 'Пройдено', hint: `${completionPercent}% библиотеки`, tint: 'text-emerald-300 bg-emerald-500/15', glow: '16,185,129' },
+    { icon: Clock, value: profile.totalHours.toLocaleString('ru-RU'), label: 'Часов', hint: 'в играх', tint: 'text-sky-300 bg-sky-500/15', glow: '14,165,233' },
+    { icon: MessageSquare, value: reviewsCount.toLocaleString('ru-RU'), label: 'Рецензий', hint: 'опубликовано', tint: 'text-amber-300 bg-amber-500/15', glow: '245,158,11' },
   ];
 
   return (
@@ -362,12 +362,20 @@ export default function ProfileHeader({
 
         {/* Метрики */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 mt-5">
-          {stats.map(({ icon: Icon, value, label, hint, tint }) => (
+          {stats.map(({ icon: Icon, value, label, hint, tint, glow }) => (
             <div
               key={label}
-              className="group rounded-2xl bg-neutral-800/50 border border-neutral-800 hover:border-neutral-600 hover:bg-neutral-800 p-3 sm:p-4 transition hover:-translate-y-1"
+              className="group relative overflow-hidden rounded-2xl bg-neutral-800/50 border border-neutral-800 hover:border-neutral-600 hover:bg-neutral-800 p-3 sm:p-4 transition hover:-translate-y-1"
             >
-              <div className="flex items-center gap-2.5">
+              {/* Цветное свечение из левого верхнего угла, к правому нижнему угасает до полной прозрачности */}
+              <div
+                aria-hidden="true"
+                className="absolute inset-0 pointer-events-none"
+                style={{
+                  background: `linear-gradient(135deg, rgba(${glow},0.22) 0%, rgba(${glow},0.09) 40%, rgba(${glow},0) 100%)`,
+                }}
+              />
+              <div className="relative flex items-center gap-2.5">
                 <span className={`w-9 h-9 rounded-xl inline-flex items-center justify-center flex-shrink-0 transition group-hover:scale-110 ${tint}`}>
                   <Icon className="w-[18px] h-[18px]" />
                 </span>
@@ -376,7 +384,7 @@ export default function ProfileHeader({
                   <div className="text-[10px] sm:text-[11px] text-neutral-500 mt-1 uppercase tracking-wider truncate">{label}</div>
                 </div>
               </div>
-              <div className="text-[11px] text-neutral-500 mt-2.5 pt-2.5 border-t border-neutral-800 truncate">{hint}</div>
+              <div className="relative text-[11px] text-neutral-500 mt-2.5 pt-2.5 border-t border-neutral-800 truncate">{hint}</div>
             </div>
           ))}
         </div>

@@ -818,9 +818,9 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
             </span>
             <ChevronDown className={`w-4 h-4 text-neutral-500 transition-transform duration-300 ${profOpen ? 'rotate-180' : ''}`} />
           </button>
-        <div className={`${profOpen ? 'grid mt-4' : 'hidden'} lg:grid grid-cols-1 lg:grid-cols-3 gap-4`}>
+        <div className={`${profOpen ? 'grid mt-4' : 'hidden'} lg:grid grid-cols-1 lg:grid-cols-3 lg:items-start gap-4`}>
           {/* Любимые игры */}
-          <div className="bg-neutral-900/80 backdrop-blur-md border border-neutral-800 rounded-2xl p-5 flex flex-col">
+          <div className="bg-neutral-900/80 backdrop-blur-md border border-neutral-800 rounded-2xl p-5 flex flex-col lg:h-[480px]">
             <h3 className="font-semibold text-white mb-4 flex items-center gap-2">
               <Star className="w-4 h-4 text-yellow-500" />
               Мои любимые игры
@@ -841,32 +841,29 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
                     <button
                       key={game.id}
                       onClick={() => openGameModal(game)}
-                      className="group relative flex-1 min-h-[88px] lg:max-h-[190px] flex items-center gap-3 sm:gap-4 p-2.5 rounded-2xl bg-neutral-800/40 hover:bg-neutral-800/80 border border-neutral-800 hover:border-neutral-700 overflow-hidden transition text-left"
+                      className="group relative flex-1 flex flex-col justify-center gap-2 p-2.5 rounded-2xl bg-neutral-800/40 hover:bg-neutral-800/80 border border-neutral-800 hover:border-neutral-700 overflow-hidden transition text-left"
                     >
-                      <div className="relative w-[128px] sm:w-[168px] aspect-[460/215] self-center rounded-xl overflow-hidden bg-neutral-800 flex-shrink-0 shadow-lg shadow-black/40">
-                        {game.cover && (
-                          <GameImage
-                            src={game.cover}
-                            fallback={game.coverAlt}
-                            smart
-                            alt={game.title}
-                            fill
-                            sizes="168px"
-                            className="object-cover transition duration-500 group-hover:scale-105"
-                            unoptimized
-                          />
-                        )}
-                        {slot && (
-                          <div className="absolute top-1.5 left-1.5 w-6 h-6 rounded-full bg-yellow-500 text-black text-xs font-bold flex items-center justify-center shadow">
-                            {slot}
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0 flex flex-col justify-center gap-2">
-                        <div className="text-base font-semibold text-white leading-snug line-clamp-2">
-                          {game.title}
+                      <div className="flex items-center gap-3 sm:gap-4">
+                        <div className="relative w-[128px] sm:w-[168px] aspect-[460/215] rounded-xl overflow-hidden bg-neutral-800 flex-shrink-0 shadow-lg shadow-black/40">
+                          {game.cover && (
+                            <GameImage
+                              src={game.cover}
+                              fallback={game.coverAlt}
+                              smart
+                              alt={game.title}
+                              fill
+                              sizes="168px"
+                              className="object-cover transition duration-500 group-hover:scale-105"
+                              unoptimized
+                            />
+                          )}
+                          {slot && (
+                            <div className="absolute top-1.5 left-1.5 w-6 h-6 rounded-full bg-yellow-500 text-black text-xs font-bold flex items-center justify-center shadow">
+                              {slot}
+                            </div>
+                          )}
                         </div>
-                        <div className="flex flex-wrap items-center gap-2 text-xs">
+                        <div className="flex flex-col items-start justify-center gap-2 text-xs min-w-0">
                           {data?.rating ? (
                             <span className="flex items-center gap-1 text-yellow-300 font-semibold bg-yellow-500/10 border border-yellow-500/25 px-2 py-0.5 rounded-lg">
                               <Star className="w-3 h-3 fill-yellow-400" />
@@ -877,9 +874,9 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
                             <span className="text-neutral-300 bg-neutral-700/40 px-2 py-0.5 rounded-lg">{data.hours} ч.</span>
                           ) : null}
                         </div>
-                        {game.genre && (
-                          <div className="text-[11px] text-neutral-500 truncate">{game.genre}</div>
-                        )}
+                      </div>
+                      <div className="text-sm font-semibold text-white leading-snug line-clamp-2 px-0.5">
+                        {game.title}
                       </div>
                     </button>
                   );
@@ -890,14 +887,14 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
           </div>
 
           {/* Лента активности */}
-          <div className="bg-neutral-900/80 backdrop-blur-md border border-neutral-800 rounded-2xl p-5 flex flex-col">
+          <div className="bg-neutral-900/80 backdrop-blur-md border border-neutral-800 rounded-2xl p-5 flex flex-col lg:h-[480px]">
             <h3 className="font-semibold text-white mb-4 flex items-center gap-2">
               <MessageSquare className="w-4 h-4 text-indigo-500" />
               Лента активности
             </h3>
             <div className="contents">
             {/* Высота ленты равна соседним блокам; внутри — прокрутка (на десктопе), на телефоне — фиксированные ~5 событий */}
-            <div className="relative h-[470px] lg:h-auto lg:flex-1 lg:min-h-[320px]">
+            <div className="relative h-[470px] lg:h-auto lg:flex-1 lg:min-h-0">
               <div className="absolute inset-0 overflow-y-auto pr-1 activity-scroll">
                 <ActivityFeed
                   userId={id}
@@ -931,7 +928,7 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
         {/* Табы + коллекция */}
         <div className="space-y-6 min-w-0">
           {statusCounts.want > 0 && (
-          <div className="flex items-center gap-2 border-b border-neutral-800 scrollbar-hide bg-neutral-900/70 backdrop-blur-md rounded-t-xl px-2">
+          <div className="flex items-center gap-2 border-b border-neutral-800 overflow-x-auto scrollbar-hide bg-neutral-900/70 backdrop-blur-md rounded-t-xl px-2">
             <button
               onClick={() => setActiveTab('games')}
               className={`px-4 py-2.5 text-sm font-medium transition border-b-2 -mb-px whitespace-nowrap ${
@@ -1263,8 +1260,8 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
                     <div className="flex items-center gap-3 p-3 md:p-4 bg-neutral-800 rounded-lg">
                       <Loader2 className="w-5 h-5 text-indigo-400 animate-spin" />
                       <div>
-                        <div className="text-sm text-white font-medium"></div>
-                        <div className="text-xs text-neutral-400 mt-0.5"></div>
+                        <div className="text-sm text-white font-medium">Переводим описание...</div>
+                        <div className="text-xs text-neutral-400 mt-0.5">Google Translate</div>
                       </div>
                     </div>
                   ) : descriptionRu ? (

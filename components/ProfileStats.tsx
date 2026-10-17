@@ -102,7 +102,7 @@ export default function ProfileStats({
   ];
 
   return (
-    <div className="bg-neutral-900/80 backdrop-blur-md border border-neutral-800 rounded-2xl p-5 flex flex-col gap-5">
+    <div className="bg-neutral-900/80 backdrop-blur-md border border-neutral-800 rounded-2xl p-5 flex flex-col gap-5 lg:min-h-[480px]">
       <h3 className="font-semibold text-white flex items-center gap-2">
         <span className="w-7 h-7 rounded-lg bg-indigo-500/15 flex items-center justify-center">
           <BarChart3 className="w-4 h-4 text-indigo-400" />
@@ -113,11 +113,11 @@ export default function ProfileStats({
       <div className="contents">
 
       {/* Статистика профиля: всегда на виду */}
-      <div className="grid grid-cols-2 gap-2.5">
+      <div className="grid grid-cols-2 gap-2.5 lg:flex-1 lg:auto-rows-fr">
         {tiles.map(({ icon: Icon, label, value, tint }) => (
           <div
             key={label}
-            className="rounded-xl bg-neutral-800/60 border border-neutral-800 p-3 transition hover:border-neutral-700 hover:bg-neutral-800"
+            className="rounded-xl bg-neutral-800/60 border border-neutral-800 p-3 transition hover:border-neutral-700 hover:bg-neutral-800 flex flex-col items-start justify-center"
           >
             <span className={`w-7 h-7 rounded-lg inline-flex items-center justify-center ${tint}`}>
               <Icon className="w-3.5 h-3.5" />

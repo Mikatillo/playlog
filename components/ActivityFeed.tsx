@@ -25,7 +25,7 @@ interface Activity {
 
 interface ActivityFeedProps {
   userId: string;
-  scope?: 'user' | 'feed';
+  scope?: 'user' | 'feed' | 'following';
   showAvatars?: boolean;
   limit?: number;
   emptyText?: string;

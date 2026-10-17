@@ -16,6 +16,15 @@ export async function GET(request: NextRequest) {
 
     if (scope === 'user' && userId) {
       query = query.eq('user_id', userId);
+    } else if (scope === 'following' && userId) {
+      // Только те, на кого подписан пользователь (без него самого)
+      const { data: follows } = await supabase
+        .from('follows')
+        .select('following_id')
+        .eq('follower_id', userId);
+      const ids = (follows || []).map((f) => f.following_id);
+      if (ids.length === 0) return NextResponse.json({ activities: [] });
+      query = query.in('user_id', ids);
     } else if (scope === 'feed' && userId) {
       const { data: follows } = await supabase
         .from('follows')
