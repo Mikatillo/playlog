@@ -39,6 +39,14 @@ export default function Header() {
   const userMenuRef = useRef<HTMLDivElement>(null);
   const searchWrapRef = useRef<HTMLDivElement>(null);
   const mobileSearchWrapRef = useRef<HTMLDivElement>(null);
+  const mobileInputRef = useRef<HTMLInputElement>(null);
+  const mobileSugRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (searchOpen) {
+      const t = setTimeout(() => mobileInputRef.current?.focus(), 200);
+      return () => clearTimeout(t);
+    }
+  }, [searchOpen]);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const levelInfo = calculateLevel(profile.xp);
@@ -173,7 +181,8 @@ export default function Header() {
       const target = e.target as Node;
       const insideDesktop = searchWrapRef.current?.contains(target);
       const insideMobile = mobileSearchWrapRef.current?.contains(target);
-      if (!insideDesktop && !insideMobile) {
+      const insideMobileSug = mobileSugRef.current?.contains(target);
+      if (!insideDesktop && !insideMobile && !insideMobileSug) {
         setShowSuggestions(false);
       }
     };
@@ -322,8 +331,8 @@ export default function Header() {
 
   return (
     <>
-      <header className="bg-neutral-900 border-b border-neutral-800 sticky top-0 z-40 pt-[env(safe-area-inset-top)]">
-        <div className="max-w-7xl mx-auto px-4 md:px-6 py-3 flex items-center gap-3 md:gap-4">
+      <header className="sticky top-0 z-40 pt-[calc(env(safe-area-inset-top)+0.5rem)] px-2 sm:px-4">
+        <div className="floating-nav relative max-w-7xl mx-auto rounded-2xl px-3 md:px-5 py-2.5 flex items-center gap-3 md:gap-4">
           {/* Логотип */}
           <Link
             href="/"
@@ -405,13 +414,55 @@ export default function Header() {
 
           {/* Правый блок */}
           <div className="flex items-center gap-2 md:gap-3 flex-shrink-0 ml-auto lg:ml-0">
-            <button
-              onClick={() => setSearchOpen((v) => !v)}
-              className="md:hidden p-2 text-neutral-400 hover:text-white transition"
-              aria-label="Поиск"
+            {/* Поиск (мобильный): значок плавно растягивается в строку */}
+            <div
+              ref={mobileSearchWrapRef}
+              className={`md:hidden relative flex items-center h-9 rounded-full overflow-hidden border transition-[width,background-color,border-color,box-shadow] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+                searchOpen
+                  ? 'w-[calc(100vw-8.75rem)] bg-white/10 border-indigo-400/40 shadow-[0_0_0_4px_rgba(99,102,241,0.15)]'
+                  : 'w-9 bg-white/5 border-white/10'
+              }`}
             >
-              {searchOpen ? <X className="w-5 h-5" /> : <Search className="w-5 h-5" />}
-            </button>
+              <button
+                type="button"
+                onClick={() => (searchOpen ? submitSearch() : setSearchOpen(true))}
+                className="absolute left-0 top-0 w-9 h-9 flex items-center justify-center text-neutral-300 z-10"
+                aria-label="Поиск"
+              >
+                <Search className="w-[18px] h-[18px]" />
+              </button>
+              <form
+                onSubmit={submitSearch}
+                className={`flex-1 min-w-0 pl-9 pr-1 flex items-center transition-opacity duration-300 ${
+                  searchOpen ? 'opacity-100 delay-150' : 'opacity-0 pointer-events-none'
+                }`}
+              >
+                <input
+                  ref={mobileInputRef}
+                  type="text"
+                  value={query}
+                  onChange={(e) => handleInputChange(e.target.value)}
+                  onFocus={() => {
+                    if (suggestions.length > 0) setShowSuggestions(true);
+                  }}
+                  placeholder="Поиск игр..."
+                  tabIndex={searchOpen ? 0 : -1}
+                  className="w-full min-w-0 bg-transparent text-sm text-white placeholder:text-neutral-400 focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (query) clearSearch();
+                    setSearchOpen(false);
+                    setShowSuggestions(false);
+                  }}
+                  className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full text-neutral-400 hover:text-white"
+                  aria-label="Закрыть поиск"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </form>
+            </div>
 
             {loading ? (
               <div className="w-24 md:w-32 h-10 bg-neutral-800 rounded-lg animate-pulse" />
@@ -536,7 +587,7 @@ export default function Header() {
             ) : (
               <Link
                 href="/auth"
-                className="inline-flex items-center gap-1.5 px-3 sm:px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-medium rounded-lg transition"
+                className={`${searchOpen ? 'hidden md:inline-flex' : 'inline-flex'} items-center gap-1.5 px-3 sm:px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-medium rounded-lg transition`}
               >
                 <UserIcon className="w-4 h-4" />
                 <span className="hidden sm:inline">Войти</span>
@@ -550,37 +601,10 @@ export default function Header() {
               {menuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
           </div>
-        </div>
-
-        {searchOpen && (
-          <div ref={mobileSearchWrapRef} className="md:hidden border-t border-neutral-800 px-4 py-3 relative">
-            <form onSubmit={submitSearch} className="relative w-full">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500 pointer-events-none" />
-              <input
-                type="text"
-                value={query}
-                onChange={(e) => handleInputChange(e.target.value)}
-                onFocus={() => {
-                  if (suggestions.length > 0) setShowSuggestions(true);
-                }}
-                placeholder="Поиск игр..."
-                autoFocus
-                className="w-full bg-neutral-800 border border-neutral-700 rounded-lg pl-9 pr-9 py-2.5 text-sm text-white placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-              {query && (
-                <button
-                  type="button"
-                  onClick={clearSearch}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 hover:bg-neutral-700 rounded transition"
-                  aria-label="Очистить"
-                >
-                  <X className="w-4 h-4 text-neutral-400" />
-                </button>
-              )}
-            </form>
+          <div ref={mobileSugRef} className="md:hidden">
             <SuggestionsList />
           </div>
-        )}
+        </div>
 
         {/* Мобильное меню */}
         {menuOpen && (

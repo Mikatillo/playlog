@@ -32,8 +32,7 @@ import GameSeries from '@/components/GameSeries';
 import ActivityFeed from '@/components/ActivityFeed';
 import { useGameUpdates, patchGameInList } from '@/lib/game-events';
 
-type TopTab = 'games' | 'wishlist' | 'reviews';
-type GameTab = 'all' | 'playing' | 'completed' | 'dropped';
+type GameTab = 'all' | 'want' | 'playing' | 'completed' | 'dropped';
 type SortType = 'newest' | 'oldest' | 'no-rating' | 'hours-desc' | 'hours-asc';
 
 const sortOptions: { value: SortType; label: string }[] = [
@@ -171,7 +170,6 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
   const [followLoading, setFollowLoading] = useState(false);
   const [notFound, setNotFound] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<TopTab>('games');
   // На телефоне «Любимые игры», «Лента активности» и статистика собраны в один сворачиваемый блок (на ПК всегда раскрыт)
   const [profOpen, setProfOpen] = useState(false);
   const [gameTab, setGameTab] = useState<GameTab>('all');
@@ -666,9 +664,10 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
   }, [games, userGamesData, updatedAtMap, sortBy]);
 
   const filteredCollectionGames = useMemo(() => {
+    if (gameTab === 'want') return wishlistGames;
     if (gameTab === 'all') return collectionGames;
     return collectionGames.filter((g) => userGamesData.get(g.id)?.status === gameTab);
-  }, [collectionGames, gameTab, userGamesData]);
+  }, [collectionGames, wishlistGames, gameTab, userGamesData]);
 
   const favoriteOrderMap = useMemo(() => {
     const map = new Map<number, number>();
@@ -714,6 +713,9 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
 
   const gameTabOptions: { id: GameTab; label: string; count: number; color: string }[] = [
     { id: 'all', label: 'Все', count: collectionGames.length, color: 'text-indigo-400' },
+    ...(statusCounts.want > 0
+      ? [{ id: 'want' as GameTab, label: 'Лист ожидания', count: statusCounts.want, color: 'text-pink-400' }]
+      : []),
     { id: 'playing', label: 'Играю', count: statusCounts.playing, color: 'text-blue-400' },
     { id: 'completed', label: 'Пройдено', count: statusCounts.completed, color: 'text-emerald-400' },
     { id: 'dropped', label: 'Заброшено', count: statusCounts.dropped, color: 'text-neutral-400' },
@@ -927,37 +929,8 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
         </div>
         {/* Табы + коллекция */}
         <div className="space-y-6 min-w-0">
-          {statusCounts.want > 0 && (
-          <div className="flex items-center gap-2 border-b border-neutral-800 overflow-x-auto scrollbar-hide bg-neutral-900/70 backdrop-blur-md rounded-t-xl px-2">
-            <button
-              onClick={() => setActiveTab('games')}
-              className={`px-4 py-2.5 text-sm font-medium transition border-b-2 -mb-px whitespace-nowrap ${
-                activeTab === 'games'
-                  ? 'text-indigo-400 border-indigo-500'
-                  : 'text-neutral-400 border-transparent hover:text-white'
-              }`}
-            >
-              Коллекция игр ({collectionGames.length})
-            </button>
-            {statusCounts.want > 0 && (
-              <button
-                onClick={() => setActiveTab('wishlist')}
-                className={`px-4 py-2.5 text-sm font-medium transition border-b-2 -mb-px whitespace-nowrap flex items-center gap-1.5 ${
-                  activeTab === 'wishlist'
-                    ? 'text-blue-400 border-blue-500'
-                    : 'text-neutral-400 border-transparent hover:text-white'
-                }`}
-              >
-                <Heart className="w-3.5 h-3.5" />
-                Лист ожидания ({statusCounts.want})
-              </button>
-            )}
-          </div>
-          )}
-
-          {activeTab === 'games' && (
             <div className="space-y-4">
-              {collectionGames.length > 0 && (
+              {(collectionGames.length > 0 || statusCounts.want > 0) && (
                 <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 sm:gap-3 bg-neutral-900/70 backdrop-blur-md p-2.5 sm:p-3 rounded-xl border border-neutral-800">
                   <div className="flex gap-2 overflow-x-auto sm:flex-wrap sm:overflow-visible no-scrollbar -mx-0.5 px-0.5 snap-x">
                     {gameTabOptions.map((opt) => {
@@ -1034,7 +1007,9 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
                 <div className="text-center py-12 bg-neutral-900/80 backdrop-blur-md border border-neutral-800 rounded-xl">
                   <Gamepad className="w-12 h-12 text-neutral-600 mx-auto mb-3" />
                   <p className="text-sm text-neutral-400">
-                    {collectionGames.length === 0
+                    {gameTab === 'want'
+                      ? 'Лист ожидания пуст'
+                      : collectionGames.length === 0
                       ? isOwnProfile
                         ? 'Ты ещё не добавил ни одной игры'
                         : 'Пользователь ещё не добавил игр'
@@ -1057,104 +1032,6 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
                 </div>
               )}
             </div>
-          )}
-
-          {activeTab === 'wishlist' && (
-            <div className="space-y-4">
-              {gamesLoading ? (
-                <div className={gridClass}>
-                  {Array.from({ length: 6 }).map((_, i) => (
-                    <GameCardSkeleton key={i} />
-                  ))}
-                </div>
-              ) : wishlistGames.length === 0 ? (
-                <div className="text-center py-12 bg-neutral-900/80 backdrop-blur-md border border-neutral-800 rounded-xl">
-                  <Heart className="w-12 h-12 text-neutral-600 mx-auto mb-3" />
-                  <p className="text-sm text-neutral-400">Лист ожидания пуст</p>
-                  {isOwnProfile && (
-                    <Link
-                      href="/releases"
-                      className="inline-block mt-4 px-5 py-2.5 bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium rounded-lg transition"
-                    >
-                      Посмотреть релизы
-                    </Link>
-                  )}
-                </div>
-              ) : (
-                <div className={gridClass}>
-                  {wishlistGames.map((game, idx) => (
-                    <GameCard
-                      key={game.id}
-                      game={game}
-                      onClick={() => openGameModal(game)}
-                      userGameData={userGamesData.get(game.id)}
-                      isAuthenticated={true}
-                      index={idx}
-                      compact={cardSize === 'compact'}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {activeTab === 'reviews' && (
-            <div>
-              {reviews.length === 0 ? (
-                <div className="text-center py-12 bg-neutral-900/80 backdrop-blur-md border border-neutral-800 rounded-xl">
-                  <MessageSquare className="w-12 h-12 text-neutral-600 mx-auto mb-3" />
-                  <p className="text-sm text-neutral-400">
-                    {isOwnProfile
-                      ? 'Ты ещё не оставил ни одной рецензии'
-                      : 'Пользователь ещё не написал рецензий'}
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {reviews.map((review) => (
-                    <div
-                      key={review.id}
-                      className="bg-neutral-900/80 backdrop-blur-md border border-neutral-800 rounded-xl p-4"
-                    >
-                      <div className="flex gap-3">
-                        {review.game_cover && (
-                          <div className="relative w-16 h-16 md:w-20 md:h-20 rounded-lg overflow-hidden bg-neutral-800 flex-shrink-0">
-                            <Image
-                              src={review.game_cover}
-                              alt={review.game_title}
-                              fill
-                              sizes="80px"
-                              className="object-cover"
-                              unoptimized
-                            />
-                          </div>
-                        )}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap mb-1">
-                            <h3 className="text-sm font-medium text-white truncate">
-                              {review.game_title}
-                            </h3>
-                            {review.rating !== null && review.rating > 0 && (
-                              <span className="flex items-center gap-0.5 text-xs text-yellow-400 font-bold flex-shrink-0">
-                                <Star className="w-3 h-3 fill-yellow-400" />
-                                {review.rating}
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-xs text-neutral-300 line-clamp-3 leading-relaxed">
-                            {review.text}
-                          </p>
-                          <div className="text-[11px] text-neutral-500 mt-2">
-                            {timeAgo(review.created_at)}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
         </div>
       </div>
 
