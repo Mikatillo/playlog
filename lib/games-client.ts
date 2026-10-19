@@ -1,9 +1,8 @@
 import type { Game } from '@/types/game';
 
-// Кеш игр на клиенте: переживает переходы между страницами (память модуля)
-// и перезагрузку вкладки (sessionStorage).
+// Новая версия кеша: старые обложки загружаются заново.
 const memory = new Map<number, Game>();
-const STORAGE_KEY = 'playlog:games-cache-v1';
+const STORAGE_KEY = 'playlog:games-cache-v2';
 const MAX_STORED = 300;
 let hydrated = false;
 
@@ -27,17 +26,15 @@ function persist() {
 
 const CHUNK = 40;
 
-/**
- * Загружает игры по id. Запрашивает с сервера только те, которых ещё нет в кеше,
- * порциями по 40 штук и параллельно. Порядок результата соответствует порядку ids.
- */
 export async function fetchGamesByIds(ids: number[]): Promise<Game[]> {
   hydrate();
   const missing = ids.filter((id) => !memory.has(id));
 
   if (missing.length > 0) {
     const chunks: number[][] = [];
-    for (let i = 0; i < missing.length; i += CHUNK) chunks.push(missing.slice(i, i + CHUNK));
+    for (let i = 0; i < missing.length; i += CHUNK) {
+      chunks.push(missing.slice(i, i + CHUNK));
+    }
 
     await Promise.all(
       chunks.map(async (chunk) => {
@@ -56,11 +53,11 @@ export async function fetchGamesByIds(ids: number[]): Promise<Game[]> {
     persist();
   }
 
-  return ids.map((id) => memory.get(id)).filter((g): g is Game => !!g);
+  return ids
+    .map((id) => memory.get(id))
+    .filter((g): g is Game => !!g);
 }
 
-
-/** Сбрасывает закешированную игру (например, после правки пользовательской карточки). */
 export function invalidateGame(id: number) {
   hydrate();
   memory.delete(id);

@@ -39,7 +39,7 @@ export async function getIgdbToken(): Promise<string> {
   return data.access_token;
 }
 
-// IGDB разрешает 4 запроса в секунду — ставим запросы в очередь с паузой между стартами
+// IGDB разрешает 4 запроса в секунду.
 let lastStart = 0;
 let queue: Promise<void> = Promise.resolve();
 
@@ -53,7 +53,6 @@ function waitTurn(): Promise<void> {
   return turn;
 }
 
-// Небольшой кэш ответов в памяти сервера (одинаковый запрос не уходит в IGDB повторно)
 const responseCache = new Map<string, { at: number; data: any }>();
 const CACHE_LIMIT = 300;
 
@@ -81,23 +80,27 @@ async function igdbFetch(endpoint: string, body: string): Promise<any> {
     lastError = new Error(`IGDB query failed: ${res.status} ${text}`);
 
     if (res.status === 401) {
-      cachedToken = null; // токен протух — получим новый и повторим
+      cachedToken = null;
       continue;
     }
     if (res.status === 429 || res.status >= 500) {
       await new Promise((r) => setTimeout(r, 600 * (attempt + 1)));
       continue;
     }
-    break; // 400 и прочее — повторять бессмысленно
+    break;
   }
 
   throw lastError || new Error('IGDB query failed');
 }
 
 /**
- * Запрос к IGDB. ttlMs — сколько держать ответ в памяти сервера (0 = не кэшировать).
+ * ttlMs — сколько держать ответ в памяти сервера (0 = не кэшировать).
  */
-export async function igdbQuery<T = any>(endpoint: string, body: string, ttlMs = 0): Promise<T> {
+export async function igdbQuery<T = any>(
+  endpoint: string,
+  body: string,
+  ttlMs = 0,
+): Promise<T> {
   const key = `${endpoint}::${body}`;
   if (ttlMs > 0) {
     const hit = responseCache.get(key);
@@ -117,8 +120,7 @@ export async function igdbQuery<T = any>(endpoint: string, body: string, ttlMs =
 }
 
 /**
- * Несколько запросов одним обращением (/multiquery, до 10 штук) — экономит лимит 4 req/sec.
- * Возвращает карту: имя запроса → результат.
+ * Несколько запросов одним обращением (/multiquery, до 10 штук).
  */
 export async function igdbMulti<T = any>(
   queries: { name: string; endpoint: string; body: string }[],
@@ -130,7 +132,11 @@ export async function igdbMulti<T = any>(
     const body = chunk
       .map((q) => `query ${q.endpoint} "${q.name}" {\n${q.body}\n};`)
       .join('\n');
-    const data = await igdbQuery<{ name: string; result: T[] }[]>('multiquery', body, ttlMs);
+    const data = await igdbQuery<{ name: string; result: T[] }[]>(
+      'multiquery',
+      body,
+      ttlMs,
+    );
     (data || []).forEach((d) => {
       out[d.name] = d.result || [];
     });
@@ -138,14 +144,10 @@ export async function igdbMulti<T = any>(
   return out;
 }
 
-/** Экранирует строку для запроса IGDB (кавычки и слэши ломают Apicalypse). */
 export function igdbEscape(s: string): string {
   return s.replace(/\\/g, ' ').replace(/"/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
-// === Маппинг IGDB → внутренний тип Game ===
-
-// IGDB external_game_source: 1 = Steam
 const IGDB_SOURCE_STEAM = 1;
 
 export interface IgdbExternalGame {
@@ -184,15 +186,15 @@ export function igdbImageUrl(imageId: string, size = 't_cover_big'): string {
   return `https://images.igdb.com/igdb/image/upload/${size}/${imageId}.jpg`;
 }
 
-// Steam-обложка 460x215 — горизонтальная, красивая
 export function steamHeaderUrl(appid: string | number): string {
   return `https://cdn.cloudflare.steamstatic.com/steam/apps/${appid}/header.jpg`;
 }
 
-// Ищем Steam appid в external_games (external_game_source = 1)
 function findSteamAppId(raw: IgdbGame): string | null {
   if (!raw.external_games) return null;
-  const steam = raw.external_games.find((e) => e.external_game_source === IGDB_SOURCE_STEAM);
+  const steam = raw.external_games.find(
+    (e) => e.external_game_source === IGDB_SOURCE_STEAM,
+  );
   return steam?.uid || null;
 }
 
@@ -205,31 +207,31 @@ export function mapIgdbGame(raw: IgdbGame): Game {
     ? new Date(raw.first_release_date * 1000).toISOString().split('T')[0]
     : undefined;
 
-  // Приоритет обложек:
-  // 1. Steam header (460×215, идеально горизонтальная)
-  // 2. IGDB screenshot (игровой кадр 16:9)
-  // 3. IGDB artwork (концепт-арт)
-  // 4. IGDB cover (вертикальный постер)
   let cover = '';
   let coverAlt: string | undefined;
 
-  // Картинка IGDB — она же запасная, если Steam header окажется 404 (у новых игр бывает)
-  const horizontalId = raw.screenshots?.[0]?.image_id || raw.artworks?.[0]?.image_id;
+  const horizontalId =
+    raw.screenshots?.[0]?.image_id || raw.artworks?.[0]?.image_id;
   let igdbCover = '';
-  if (horizontalId) igdbCover = igdbImageUrl(horizontalId, 't_1080p');
-  else if (raw.cover?.image_id) igdbCover = igdbImageUrl(raw.cover.image_id, 't_cover_big');
+  if (horizontalId) {
+    igdbCover = igdbImageUrl(horizontalId, 't_1080p');
+  } else if (raw.cover?.image_id) {
+    igdbCover = igdbImageUrl(raw.cover.image_id, 't_cover_big');
+  }
 
-  // Миниатюра должна совпадать с первой картинкой в карточке игры: сначала артворк (как coverHD),
-  // затем Steam header, затем кадр/постер IGDB
+  // Обложка Steam имеет приоритет над артом IGDB.
   const artworkId = raw.artworks?.[0]?.image_id;
-  const artworkCover = artworkId ? igdbImageUrl(artworkId, 't_screenshot_big') : '';
+  const artworkCover = artworkId
+    ? igdbImageUrl(artworkId, 't_screenshot_big')
+    : '';
   const steamAppId = findSteamAppId(raw);
   const steamHeader = steamAppId ? steamHeaderUrl(steamAppId) : '';
-  if (artworkCover) {
-    cover = artworkCover;
-    coverAlt = steamHeader || igdbCover || undefined;
-  } else if (steamHeader) {
+
+  if (steamHeader) {
     cover = steamHeader;
+    coverAlt = artworkCover || igdbCover || undefined;
+  } else if (artworkCover) {
+    cover = artworkCover;
     coverAlt = igdbCover || undefined;
   } else {
     cover = igdbCover;
@@ -246,7 +248,9 @@ export function mapIgdbGame(raw: IgdbGame): Game {
     title: raw.name,
     cover,
     coverAlt,
-    coverHD: raw.artworks?.[0]?.image_id ? igdbImageUrl(raw.artworks[0].image_id, 't_1080p') : undefined,
+    coverHD: raw.artworks?.[0]?.image_id
+      ? igdbImageUrl(raw.artworks[0].image_id, 't_1080p')
+      : undefined,
     year,
     released,
     rating,
@@ -272,11 +276,7 @@ export function mapIgdbGame(raw: IgdbGame): Game {
     playtime: undefined,
   };
 }
-// ============================================================
-// Steam API поиск по названию (для игр без external_games)
-// ============================================================
 
-// Нормализация названия: убираем ™®, лишние пробелы, "The" в начале
 function normalizeTitle(title: string): string {
   return title
     .replace(/™|®/g, '')
@@ -284,15 +284,16 @@ function normalizeTitle(title: string): string {
     .trim();
 }
 
-// Ищем appid через публичный Steam Search API
-export async function findSteamAppIdByTitle(title: string): Promise<string | null> {
+export async function findSteamAppIdByTitle(
+  title: string,
+): Promise<string | null> {
   try {
     const clean = normalizeTitle(title);
     if (!clean) return null;
 
     const url = `https://store.steampowered.com/api/storesearch/?term=${encodeURIComponent(clean)}&l=en&cc=US`;
     const res = await fetch(url, {
-      next: { revalidate: 86400 }, // кэш на сутки
+      next: { revalidate: 86400 },
     });
     if (!res.ok) return null;
 
@@ -300,8 +301,8 @@ export async function findSteamAppIdByTitle(title: string): Promise<string | nul
     const items = data?.items || [];
     if (!items.length) return null;
 
-    // Берём только результат с совпадающим названием (иначе подставится чужая игра)
-    const key = (t: string) => normalizeTitle(t).toLowerCase().replace(/[^a-z0-9а-яё]/g, '');
+    const key = (t: string) =>
+      normalizeTitle(t).toLowerCase().replace(/[^a-z0-9а-яё]/g, '');
     const target = key(title);
     if (target.length < 3) return null;
 
@@ -309,7 +310,8 @@ export async function findSteamAppIdByTitle(title: string): Promise<string | nul
       const k = key(String(it?.name || ''));
       if (!k) return false;
       if (k === target) return true;
-      const [short, long] = k.length < target.length ? [k, target] : [target, k];
+      const [short, long] =
+        k.length < target.length ? [k, target] : [target, k];
       return short.length >= 6 && long.startsWith(short);
     });
     if (match?.id) return String(match.id);
