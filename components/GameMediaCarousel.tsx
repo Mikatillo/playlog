@@ -37,8 +37,8 @@ export default function GameMediaCarousel({
   }, []);
 
   const slides: Slide[] = [
-    // В большом окне показываем самую качественную картинку: промо-арт IGDB (1080p), иначе обложку
-    { type: 'cover', image: game.coverHD || game.cover },
+    // Показываем ту же обложку, что и в редакторе; арт IGDB — только запасной вариант.
+    { type: 'cover', image: game.cover || game.coverHD || '' },
     ...(game.screenshots || []).map((s) => ({
       type: 'screenshot' as const,
       image: s.image,
@@ -141,6 +141,7 @@ export default function GameMediaCarousel({
           }`}
         >
           <img
+            key={slide.image}
             src={slide.image}
             alt={game.title}
             className={`w-full h-full object-cover ${
@@ -158,11 +159,11 @@ export default function GameMediaCarousel({
             }}
             loading={idx === 0 ? 'eager' : 'lazy'}
             onError={(e) => {
-              // у Steam нет header.jpg — берём запасную обложку IGDB
+              // Если обложка недоступна, пробуем запасную картинку и арт IGDB.
               const el = e.currentTarget;
               if (slide.type !== 'cover') return;
-              // цепочка запасных вариантов: промо-арт → обложка Steam → картинка IGDB
-              const chain = [game.cover, game.coverAlt].filter((u): u is string => !!u && u !== slide.image);
+              const chain = [...new Set([game.coverAlt, game.coverHD])]
+                .filter((u): u is string => !!u && u !== slide.image);
               const step = Number(el.dataset.fallback || '0');
               if (step < chain.length) {
                 el.dataset.fallback = String(step + 1);
