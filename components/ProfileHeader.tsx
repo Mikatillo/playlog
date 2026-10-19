@@ -1,10 +1,10 @@
 'use client';
 
 import SteamIcon from '@/components/SteamIcon';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import {
   Pencil, MapPin, ExternalLink, UserPlus, UserCheck, Quote,
-  Gamepad2, Trophy, Clock, MessageSquare, ThumbsUp, Users,
+  BarChart3, ThumbsUp, Users,
 } from 'lucide-react';
 import Image from 'next/image';
 import { calculateLevel } from '@/types/game';
@@ -37,6 +37,8 @@ interface ProfileHeaderProps {
   onEdit: () => void;
   reviewsCount: number;
   onOpenXpDetails?: () => void;
+  onOpenStats: () => void;
+  showcase?: ReactNode;
 }
 
 // Цвета баннера, если у профиля нет своей картинки и аватара
@@ -75,7 +77,8 @@ export default function ProfileHeader({
   followLoading,
   onToggleFollow,
   onEdit,
-  reviewsCount,
+  onOpenStats,
+  showcase,
 }: ProfileHeaderProps) {
   const [statusText, setStatusText] = useState<string | null>(null);
 
@@ -124,17 +127,9 @@ export default function ProfileHeader({
   const rank = rankTitle(levelInfo.level);
   const initials = profile.nickname.substring(0, 2).toUpperCase();
   const xpPercent = Math.round((levelInfo.xpInLevel / levelInfo.xpToNext) * 100);
-  const completionPercent =
-    profile.totalGames > 0 ? Math.round((profile.completedGames / profile.totalGames) * 100) : 0;
   const gradient = BANNER_GRADIENTS[profile.banner_gradient] || BANNER_GRADIENTS.indigo;
   const location = [profile.city, profile.region].filter(Boolean).join(', ');
 
-  const stats = [
-    { icon: Gamepad2, value: profile.totalGames.toLocaleString('ru-RU'), label: 'Игр', hint: 'в коллекции', tint: 'text-indigo-300 bg-indigo-500/15', glow: '99,102,241' },
-    { icon: Trophy, value: profile.completedGames.toLocaleString('ru-RU'), label: 'Пройдено', hint: `${completionPercent}% библиотеки`, tint: 'text-emerald-300 bg-emerald-500/15', glow: '16,185,129' },
-    { icon: Clock, value: profile.totalHours.toLocaleString('ru-RU'), label: 'Часов', hint: 'в играх', tint: 'text-sky-300 bg-sky-500/15', glow: '14,165,233' },
-    { icon: MessageSquare, value: reviewsCount.toLocaleString('ru-RU'), label: 'Рецензий', hint: 'опубликовано', tint: 'text-amber-300 bg-amber-500/15', glow: '245,158,11' },
-  ];
 
   return (
     <section className="relative overflow-hidden rounded-3xl border border-neutral-800 bg-neutral-900/90 backdrop-blur-md shadow-2xl shadow-black/40">
@@ -190,18 +185,16 @@ export default function ProfileHeader({
         />
         <div className="absolute inset-0 bg-gradient-to-t from-neutral-900 via-neutral-900/30 to-black/10" />
 
-        {/* Редактирование */}
-        {isOwnProfile && (
-          <button
-            onClick={onEdit}
-            title="Редактировать профиль"
-            aria-label="Редактировать профиль"
-            className="absolute top-3 right-3 sm:top-4 sm:right-4 inline-flex items-center gap-2 h-9 px-3 rounded-xl bg-black/40 hover:bg-black/60 backdrop-blur-md border border-white/15 hover:border-white/30 text-white text-xs font-medium transition hover:-translate-y-0.5 z-10"
-          >
-            <Pencil className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Редактировать</span>
+        <div className="absolute top-3 right-3 z-10 flex gap-2 sm:top-4 sm:right-4">
+          <button type="button" onClick={onOpenStats} title="Статистика профиля" aria-label="Статистика профиля"
+            className="inline-flex h-9 items-center gap-2 rounded-xl border border-white/15 bg-black/40 px-3 text-xs font-medium text-white backdrop-blur-md transition hover:border-white/30 hover:bg-black/60">
+            <BarChart3 className="h-3.5 w-3.5" /><span className="hidden sm:inline">Статистика</span>
           </button>
-        )}
+          {isOwnProfile && <button type="button" onClick={onEdit} title="Редактировать профиль" aria-label="Редактировать профиль"
+            className="inline-flex h-9 items-center gap-2 rounded-xl border border-white/15 bg-black/40 px-3 text-xs font-medium text-white backdrop-blur-md transition hover:border-white/30 hover:bg-black/60">
+            <Pencil className="h-3.5 w-3.5" /><span className="hidden sm:inline">Редактировать</span>
+          </button>}
+        </div>
       </div>
 
       {/* ===== Основной блок ===== */}
@@ -360,34 +353,8 @@ export default function ProfileHeader({
           </blockquote>
         )}
 
-        {/* Метрики */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 mt-5">
-          {stats.map(({ icon: Icon, value, label, hint, tint, glow }) => (
-            <div
-              key={label}
-              className="group relative overflow-hidden rounded-2xl bg-neutral-800/50 border border-neutral-800 hover:border-neutral-600 hover:bg-neutral-800 p-3 sm:p-4 transition hover:-translate-y-1"
-            >
-              {/* Цветное свечение из левого верхнего угла, к правому нижнему угасает до полной прозрачности */}
-              <div
-                aria-hidden="true"
-                className="absolute inset-0 pointer-events-none"
-                style={{
-                  background: `linear-gradient(135deg, rgba(${glow},0.22) 0%, rgba(${glow},0.09) 40%, rgba(${glow},0) 100%)`,
-                }}
-              />
-              <div className="relative flex items-center gap-2.5">
-                <span className={`w-9 h-9 rounded-xl inline-flex items-center justify-center flex-shrink-0 transition group-hover:scale-110 ${tint}`}>
-                  <Icon className="w-[18px] h-[18px]" />
-                </span>
-                <div className="min-w-0">
-                  <div className="text-xl sm:text-2xl font-extrabold text-white leading-none">{value}</div>
-                  <div className="text-[10px] sm:text-[11px] text-neutral-500 mt-1 uppercase tracking-wider truncate">{label}</div>
-                </div>
-              </div>
-              <div className="relative text-[11px] text-neutral-500 mt-2.5 pt-2.5 border-t border-neutral-800 truncate">{hint}</div>
-            </div>
-          ))}
-        </div>
+        {showcase}
+
       </div>
     </section>
   );

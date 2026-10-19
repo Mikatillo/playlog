@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import GameImage from '@/components/GameImage';
+import GameCardDetails from './GameCardDetails';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import type { Game, GameData } from '@/types/game';
 
@@ -73,11 +74,11 @@ export function Rail({ title, subtitle, action, children, resetKey }: RailProps)
         </div>
       </div>
 
-      <div className="relative -mx-4 md:mx-0">
+      <div className="relative -mx-4 md:-mx-2">
         <div
           ref={ref}
           onScroll={update}
-          className="no-scrollbar flex gap-3 md:gap-4 overflow-x-auto snap-x snap-mandatory scroll-smooth px-4 md:px-0 pb-1"
+          className="no-scrollbar flex gap-3 md:gap-4 overflow-x-auto snap-x snap-mandatory scroll-smooth px-4 md:px-2 py-2"
         >
           {children}
         </div>
@@ -103,13 +104,13 @@ interface RailCardProps {
   priority?: boolean;
 }
 
-export function RailCard({ game, onClick, badge, meta, userData, priority }: RailCardProps) {
+export function RailCard({ game, onClick, badge, userData, priority }: RailCardProps) {
   const saved = userData && userData.status !== 'none';
   return (
     <button
       type="button"
       onClick={onClick}
-      className="group snap-start flex-shrink-0 w-[236px] md:w-[272px] text-left rounded-2xl overflow-hidden bg-neutral-900 border border-neutral-800 hover:border-indigo-500/50 transition hover:-translate-y-1 hover:shadow-xl hover:shadow-indigo-500/10"
+      className="card-glow group relative snap-start flex-shrink-0 w-[236px] md:w-[272px] text-left rounded-2xl overflow-hidden bg-neutral-900 border border-neutral-800"
     >
       <div className="relative aspect-[460/215] bg-neutral-800 overflow-hidden">
         <GameImage
@@ -119,11 +120,10 @@ export function RailCard({ game, onClick, badge, meta, userData, priority }: Rai
           alt={game.title}
           fill
           sizes="272px"
-          className="object-cover transition duration-500 group-hover:scale-105"
+          className="object-cover"
           unoptimized
           priority={priority}
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
         {badge && (
           <span className="absolute top-2 left-2 max-w-[85%] truncate text-[10px] font-semibold uppercase tracking-wide text-white bg-indigo-500/85 backdrop-blur px-2 py-0.5 rounded-md">
             {badge}
@@ -135,14 +135,7 @@ export function RailCard({ game, onClick, badge, meta, userData, priority }: Rai
           </span>
         )}
       </div>
-      <div className="p-3">
-        <div className="text-sm font-semibold text-white truncate group-hover:text-indigo-200 transition">
-          {game.title}
-        </div>
-        <div className="text-xs text-neutral-500 mt-0.5 truncate">
-          {meta || [game.genre, game.year || null].filter(Boolean).join(' · ')}
-        </div>
-      </div>
+      <GameCardDetails game={game} userData={userData} />
     </button>
   );
 }

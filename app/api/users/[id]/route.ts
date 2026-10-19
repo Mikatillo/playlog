@@ -17,7 +17,7 @@ export async function GET(
         .maybeSingle(),
       supabase
         .from('public_reviews')
-        .select('id, game_id, game_title, game_cover, rating, text, created_at')
+        .select('id, game_id, game_title, game_cover, rating, text, created_at', { count: 'exact' })
         .eq('user_id', id)
         .order('created_at', { ascending: false })
         .limit(50),
@@ -95,7 +95,7 @@ export async function GET(
         },
         stats: {
           likes: likesCount || 0,
-          reviewsCount: reviews?.length || 0,
+          reviewsCount: reviewsRes.count ?? reviews?.length ?? 0,
           reviewLikesSum,
           gamesCount: userGames.length,
         },

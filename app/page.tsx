@@ -21,7 +21,6 @@ import GameCardSkeleton from '@/components/GameCardSkeleton';
 import ForYou from '@/components/ForYou';
 import ReleasesTicker from '@/components/ReleasesTicker';
 import SteamHero from '@/components/SteamHero';
-import ContinuePlaying from '@/components/ContinuePlaying';
 import GenreTiles from '@/components/GenreTiles';
 import HomeWelcome from '@/components/HomeWelcome';
 import GameMediaCarousel from '@/components/GameMediaCarousel';
@@ -918,7 +917,6 @@ fetch(`/api/games/${gameId}?full=true`)
             <>
               <HomeWelcome />
               <SteamHero onGameClick={openGame} />
-              <ContinuePlaying onGameClick={openGame} />
               <ForYou onGameClick={openGame} />
               <GenreTiles
                 selected={selectedGenre}

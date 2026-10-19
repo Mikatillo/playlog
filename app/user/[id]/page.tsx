@@ -1,14 +1,14 @@
 'use client';
 
-import ProfileStats from '@/components/ProfileStats';
+import ProfileDashboard from '@/components/ProfileDashboard';
 import { ASPECTS, aspectsFromRow, hasAspects } from '@/lib/aspects';
 import { fetchGamesByIds } from '@/lib/games-client';
 import { authFetch } from '@/lib/api-client';
 import { supabase } from '@/lib/supabase';
 import { useEffect, useState, use, useMemo, useCallback } from 'react';
 import {
-  Loader2, Star, Check, Gamepad, XCircle, MessageSquare, ArrowLeft,
-  Heart, Plus, BarChart3, ChevronDown, ChevronUp, ArrowUpDown, Pencil, X, Clock, LayoutGrid, Square,
+  Loader2, Star, Check, Gamepad, XCircle, ArrowLeft,
+  Heart, Plus, ChevronDown, ChevronUp, ArrowUpDown, Pencil, X, Clock, LayoutGrid, Square,
 } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -17,7 +17,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import { Game, GameData } from '@/types/game';
 import { cleanDescription } from '@/lib/text';
-import GameImage from '@/components/GameImage';
 import GameCard from '@/components/GameCard';
 import GameCardSkeleton from '@/components/GameCardSkeleton';
 import GameMediaCarousel from '@/components/GameMediaCarousel';
@@ -25,11 +24,12 @@ import SteamRating from '@/components/SteamRating';
 import ReviewsSection from '@/components/ReviewsSection';
 import EditProfileModal from '@/components/EditProfileModal';
 import ProfileHeader from '@/components/ProfileHeader';
+import ProfileShowcase from '@/components/ProfileShowcase';
+import ProfileDialog from '@/components/ProfileDialog';
 import GameMeta from '@/components/GameMeta';
 import AdminEditButton from '@/components/AdminEditButton';
 import ScreenshotViewer from '@/components/ScreenshotViewer';
 import GameSeries from '@/components/GameSeries';
-import ActivityFeed from '@/components/ActivityFeed';
 import { useGameUpdates, patchGameInList } from '@/lib/game-events';
 
 type GameTab = 'all' | 'want' | 'playing' | 'completed' | 'dropped';
@@ -170,7 +170,7 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
   const [followLoading, setFollowLoading] = useState(false);
   const [notFound, setNotFound] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
-  // На телефоне «Любимые игры», «Лента активности» и статистика собраны в один сворачиваемый блок (на ПК всегда раскрыт)
+  // Подробная статистика открывается отдельной кнопкой в шапке.
   const [profOpen, setProfOpen] = useState(false);
   const [gameTab, setGameTab] = useState<GameTab>('all');
   const [sortBy, setSortBy] = useState<SortType>('newest');
@@ -686,31 +686,6 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
       .slice(0, 3);
   }, [games, favoriteOrderMap]);
 
-  const topGenres = useMemo(() => {
-    const counter = new Map<string, number>();
-    collectionGames.forEach((g) => {
-      const genres = g.genres;
-      if (!genres) return;
-      genres.forEach((genre) => {
-        counter.set(genre.name, (counter.get(genre.name) || 0) + 1);
-      });
-    });
-    return Array.from(counter.entries())
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5);
-  }, [collectionGames]);
-
-  const profileTotalHours = useMemo(
-    () => userGames.reduce((sum, g) => sum + (g.hours || 0), 0),
-    [userGames],
-  );
-
-  const profileAverageRating = useMemo(() => {
-    const rated = userGames.filter((g) => (g.rating || 0) > 0);
-    if (rated.length === 0) return null;
-    return rated.reduce((sum, g) => sum + g.rating, 0) / rated.length;
-  }, [userGames]);
-
   const gameTabOptions: { id: GameTab; label: string; count: number; color: string }[] = [
     { id: 'all', label: 'Все', count: collectionGames.length, color: 'text-indigo-400' },
     ...(statusCounts.want > 0
@@ -802,131 +777,33 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
           onToggleFollow={handleToggleFollow}
           onEdit={() => setEditOpen(true)}
           reviewsCount={stats?.reviewsCount || 0}
+          onOpenStats={() => setProfOpen(true)}
+          showcase={
+            <ProfileShowcase
+              key={id}
+              profileId={id}
+              isOwnProfile={isOwnProfile}
+              games={games}
+              userData={userGamesData}
+              reviews={reviews}
+              favoriteIds={favoriteGames.map((g) => g.id)}
+              onGameClick={openGameModal}
+              onOpenStats={() => setProfOpen(true)}
+            />
+          }
         />
 
-        {/* Телефон: один сворачиваемый блок «Статистика профиля» со всем содержимым; ПК: 3 колонки */}
-        <div>
-          <button
-            type="button"
-            onClick={() => setProfOpen((v) => !v)}
-            aria-expanded={profOpen}
-            className="lg:hidden w-full flex items-center justify-between gap-2 text-left font-semibold text-white bg-neutral-900/80 backdrop-blur-md border border-neutral-800 rounded-2xl p-5"
-          >
-            <span className="flex items-center gap-2">
-              <span className="w-7 h-7 rounded-lg bg-indigo-500/15 flex items-center justify-center">
-                <BarChart3 className="w-4 h-4 text-indigo-400" />
-              </span>
-              Статистика профиля
-            </span>
-            <ChevronDown className={`w-4 h-4 text-neutral-500 transition-transform duration-300 ${profOpen ? 'rotate-180' : ''}`} />
-          </button>
-        <div className={`${profOpen ? 'grid mt-4' : 'hidden'} lg:grid grid-cols-1 lg:grid-cols-3 lg:items-start gap-4`}>
-          {/* Любимые игры */}
-          <div className="bg-neutral-900/80 backdrop-blur-md border border-neutral-800 rounded-2xl p-5 flex flex-col lg:h-[480px]">
-            <h3 className="font-semibold text-white mb-4 flex items-center gap-2">
-              <Star className="w-4 h-4 text-yellow-500" />
-              Мои любимые игры
-            </h3>
-            <div className="contents">
-            {favoriteGames.length === 0 ? (
-              <div className="text-sm text-neutral-500 py-4">
-                {isOwnProfile
-                  ? 'Открой любую игру в коллекции и добавь её в слот 1, 2 или 3'
-                  : 'Пользователь ещё не выбрал любимые игры'}
-              </div>
-            ) : (
-              <div className="flex-1 flex flex-col gap-3">
-                {favoriteGames.map((game) => {
-                  const data = userGamesData.get(game.id);
-                  const slot = favoriteOrderMap.get(game.id);
-                  return (
-                    <button
-                      key={game.id}
-                      onClick={() => openGameModal(game)}
-                      className="group relative flex-1 flex flex-col justify-center gap-2 p-2.5 rounded-2xl bg-neutral-800/40 hover:bg-neutral-800/80 border border-neutral-800 hover:border-neutral-700 overflow-hidden transition text-left"
-                    >
-                      <div className="flex items-center gap-3 sm:gap-4">
-                        <div className="relative w-[128px] sm:w-[168px] aspect-[460/215] rounded-xl overflow-hidden bg-neutral-800 flex-shrink-0 shadow-lg shadow-black/40">
-                          {game.cover && (
-                            <GameImage
-                              src={game.cover}
-                              fallback={game.coverAlt}
-                              smart
-                              alt={game.title}
-                              fill
-                              sizes="168px"
-                              className="object-cover transition duration-500 group-hover:scale-105"
-                              unoptimized
-                            />
-                          )}
-                          {slot && (
-                            <div className="absolute top-1.5 left-1.5 w-6 h-6 rounded-full bg-yellow-500 text-black text-xs font-bold flex items-center justify-center shadow">
-                              {slot}
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex flex-col items-start justify-center gap-2 text-xs min-w-0">
-                          {data?.rating ? (
-                            <span className="flex items-center gap-1 text-yellow-300 font-semibold bg-yellow-500/10 border border-yellow-500/25 px-2 py-0.5 rounded-lg">
-                              <Star className="w-3 h-3 fill-yellow-400" />
-                              {data.rating}/10
-                            </span>
-                          ) : null}
-                          {data?.hours ? (
-                            <span className="text-neutral-300 bg-neutral-700/40 px-2 py-0.5 rounded-lg">{data.hours} ч.</span>
-                          ) : null}
-                        </div>
-                      </div>
-                      <div className="text-sm font-semibold text-white leading-snug line-clamp-2 px-0.5">
-                        {game.title}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-            </div>
-          </div>
-
-          {/* Лента активности */}
-          <div className="bg-neutral-900/80 backdrop-blur-md border border-neutral-800 rounded-2xl p-5 flex flex-col lg:h-[480px]">
-            <h3 className="font-semibold text-white mb-4 flex items-center gap-2">
-              <MessageSquare className="w-4 h-4 text-indigo-500" />
-              Лента активности
-            </h3>
-            <div className="contents">
-            {/* Высота ленты равна соседним блокам; внутри — прокрутка (на десктопе), на телефоне — фиксированные ~5 событий */}
-            <div className="relative h-[470px] lg:h-auto lg:flex-1 lg:min-h-0">
-              <div className="absolute inset-0 overflow-y-auto pr-1 activity-scroll">
-                <ActivityFeed
-                  userId={id}
-                  scope="user"
-                  showAvatars={false}
-                  limit={20}
-                  emptyText="Пока нет активности"
-                />
-              </div>
-            </div>
-            </div>
-          </div>
-
-          {/* Интересы и статистика */}
-          <ProfileStats
-            topGenres={topGenres}
-            statusCounts={statusCounts}
-            totalHours={profileTotalHours}
-            averageRating={profileAverageRating}
-            totalGames={collectionGames.length}
+        <ProfileDialog open={profOpen} title="Статистика профиля" onClose={() => setProfOpen(false)} wide>
+          <ProfileDashboard
+            nickname={publicProfile.nickname}
+            games={games}
+            userGames={userGames}
+            reviewsCount={stats?.reviewsCount || 0}
             isOwnProfile={isOwnProfile}
-            tasteEntries={userGames
-              .map((ug) => ({
-                title: games.find((g) => g.id === ug.game_id)?.title || 'Игра',
-                aspects: aspectsFromRow(ug),
-              }))
-              .filter((e) => hasAspects(e.aspects))}
+            gamesLoading={gamesLoading}
+            onGameClick={(game) => { setProfOpen(false); openGameModal(game); }}
           />
-        </div>
-        </div>
+        </ProfileDialog>
         {/* Табы + коллекция */}
         <div className="space-y-6 min-w-0">
             <div className="space-y-4">

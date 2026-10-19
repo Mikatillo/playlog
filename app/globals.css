@@ -219,24 +219,24 @@ a[class*='bg-indigo-500'] {
   transform: rotateY(180deg) scale(1.1);
 }
 
-/* Карточки: пружинный подъём при наведении и «нажатие» пальцем */
+/* Карточки: небольшое увеличение на ПК и нажатие на сенсорном экране */
 .card-glow {
-  transition: transform 0.45s var(--spring), box-shadow 0.35s ease, border-color 0.3s ease;
+  transition: scale 0.3s ease, box-shadow 0.35s ease, border-color 0.3s ease;
   box-shadow: 0 6px 20px -10px rgb(0 0 0 / 0.6);
-  will-change: transform;
 }
 .card-glow:active {
-  transform: scale(0.965);
+  scale: 0.965;
   transition-duration: 0.15s;
 }
-@media (hover: hover) {
+@media (hover: hover) and (pointer: fine) {
   .card-glow:hover {
-    transform: translateY(-5px) scale(1.015);
+    scale: 1.025;
+    z-index: 1;
     border-color: rgba(129, 140, 248, 0.45);
     box-shadow: 0 22px 44px -18px rgba(99, 102, 241, 0.55), 0 8px 18px -8px rgb(0 0 0 / 0.6);
   }
   .card-glow:hover:active {
-    transform: scale(0.97);
+    scale: 0.97;
   }
 }
 
