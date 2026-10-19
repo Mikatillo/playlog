@@ -86,7 +86,7 @@ export default function CreateGameModal({ userId, editId, baseGame, onReset, ini
     setGenres((baseGame.genres || []).map((g) => g.name));
     setPlatforms(baseGame.platforms || []);
     setCoverUrl(baseGame.cover || '');
-    setShots((baseGame.screenshots || []).slice(0, MAX_SHOTS).map((x) => ({ url: x.image })));
+    setShots((baseGame.screenshots || []).map((x) => ({ url: x.image })));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [baseGame?.id]);
 
@@ -121,6 +121,20 @@ export default function CreateGameModal({ userId, editId, baseGame, onReset, ini
 
   const toggle = (list: string[], set: (v: string[]) => void, value: string) =>
     set(list.includes(value) ? list.filter((x) => x !== value) : [...list, value]);
+
+  // Выбор обложки из уже добавленных скриншотов
+  const makeCover = (sh: { file?: File; url: string }) => {
+    setError('');
+    if (sh.file) {
+      setFile(sh.file);
+      setPreview(sh.url);
+      setCoverUrl('');
+    } else {
+      setFile(null);
+      setPreview(null);
+      setCoverUrl(sh.url);
+    }
+  };
 
   const pickFile = (f: File | null) => {
     setError('');
@@ -310,8 +324,15 @@ export default function CreateGameModal({ userId, editId, baseGame, onReset, ini
               onChange={(e) => addShots(e.target.files)}
             />
             <div className="flex flex-wrap gap-2">
-              {shots.map((sh, i) => (
-                <div key={sh.url} className="relative w-24 aspect-video rounded-lg overflow-hidden bg-neutral-800 border border-neutral-700">
+              {shots.map((sh, i) => {
+                const isCover = !!shownCover && shownCover === (sh.file ? preview : sh.url);
+                return (
+                <div
+                  key={sh.url}
+                  className={`group relative w-24 aspect-video rounded-lg overflow-hidden bg-neutral-800 border ${
+                    isCover ? 'border-indigo-400 ring-2 ring-indigo-400/50' : 'border-neutral-700'
+                  }`}
+                >
                   <Image src={sh.url} alt="" fill sizes="96px" className="object-cover" unoptimized />
                   <button
                     type="button"
@@ -321,8 +342,20 @@ export default function CreateGameModal({ userId, editId, baseGame, onReset, ini
                   >
                     <X className="w-3 h-3" />
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => makeCover(sh)}
+                    className={`absolute bottom-0 inset-x-0 py-0.5 text-[10px] font-medium text-center transition ${
+                      isCover
+                        ? 'bg-indigo-500 text-white'
+                        : 'bg-black/70 text-neutral-200 sm:opacity-0 sm:group-hover:opacity-100 hover:bg-indigo-500'
+                    }`}
+                  >
+                    {isCover ? 'Обложка' : 'Сделать обложкой'}
+                  </button>
                 </div>
-              ))}
+                );
+              })}
               {shots.length < MAX_SHOTS && (
                 <button
                   type="button"

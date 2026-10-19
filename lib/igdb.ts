@@ -219,9 +219,17 @@ export function mapIgdbGame(raw: IgdbGame): Game {
   if (horizontalId) igdbCover = igdbImageUrl(horizontalId, 't_1080p');
   else if (raw.cover?.image_id) igdbCover = igdbImageUrl(raw.cover.image_id, 't_cover_big');
 
+  // Миниатюра должна совпадать с первой картинкой в карточке игры: сначала артворк (как coverHD),
+  // затем Steam header, затем кадр/постер IGDB
+  const artworkId = raw.artworks?.[0]?.image_id;
+  const artworkCover = artworkId ? igdbImageUrl(artworkId, 't_screenshot_big') : '';
   const steamAppId = findSteamAppId(raw);
-  if (steamAppId) {
-    cover = steamHeaderUrl(steamAppId);
+  const steamHeader = steamAppId ? steamHeaderUrl(steamAppId) : '';
+  if (artworkCover) {
+    cover = artworkCover;
+    coverAlt = steamHeader || igdbCover || undefined;
+  } else if (steamHeader) {
+    cover = steamHeader;
     coverAlt = igdbCover || undefined;
   } else {
     cover = igdbCover;
