@@ -29,7 +29,7 @@ export default function AdminEditButton({ game, userId, onSaved }: AdminEditButt
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 font-medium rounded-lg transition text-sm"
+        className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs font-medium text-amber-300 transition hover:bg-amber-500/10"
       >
         <Pencil className="w-4 h-4" />
         {custom ? 'Редактировать карточку (админ)' : 'Править карточку игры (админ)'}

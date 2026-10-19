@@ -1,6 +1,7 @@
 'use client';
 
 import SteamIcon from '@/components/SteamIcon';
+import ShareButton from './ShareButton';
 import { useEffect, useState, type ReactNode } from 'react';
 import {
   Pencil, MapPin, ExternalLink, UserPlus, UserCheck, Quote,
@@ -186,6 +187,7 @@ export default function ProfileHeader({
         <div className="absolute inset-0 bg-gradient-to-t from-neutral-900 via-neutral-900/30 to-black/10" />
 
         <div className="absolute top-3 right-3 z-10 flex gap-2 sm:top-4 sm:right-4">
+          <ShareButton key={profile.id} path={`/user/${profile.id}`} title={`Профиль ${profile.nickname} в Playlog`} compact className="h-9 border-white/15 bg-black/40 text-white backdrop-blur-md" />
           <button type="button" onClick={onOpenStats} title="Статистика профиля" aria-label="Статистика профиля"
             className="inline-flex h-9 items-center gap-2 rounded-xl border border-white/15 bg-black/40 px-3 text-xs font-medium text-white backdrop-blur-md transition hover:border-white/30 hover:bg-black/60">
             <BarChart3 className="h-3.5 w-3.5" /><span className="hidden sm:inline">Статистика</span>

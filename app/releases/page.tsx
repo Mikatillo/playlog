@@ -17,6 +17,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import { supabase } from '@/lib/supabase';
 import GameMediaCarousel from '@/components/GameMediaCarousel';
+import ShareButton from '@/components/ShareButton';
+import ReviewComposer from '@/components/ReviewComposer';
 import ReviewsSection from '@/components/ReviewsSection';
 import { useGameUpdates, patchGameInList } from '@/lib/game-events';
 
@@ -254,10 +256,11 @@ export default function ReleasesPage() {
       setComment('');
       setSavedTick((v) => v + 1);
       showToast('Комментарий опубликован', 'success');
+      return true;
     } catch {
       showToast('Не удалось опубликовать', 'error');
-    }
-    setPublishing(false);
+      return false;
+    } finally { setPublishing(false); }
   };
 
   return (
@@ -382,6 +385,7 @@ export default function ReleasesPage() {
             ) : (
               <div className="p-4 pt-[calc(1rem+env(safe-area-inset-top))] md:p-6 lg:p-8 space-y-4 md:space-y-6">
                 <GameMediaCarousel game={selectedGame} />
+                <ShareButton key={selectedGame.id} path={`/?open=${selectedGame.id}`} title={selectedGame.title} />
 
                 <div className="flex items-center gap-2 text-sm">
                   <Calendar className="w-4 h-4 text-indigo-500" />
@@ -517,37 +521,7 @@ export default function ReleasesPage() {
                 )}
 
                 {userId && (
-                  <div className="bg-neutral-800 rounded-xl p-4 md:p-5">
-                    <h3 className="font-semibold text-white text-sm md:text-base mb-3 flex items-center gap-2">
-                      <MessageSquare className="w-4 h-4 text-indigo-500" />
-                      Твой комментарий
-                    </h3>
-                    <textarea
-                      value={comment}
-                      onChange={(e) => setComment(e.target.value)}
-                      placeholder="Что думаешь об этой игре? Ждёшь её?"
-                      className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-3 text-white placeholder:text-neutral-500 min-h-[80px] resize-y focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-                    />
-                    {comment.length > 0 && (
-                      <div className="mt-1.5 text-right">
-                        <span className="text-xs text-neutral-500">
-                          {comment.length} символов
-                        </span>
-                      </div>
-                    )}
-                    <button
-                      onClick={publishComment}
-                      disabled={publishing || comment.trim().length < 5}
-                      className="mt-3 w-full px-4 py-2 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/30 text-indigo-400 text-sm font-medium rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                    >
-                      {publishing ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <MessageSquare className="w-4 h-4" />
-                      )}
-                      Оставить комментарий
-                    </button>
-                  </div>
+                  <ReviewComposer key={selectedGame.id} value={comment} onChange={setComment} onPublish={publishComment} minLength={5} />
                 )}
 
                 <div className="pt-4 border-t border-neutral-800">

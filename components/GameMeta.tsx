@@ -125,6 +125,7 @@ export default function GameMeta({ gameId, platforms, ownerId }: GameMetaProps) 
         if (error && error.code !== '23505') throw error;
         setTeammates((prev) => [...prev, friend]);
       }
+      setPickerOpen(false);
     } catch {
       showToast('Не удалось сохранить тиммейта', 'error');
     }
@@ -233,7 +234,7 @@ export default function GameMeta({ gameId, platforms, ownerId }: GameMetaProps) 
                     <button
                       type="button"
                       onClick={() => toggle(f)}
-                      disabled={busyId === f.id}
+                      disabled={!!busyId}
                       className={`w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-left text-sm transition ${
                         selected ? 'bg-indigo-500/15 text-white' : 'text-neutral-300 hover:bg-neutral-700/60'
                       }`}

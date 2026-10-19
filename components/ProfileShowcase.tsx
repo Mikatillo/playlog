@@ -147,9 +147,16 @@ export default function ProfileShowcase({ profileId, isOwnProfile, games, userDa
     }
     if (slot.type === 'stat') {
       const Icon = slot.metric === 'hours' ? Clock : slot.metric === 'reviews' ? MessageSquare : slot.metric === 'rating' ? Star : BarChart3;
-      return <button type="button" onClick={onOpenStats} className="flex h-36 w-full flex-col justify-between rounded-2xl border border-indigo-400/15 bg-gradient-to-br from-indigo-500/15 to-neutral-800/40 p-3 text-left transition hover:border-indigo-400/60 sm:h-40 sm:p-4">
-        <Icon className="h-5 w-5 text-indigo-300" />
-        <span><span className="block text-2xl font-extrabold text-white sm:text-3xl">{statValue(slot.metric)}</span><span className="mt-1 block text-xs text-neutral-400">{SHOWCASE_METRICS[slot.metric]}</span></span>
+      const tint = slot.metric === 'hours' ? '#818cf8' : slot.metric === 'rating' ? '#fbbf24' : slot.metric === 'reviews' ? '#e879f9' : '#34d399';
+      return <button type="button" onClick={onOpenStats} className="group relative flex h-36 w-full items-center overflow-hidden rounded-2xl border border-white/10 bg-neutral-950/70 p-3 text-left transition hover:border-white/25 sm:h-40 sm:p-4">
+        <span aria-hidden="true" className="absolute inset-0" style={{ background: `radial-gradient(ellipse at 100% 0%, ${tint}24, transparent 75%)` }} />
+        <Icon aria-hidden="true" className="pointer-events-none absolute -bottom-3 -right-3 h-28 w-28 -rotate-12 opacity-[0.07] sm:h-32 sm:w-32" style={{ color: tint }} strokeWidth={1} />
+        <span className="relative block min-w-0 flex-1">
+          <span className="mb-3 flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-neutral-500"><Icon className="h-3.5 w-3.5" style={{ color: tint }} />Статистика</span>
+          <span className="block break-all text-3xl font-extrabold leading-none tracking-tight text-white tabular-nums sm:text-4xl">{statValue(slot.metric)}</span>
+          <span className="mt-2 block text-[11px] font-medium leading-snug text-neutral-400">{SHOWCASE_METRICS[slot.metric]}</span>
+        </span>
+        <span aria-hidden="true" className="absolute right-3 top-3 text-neutral-600 transition group-hover:text-neutral-300">↗</span>
       </button>;
     }
     if (slot.type === 'review') {

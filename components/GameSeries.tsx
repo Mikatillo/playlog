@@ -82,7 +82,7 @@ export default function GameSeries({ gameId, onOpen }: GameSeriesProps) {
   };
 
   return (
-    <div className="bg-neutral-800 rounded-xl p-4 md:p-5">
+    <section className="border-t border-neutral-800 pt-4">
       <div className="flex items-center justify-between mb-3 gap-2">
         <h3 className="font-semibold text-white text-sm md:text-base flex items-center gap-2">
           <Layers className="w-4 h-4 text-indigo-500" />
@@ -156,12 +156,12 @@ export default function GameSeries({ gameId, onOpen }: GameSeriesProps) {
 
         {/* Подсказка «есть ещё» — затухание у края */}
         {canRight && (
-          <div className="pointer-events-none absolute right-0 top-0 bottom-1 w-8 bg-gradient-to-l from-neutral-800 to-transparent" />
+          <div className="pointer-events-none absolute right-0 top-0 bottom-1 w-8 bg-gradient-to-l from-neutral-900 to-transparent" />
         )}
         {canLeft && (
-          <div className="pointer-events-none absolute left-0 top-0 bottom-1 w-8 bg-gradient-to-r from-neutral-800 to-transparent" />
+          <div className="pointer-events-none absolute left-0 top-0 bottom-1 w-8 bg-gradient-to-r from-neutral-900 to-transparent" />
         )}
       </div>
-    </div>
+    </section>
   );
 }

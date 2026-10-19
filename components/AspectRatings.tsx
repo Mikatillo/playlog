@@ -28,13 +28,14 @@ export default function AspectRatings({ value, overall, onChange, onSuggestOvera
   };
 
   return (
-    <div className="bg-neutral-800 rounded-xl p-4 md:p-5">
+    <div className="overflow-hidden rounded-2xl border border-neutral-700/50 bg-neutral-900/50">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-controls={panelId}
-        className="w-full flex items-center justify-between gap-3 text-left"
+        style={{ scale: 1 }}
+        className="flex min-h-12 w-full items-center justify-between gap-3 p-3 text-left transition hover:bg-white/5 sm:px-4"
       >
         <span className="flex items-center gap-2 min-w-0">
           <Radar className="w-4 h-4 text-indigo-500 flex-shrink-0" />
@@ -43,12 +44,12 @@ export default function AspectRatings({ value, overall, onChange, onSuggestOvera
             {filled ? 'для радара вкуса в профиле' : 'необязательно'}
           </span>
         </span>
-        <ChevronDown className={`w-4 h-4 text-neutral-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+        <ChevronDown aria-hidden="true" className={`pointer-events-none h-4 w-4 shrink-0 text-neutral-400 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
 
       {/* Краткая сводка, когда блок свёрнут */}
       {!open && filled && (
-        <div className="mt-3 flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap gap-1.5 px-4 pb-3">
           {ASPECTS.filter((m) => value[m.key] > 0).map((m) => (
             <span
               key={m.key}
@@ -61,7 +62,7 @@ export default function AspectRatings({ value, overall, onChange, onSuggestOvera
       )}
 
       {open && (
-        <div id={panelId} className="mt-4 space-y-4">
+        <div id={panelId} className="space-y-4 border-t border-neutral-800 p-4">
           {ASPECTS.map((m) => {
             const v = value[m.key];
             return (

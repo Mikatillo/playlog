@@ -26,7 +26,9 @@ import HomeWelcome from '@/components/HomeWelcome';
 import GameMediaCarousel from '@/components/GameMediaCarousel';
 import SteamRating from '@/components/SteamRating';
 import GameSeries from '@/components/GameSeries';
-import AspectRatings from '@/components/AspectRatings';
+import GamePersonalFields from '@/components/GamePersonalFields';
+import ReviewComposer from '@/components/ReviewComposer';
+import ShareButton from '@/components/ShareButton';
 import { emptyAspects, hasAspects, aspectColumns, aspectsFromRow, type Aspects } from '@/lib/aspects';
 import GameMeta from '@/components/GameMeta';
 import AdminEditButton from '@/components/AdminEditButton';
@@ -195,7 +197,9 @@ export default function Home() {
     [showToast],
   );
 
+  const openedGameRequest = useRef(0);
   const openGame = async (game: Game) => {
+    const request = ++openedGameRequest.current;
     setSelectedGame(game);
     setDescriptionExpanded(false);
     setTranslating(false);
@@ -228,7 +232,7 @@ export default function Home() {
             .eq('user_id', userId)
             .eq('game_id', game.id)
             .maybeSingle();
-          if (data) {
+          if (data && request === openedGameRequest.current) {
             setUserRating(data.rating || 0);
             setUserAspects(aspectsFromRow(data));
             setUserHours(data.hours || 0);
@@ -244,7 +248,7 @@ export default function Home() {
 fetch(`/api/games/${game.id}?full=true`)
       .then((r) => (r.ok ? r.json() : null))
       .then((fullGame) => {
-        if (!fullGame) return;
+        if (!fullGame || request !== openedGameRequest.current) return;
         setSelectedGame(fullGame);
         if (fullGame.descriptionRaw) {
           translateDescription(fullGame.descriptionRaw, game.id);
@@ -283,10 +287,13 @@ fetch(`/api/games/${game.id}?full=true`)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const openGameRef = useRef(openGame);
+  openGameRef.current = openGame;
+
   useEffect(() => {
     const openHandler = (e: Event) => {
       const game = (e as CustomEvent).detail?.game;
-      if (game) openGame(game);
+      if (game) openGameRef.current(game);
     };
     window.addEventListener('playlog:openGame', openHandler);
 
@@ -299,22 +306,7 @@ fetch(`/api/games/${game.id}?full=true`)
         window.history.replaceState({}, '', '/');
 fetch(`/api/games/${gameId}?full=true`)
           .then((r) => (r.ok ? r.json() : null))
-          .then((game) => {
-            if (!game) return;
-            setSelectedGame(game);
-
-            const data = userGames.get(gameId);
-            if (data) {
-              setUserRating(data.rating || 0);
-              setUserAspects(data.aspects || emptyAspects());
-              setUserHours(data.hours || 0);
-              setReview(data.review || '');
-              setGameStatus(data.status || 'none');
-            }
-            if (game.descriptionRaw) {
-              translateDescription(game.descriptionRaw, gameId);
-            }
-          })
+          .then((game) => { if (game) openGameRef.current(game); })
           .catch((err) => console.error('Open from URL error:', err));
       }
     } else {
@@ -333,6 +325,11 @@ fetch(`/api/games/${gameId}?full=true`)
     return () => window.removeEventListener('playlog:openGame', openHandler);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (userId && selectedGame) void openGameRef.current(selectedGame);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId]);
 
   useEffect(() => {
     if (searchMode === 'browse' && !searchQuery && !searchActiveRef.current) {
@@ -395,6 +392,7 @@ fetch(`/api/games/${gameId}?full=true`)
   };
 
   const translateDescription = async (rawText: string, gameId: number) => {
+    const request = openedGameRequest.current;
     const text = cleanDescription(rawText);
     const cached = localStorage.getItem(`translation_${gameId}`);
     if (cached) {
@@ -414,6 +412,7 @@ fetch(`/api/games/${gameId}?full=true`)
         body: JSON.stringify({ text }),
       });
       const data = await response.json();
+      if (request !== openedGameRequest.current) return;
       if (data.translatedText) {
         setDescriptionRu(data.translatedText);
         localStorage.setItem(`translation_${gameId}`, data.translatedText);
@@ -421,45 +420,18 @@ fetch(`/api/games/${gameId}?full=true`)
         setDescriptionRu(text);
       }
     } catch {
-      setDescriptionRu(text);
+      if (request === openedGameRequest.current) setDescriptionRu(text);
     }
-    setTranslating(false);
+    if (request === openedGameRequest.current) setTranslating(false);
   };
 
   const closeGame = () => {
+    openedGameRequest.current++;
     setSelectedGame(null);
     setDescriptionExpanded(false);
     setDescriptionRu(null);
     setSelectedScreenshot(null);
     setSaving(false);
-  };
-
-  const publishReviewInBackground = (
-    game: Game,
-    rating: number,
-    text: string,
-  ) => {
-    if (!userId || text.trim().length < 20) return;
-    authFetch('/api/reviews', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        userId,
-        gameId: game.id,
-        gameTitle: game.title,
-        gameCover: game.cover,
-        rating: rating > 0 ? rating : null,
-        text: text.trim(),
-      }),
-    })
-      .then(() => {
-        setSavedTick((v) => v + 1);
-        logActivity('reviewed', game, {
-          rating: rating > 0 ? rating : undefined,
-          preview: text.trim().slice(0, 120),
-        });
-      })
-      .catch(() => {});
   };
 
   const saveData = async (
@@ -481,7 +453,7 @@ fetch(`/api/games/${gameId}?full=true`)
     const hadAspects = hasAspects(userGames.get(selectedGame.id)?.aspects);
     const aspectPart = hasAspects(userAspects) || hadAspects ? aspectColumns(userAspects) : {};
 
-    await supabase.from('user_games').upsert(
+    const { error: saveError } = await supabase.from('user_games').upsert(
       {
         user_id: userId,
         game_id: selectedGame.id,
@@ -493,6 +465,8 @@ fetch(`/api/games/${gameId}?full=true`)
       },
       { onConflict: 'user_id,game_id' },
     );
+
+    if (saveError) throw saveError;
 
     setUserGames((prev) => {
       const newMap = new Map(prev);
@@ -538,9 +512,6 @@ fetch(`/api/games/${gameId}?full=true`)
       showToast('Сохранено', 'success');
       closeGame();
 
-      if (review.trim().length >= 20) {
-        publishReviewInBackground(gameRef, userRating, review);
-      }
     } catch (err) {
       console.error('Save error:', err);
       showToast('Не удалось сохранить', 'error');
@@ -556,7 +527,7 @@ fetch(`/api/games/${gameId}?full=true`)
     }
     try {
       const gameRef = selectedGame;
-      await authFetch('/api/reviews', {
+      const response = await authFetch('/api/reviews', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -568,14 +539,17 @@ fetch(`/api/games/${gameId}?full=true`)
           text: review.trim(),
         }),
       });
+      if (!response.ok) throw new Error('Publish failed');
       setSavedTick((v) => v + 1);
       logActivity('reviewed', gameRef, {
         rating: userRating > 0 ? userRating : undefined,
         preview: review.trim().slice(0, 120),
       });
       showToast('Рецензия опубликована', 'success');
+      return true;
     } catch {
       showToast('Не удалось опубликовать', 'error');
+      return false;
     }
   };
 
@@ -611,12 +585,16 @@ fetch(`/api/games/${gameId}?full=true`)
             <X className="w-5 h-5 text-white" />
           </button>
 
-          <div className="p-4 pt-[calc(1rem+env(safe-area-inset-top))] md:p-6 lg:p-8 space-y-4 md:space-y-6">
+          <div className="p-4 pt-[calc(1rem+env(safe-area-inset-top))] md:p-6 lg:p-8 space-y-3 md:space-y-4">
             <GameMediaCarousel
               game={selectedGame}
               onScreenshotClick={setSelectedScreenshot}
               steamBadge={<SteamRating gameTitle={selectedGame.title} variant="badge" />}
             />
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <ShareButton key={selectedGame.id} path={`/?open=${selectedGame.id}`} title={selectedGame.title} />
+              <AdminEditButton game={selectedGame} userId={userId} onSaved={(g) => setSelectedGame(g)} />
+            </div>
 
             {userId ? (
               <div className="bg-neutral-800/70 rounded-xl p-3 md:p-4">
@@ -747,100 +725,12 @@ fetch(`/api/games/${gameId}?full=true`)
 
             <GameMeta gameId={selectedGame.id} platforms={selectedGame.platforms} />
 
-            <AdminEditButton game={selectedGame} userId={userId} onSaved={(g) => setSelectedGame(g)} />
+
 
             {userId && (
               <>
-                <div className="bg-neutral-800 rounded-xl p-4 md:p-5">
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="font-semibold text-white text-sm md:text-base flex items-center gap-2">
-                      <Trophy className="w-4 h-4 text-indigo-500" />
-                      Твоя оценка
-                    </h3>
-                    <span className={`text-xl md:text-2xl font-bold ${getRatingColor(userRating)}`}>
-                      {userRating > 0 ? `${userRating}/10` : '—'}
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0"
-                    max="10"
-                    step="1"
-                    value={userRating}
-                    onChange={(e) => setUserRating(parseInt(e.target.value))}
-                    className="w-full h-2 rounded-full appearance-none cursor-pointer"
-                    style={{
-                      background: `linear-gradient(to right, ${getSliderColor(userRating)} 0%, ${getSliderColor(userRating)} ${userRating * 10}%, #404040 ${userRating * 10}%, #404040 100%)`,
-                    }}
-                  />
-                  <div className="flex justify-between text-[10px] text-neutral-500 mt-2">
-                    <span>0</span><span>1</span><span>2</span><span>3</span><span>4</span>
-                    <span>5</span><span>6</span><span>7</span><span>8</span><span>9</span>
-                    <span>10</span>
-                  </div>
-                </div>
-
-                <AspectRatings
-                  key={selectedGame.id}
-                  value={userAspects}
-                  overall={userRating}
-                  onChange={setUserAspects}
-                  onSuggestOverall={setUserRating}
-                />
-
-                <div className="bg-neutral-800 rounded-xl p-4 md:p-5">
-                  <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
-                    <h3 className="font-semibold text-white text-sm md:text-base flex items-center gap-2">
-                      <Clock className="w-4 h-4 text-indigo-500" />
-                      Часов наиграно
-                    </h3>
-                    <TimeToBeat gameId={selectedGame.id} fallbackPlaytime={selectedGame.playtime} />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      value={userHours === 0 ? '' : userHours}
-                      onChange={(e) => {
-                        const v = e.target.value === '' ? 0 : parseInt(e.target.value) || 0;
-                        setUserHours(v);
-                      }}
-                      className="w-24 px-3 py-2 bg-neutral-900 border border-neutral-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-                      placeholder="0"
-                    />
-                    <span className="text-sm text-neutral-400">часов</span>
-                  </div>
-                </div>
-
-                <GameSeries gameId={selectedGame.id} onOpen={openGame} />
-
-                <div className="bg-neutral-800 rounded-xl p-4 md:p-5">
-                  <h3 className="font-semibold text-white text-sm md:text-base mb-3 flex items-center gap-2">
-                    <MessageSquare className="w-4 h-4 text-indigo-500" />
-                    Твоя рецензия
-                  </h3>
-                  <textarea
-                    value={review}
-                    onChange={(e) => setReview(e.target.value)}
-                    placeholder="Напиши своё мнение об игре..."
-                    className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-3 text-white placeholder:text-neutral-500 min-h-[80px] md:min-h-[100px] resize-y focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-                  />
-                  {review.length > 0 && (
-                    <div className="mt-1.5 text-right">
-                      <span className="text-xs text-neutral-500">{review.length} символов</span>
-                    </div>
-                  )}
-                  <p className="text-[11px] text-neutral-500 mt-2">
-                    Рецензии от 20 символов публикуются для всех игроков
-                  </p>
-                  <button
-                    onClick={publishReview}
-                    disabled={review.trim().length < 20}
-                    className="mt-3 w-full px-4 py-2 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/30 text-indigo-400 text-sm font-medium rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                  >
-                    <MessageSquare className="w-4 h-4" />
-                    Оставить рецензию
-                  </button>
-                </div>
+                <GamePersonalFields gameId={selectedGame.id} playtime={selectedGame.playtime} rating={userRating} hours={userHours} aspects={userAspects} onRating={setUserRating} onHours={setUserHours} onAspects={setUserAspects} />
+                <ReviewComposer key={selectedGame.id} value={review} onChange={setReview} onPublish={publishReview} />
 
                 <div className="flex gap-2 sticky bottom-0 z-30 -mx-4 px-4 py-3 bg-neutral-900/95 backdrop-blur border-t border-neutral-800 md:static md:mx-0 md:px-0 md:pb-0 md:pt-3 md:bg-transparent md:backdrop-blur-none">
                   <button
@@ -870,6 +760,8 @@ fetch(`/api/games/${gameId}?full=true`)
                 </div>
               </>
             )}
+
+            <GameSeries gameId={selectedGame.id} onOpen={openGame} />
 
             <div className="pt-4 border-t border-neutral-800">
               <ReviewsSection gameId={selectedGame.id} refreshKey={savedTick} />

@@ -23,7 +23,9 @@ import GameCardSkeleton from '@/components/GameCardSkeleton';
 import GameMediaCarousel from '@/components/GameMediaCarousel';
 import SteamRating from '@/components/SteamRating';
 import GameSeries from '@/components/GameSeries';
-import AspectRatings from '@/components/AspectRatings';
+import GamePersonalFields from '@/components/GamePersonalFields';
+import ReviewComposer from '@/components/ReviewComposer';
+import ShareButton from '@/components/ShareButton';
 import { emptyAspects, hasAspects, aspectColumns, type Aspects } from '@/lib/aspects';
 import GameMeta from '@/components/GameMeta';
 import AdminEditButton from '@/components/AdminEditButton';
@@ -68,6 +70,7 @@ export default function MyGamesPage() {
   const [descriptionRu, setDescriptionRu] = useState<string | null>(null);
   const [translating, setTranslating] = useState(false);
   const [savedTick, setSavedTick] = useState(0);
+  const [savingModal, setSavingModal] = useState(false);
   const [steamImportOpen, setSteamImportOpen] = useState(false);
 
   useEffect(() => {
@@ -300,7 +303,7 @@ export default function MyGamesPage() {
     const aspectPart = hasAspects(modalAspects) || hadAspects ? aspectColumns(modalAspects) : {};
 
     // 1. Сохраняем в user_games — это быстро
-    await supabase.from('user_games').upsert(
+    const { error: saveError } = await supabase.from('user_games').upsert(
       {
         user_id: userId,
         game_id: selectedGame.id,
@@ -312,6 +315,8 @@ export default function MyGamesPage() {
       },
       { onConflict: 'user_id,game_id' },
     );
+
+    if (saveError) throw saveError;
 
     // XP и монеты начисляет база данных — подтягиваем актуальные значения
     const prevXp = profile.xp;
@@ -337,25 +342,6 @@ export default function MyGamesPage() {
       return newMap;
     });
 
-    // 2. Публикуем рецензию в ФОНЕ, не блокируя UI
-    if (modalReview.trim().length >= 20) {
-      const payload = {
-        userId,
-        gameId: selectedGame.id,
-        gameTitle: selectedGame.title,
-        gameCover: selectedGame.cover,
-        rating: modalRating > 0 ? modalRating : null,
-        text: modalReview.trim(),
-      };
-      authFetch('/api/reviews', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
-        .then(() => setSavedTick((v) => v + 1))
-        .catch((err) => console.error('Publish review error:', err));
-    }
-
     showToast('Изменения сохранены', 'success');
   };
 
@@ -366,7 +352,7 @@ export default function MyGamesPage() {
       return;
     }
     try {
-      await authFetch('/api/reviews', {
+      const response = await authFetch('/api/reviews', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -378,10 +364,13 @@ export default function MyGamesPage() {
           text: modalReview.trim(),
         }),
       });
+      if (!response.ok) throw new Error('Publish failed');
       setSavedTick((v) => v + 1);
       showToast('Рецензия опубликована', 'success');
+      return true;
     } catch {
       showToast('Не удалось опубликовать', 'error');
+      return false;
     }
   };
 
@@ -583,12 +572,16 @@ export default function MyGamesPage() {
                 </div>
               </div>
             ) : (
-              <div className="p-4 pt-[calc(1rem+env(safe-area-inset-top))] md:p-6 lg:p-8 space-y-4 md:space-y-6">
+              <div className="p-4 pt-[calc(1rem+env(safe-area-inset-top))] md:p-6 lg:p-8 space-y-3 md:space-y-4">
                 <GameMediaCarousel
                   game={selectedGame}
                   onScreenshotClick={setSelectedScreenshot}
                   steamBadge={<SteamRating gameTitle={selectedGame.title} variant="badge" />}
                 />
+                <div className="flex flex-wrap items-center justify-between gap-2">
+              <ShareButton key={selectedGame.id} path={`/?open=${selectedGame.id}`} title={selectedGame.title} />
+              <AdminEditButton game={selectedGame} userId={userId} onSaved={(g) => setSelectedGame(g)} />
+            </div>
 
                 <div className="bg-neutral-800/70 rounded-xl p-3 md:p-4">
                   <div className="grid grid-cols-4 gap-1.5 md:gap-2">
@@ -645,7 +638,7 @@ export default function MyGamesPage() {
                       <Loader2 className="w-5 h-5 text-indigo-400 animate-spin" />
                       <div>
                         <div className="text-sm text-white font-medium">
-                          
+
                         </div>
                         <div className="text-xs text-neutral-400 mt-0.5"></div>
                       </div>
@@ -706,106 +699,20 @@ export default function MyGamesPage() {
 
                 <GameMeta gameId={selectedGame.id} platforms={selectedGame.platforms} />
 
-                <AdminEditButton game={selectedGame} userId={userId} onSaved={(g) => setSelectedGame(g)} />
 
-                <div className="bg-neutral-800 rounded-xl p-4 md:p-5">
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="font-semibold text-white text-sm md:text-base flex items-center gap-2">
-                      <Trophy className="w-4 h-4 text-indigo-500" />
-                      Твоя оценка
-                    </h3>
-                    <span className={`text-xl md:text-2xl font-bold ${getRatingColor(modalRating)}`}>
-                      {modalRating > 0 ? `${modalRating}/10` : '—'}
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0"
-                    max="10"
-                    step="1"
-                    value={modalRating}
-                    onChange={(e) => setModalRating(parseInt(e.target.value))}
-                    className="w-full h-2 rounded-full appearance-none cursor-pointer"
-                    style={{
-                      background: `linear-gradient(to right, ${getSliderColor(modalRating)} 0%, ${getSliderColor(modalRating)} ${modalRating * 10}%, #404040 ${modalRating * 10}%, #404040 100%)`,
-                    }}
-                  />
-                  <div className="flex justify-between text-[10px] text-neutral-500 mt-2">
-                    <span>0</span><span>1</span><span>2</span><span>3</span><span>4</span>
-                    <span>5</span><span>6</span><span>7</span><span>8</span><span>9</span>
-                    <span>10</span>
-                  </div>
-                </div>
 
-                <AspectRatings
-                  key={selectedGame.id}
-                  value={modalAspects}
-                  overall={modalRating}
-                  onChange={setModalAspects}
-                  onSuggestOverall={setModalRating}
-                />
-
-                <div className="bg-neutral-800 rounded-xl p-4 md:p-5">
-                  <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
-                    <h3 className="font-semibold text-white text-sm md:text-base flex items-center gap-2">
-                      <Clock className="w-4 h-4 text-indigo-500" />
-                      Часов наиграно
-                    </h3>
-                    <TimeToBeat gameId={selectedGame.id} fallbackPlaytime={selectedGame.playtime} />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      value={modalHours === 0 ? '' : modalHours}
-                      onChange={(e) => {
-                        const v = e.target.value === '' ? 0 : parseInt(e.target.value) || 0;
-                        setModalHours(v);
-                      }}
-                      className="w-24 px-3 py-2 bg-neutral-900 border border-neutral-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-                      placeholder="0"
-                    />
-                    <span className="text-sm text-neutral-400">часов</span>
-                  </div>
-                </div>
-
-                <GameSeries gameId={selectedGame.id} onOpen={openGame} />
-
-                <div className="bg-neutral-800 rounded-xl p-4 md:p-5">
-                  <h3 className="font-semibold text-white text-sm md:text-base mb-3 flex items-center gap-2">
-                    <MessageSquare className="w-4 h-4 text-indigo-500" />
-                    Твоя рецензия
-                  </h3>
-                  <textarea
-                    value={modalReview}
-                    onChange={(e) => setModalReview(e.target.value)}
-                    placeholder="Напиши своё мнение об игре..."
-                    className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-3 text-white placeholder:text-neutral-500 min-h-[80px] md:min-h-[100px] resize-y focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-                  />
-                  {modalReview.length > 0 && (
-                    <div className="mt-1.5 text-right">
-                      <span className="text-xs text-neutral-500">
-                        {modalReview.length} символов
-                      </span>
-                    </div>
-                  )}
-                  <p className="text-[11px] text-neutral-500 mt-2">
-                    Рецензии от 20 символов публикуются для всех игроков
-                  </p>
-                  <button
-                    onClick={publishReview}
-                    disabled={modalReview.trim().length < 20}
-                    className="mt-3 w-full px-4 py-2 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/30 text-indigo-400 text-sm font-medium rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                  >
-                    <MessageSquare className="w-4 h-4" />
-                    Оставить рецензию
-                  </button>
-                </div>
+                <GamePersonalFields gameId={selectedGame.id} playtime={selectedGame.playtime} rating={modalRating} hours={modalHours} aspects={modalAspects} onRating={setModalRating} onHours={setModalHours} onAspects={setModalAspects} />
+                <ReviewComposer key={selectedGame.id} value={modalReview} onChange={setModalReview} onPublish={publishReview} />
 
                 <div className="flex gap-2 sticky bottom-0 z-30 -mx-4 px-4 py-3 bg-neutral-900/95 backdrop-blur border-t border-neutral-800 md:static md:mx-0 md:px-0 md:pb-0 md:pt-3 md:bg-transparent md:backdrop-blur-none">
                   <button
-                    onClick={() => {
-                      saveModalData();
-                      closeGame();
+                    disabled={savingModal}
+                    onClick={async () => {
+                      if (savingModal) return;
+                      setSavingModal(true);
+                      try { await saveModalData(); closeGame(); }
+                      catch { showToast('Не удалось сохранить. Попробуй ещё раз.', 'error'); }
+                      finally { setSavingModal(false); }
                     }}
                     className="flex-1 bg-indigo-500 hover:bg-indigo-600 text-white font-medium py-3 rounded-lg transition flex items-center justify-center gap-2 text-sm md:text-base"
                   >
@@ -829,6 +736,8 @@ export default function MyGamesPage() {
                     <span className="hidden sm:inline ml-2">Отмена</span>
                   </button>
                 </div>
+
+                <GameSeries gameId={selectedGame.id} onOpen={openGame} />
 
                 <div className="pt-4 border-t border-neutral-800">
                   <ReviewsSection gameId={selectedGame.id} refreshKey={savedTick} />

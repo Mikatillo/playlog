@@ -5,7 +5,7 @@ import { ASPECTS, aspectsFromRow, hasAspects } from '@/lib/aspects';
 import { fetchGamesByIds } from '@/lib/games-client';
 import { authFetch } from '@/lib/api-client';
 import { supabase } from '@/lib/supabase';
-import { useEffect, useState, use, useMemo, useCallback } from 'react';
+import { useEffect, useState, use, useMemo, useCallback, useRef } from 'react';
 import {
   Loader2, Star, Check, Gamepad, XCircle, ArrowLeft,
   Heart, Plus, ChevronDown, ChevronUp, ArrowUpDown, Pencil, X, Clock, LayoutGrid, Square,
@@ -27,6 +27,8 @@ import ProfileHeader from '@/components/ProfileHeader';
 import ProfileShowcase from '@/components/ProfileShowcase';
 import ProfileDialog from '@/components/ProfileDialog';
 import GameMeta from '@/components/GameMeta';
+import PersonalGameEditor from '@/components/PersonalGameEditor';
+import ShareButton from '@/components/ShareButton';
 import AdminEditButton from '@/components/AdminEditButton';
 import ScreenshotViewer from '@/components/ScreenshotViewer';
 import GameSeries from '@/components/GameSeries';
@@ -153,7 +155,7 @@ function timeAgo(iso: string): string {
 
 export default function UserProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const { userId, profile: myProfile, setProfile: setMyProfile } = useAuth();
+  const { userId, profile: myProfile, setProfile: setMyProfile, userGames: ownLibrary, loading: authLoading } = useAuth();
   const { showToast } = useToast();
   const router = useRouter();
 
@@ -200,30 +202,16 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
   const [translating, setTranslating] = useState(false);
   const [selectedScreenshot, setSelectedScreenshot] = useState<string | null>(null);
   // «Добавить к себе»: есть ли уже эта игра у меня
-  const [mineStatus, setMineStatus] = useState<'unknown' | 'has' | 'no'>('unknown');
+  const [editingMine, setEditingMine] = useState(false);
+  const gameRequest = useRef(0);
   // Переход к другому пользователю (например, по тиммейту) — закрываем открытую карточку
   useEffect(() => {
+    gameRequest.current++;
+    setEditingMine(false);
     setSelectedGame(null);
     setSelectedScreenshot(null);
   }, [id]);
-  useEffect(() => {
-    setMineStatus('unknown');
-    if (!selectedGame || !userId || userId === id) return;
-    let cancelled = false;
-    supabase
-      .from('user_games')
-      .select('game_id')
-      .eq('user_id', userId)
-      .eq('game_id', selectedGame.id)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (!cancelled) setMineStatus(data ? 'has' : 'no');
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedGame?.id, userId, id]);
-  const [savedTick] = useState(0);
+  const [savedTick, setSavedTick] = useState(0);
 
   // Фон страницы из магазина
   const [pageBackground, setPageBackground] = useState<string | null>(null);
@@ -470,6 +458,8 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
   };
 
   const openGameModal = async (game: Game) => {
+    const request = ++gameRequest.current;
+    setEditingMine(!!userId && !ownLibrary.has(game.id));
     setSelectedGame(game);
     setGameModalLoading(true);
     setDescriptionExpanded(false);
@@ -481,6 +471,7 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
       const res = await fetch(`/api/games/${game.id}?full=true`);
       if (res.ok) {
         const fullGame: Game = await res.json();
+        if (request !== gameRequest.current) return;
         setSelectedGame(fullGame);
         if (fullGame.descriptionRaw) {
           translateDescription(fullGame.descriptionRaw, game.id);
@@ -489,10 +480,12 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
     } catch (err) {
       console.error('Open game error:', err);
     }
-    setGameModalLoading(false);
+    if (request === gameRequest.current) setGameModalLoading(false);
   };
 
   const closeGameModal = () => {
+    gameRequest.current++;
+    setEditingMine(false);
     setSelectedGame(null);
     setDescriptionExpanded(false);
     setDescriptionRu(null);
@@ -500,6 +493,7 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
   };
 
   const translateDescription = async (rawText: string, gameId: number) => {
+    const request = gameRequest.current;
     const text = cleanDescription(rawText);
     const cached = localStorage.getItem(`translation_${gameId}`);
     if (cached) {
@@ -519,6 +513,7 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
         body: JSON.stringify({ text }),
       });
       const data = await response.json();
+      if (request !== gameRequest.current) return;
       if (data.translatedText) {
         setDescriptionRu(data.translatedText);
         localStorage.setItem(`translation_${gameId}`, data.translatedText);
@@ -527,9 +522,9 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
       }
     } catch (error) {
       console.error('Translation error:', error);
-      setDescriptionRu(text);
+      if (request === gameRequest.current) setDescriptionRu(text);
     }
-    setTranslating(false);
+    if (request === gameRequest.current) setTranslating(false);
   };
 
   const handleProfileSaved = async (updated: {
@@ -722,7 +717,8 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
     );
   }
 
-  const modalGameData = selectedGame ? userGamesData.get(selectedGame.id) : null;
+  const modalGameData = selectedGame ? (isOwnProfile ? ownLibrary.get(selectedGame.id) || userGamesData.get(selectedGame.id) : userGamesData.get(selectedGame.id)) : null;
+  const showMineEditor = !!userId && !authLoading && !!selectedGame && (editingMine || !ownLibrary.has(selectedGame.id));
 
   // Стиль фона страницы (градиент или картинка из магазина)
   const isImageBg = pageBackground?.startsWith('http');
@@ -952,15 +948,20 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
                 <span className="ml-3 text-neutral-400">Загрузка данных...</span>
               </div>
             ) : (
-              <div className="p-4 pt-[calc(1rem+env(safe-area-inset-top))] md:p-6 lg:p-8 space-y-4 md:space-y-6">
+              <div className="p-4 pt-[calc(1rem+env(safe-area-inset-top))] md:p-6 lg:p-8 space-y-3 md:space-y-4">
                 <GameMediaCarousel
                   game={selectedGame}
                   onScreenshotClick={setSelectedScreenshot}
                   steamBadge={<SteamRating gameTitle={selectedGame.title} variant="badge" />}
                 />
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <ShareButton key={selectedGame.id} path={`/?open=${selectedGame.id}`} title={selectedGame.title} />
+                  <AdminEditButton game={selectedGame} userId={userId} onSaved={(g) => setSelectedGame(g)} />
+                </div>
 
                 {modalGameData && (
                   <div className="flex flex-wrap gap-2 items-center">
+                    {!isOwnProfile && <span className="w-full text-[11px] text-neutral-500">В профиле {publicProfile.nickname}</span>}
                     {modalGameData.status !== 'none' && (
                       <div
                         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${
@@ -1069,40 +1070,18 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
                   )}
                 </div>
 
-                <GameMeta gameId={selectedGame.id} platforms={selectedGame.platforms} ownerId={id} />
+                <GameMeta key={`meta-${selectedGame.id}-${showMineEditor ? userId : id}`} gameId={selectedGame.id} platforms={selectedGame.platforms} ownerId={showMineEditor ? userId : id} />
 
-                <AdminEditButton game={selectedGame} userId={userId} onSaved={(g) => setSelectedGame(g)} />
-
-                <GameSeries gameId={selectedGame.id} onOpen={openGameModal} />
-
-                {!isOwnProfile && (
-                  <div>
-                    {!userId ? (
-                      <Link
-                        href="/auth"
-                        className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-neutral-200 font-medium rounded-lg transition text-sm"
-                      >
-                        Войди, чтобы добавить к себе
-                      </Link>
-                    ) : mineStatus === 'has' ? (
-                      <Link
-                        href={`/?open=${selectedGame.id}`}
-                        className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 font-medium rounded-lg transition text-sm"
-                      >
-                        <Check className="w-4 h-4" />
-                        Уже в твоей коллекции — открыть
-                      </Link>
-                    ) : (
-                      <Link
-                        href={`/?open=${selectedGame.id}`}
-                        className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-indigo-500 hover:bg-indigo-600 text-white font-medium rounded-lg transition text-sm"
-                      >
-                        <Plus className="w-4 h-4" />
-                        Добавить к себе в коллекцию
-                      </Link>
-                    )}
-                  </div>
-                )}
+                {authLoading ? <Loader2 className="h-5 w-5 animate-spin text-indigo-400" /> : showMineEditor ? (
+                  <PersonalGameEditor key={`editor-${selectedGame.id}-${userId}`} game={selectedGame} onSaved={() => {
+                    setSavedTick((n) => n + 1);
+                    if (isOwnProfile) { clearProfileCache(id); void refreshProfile(false); }
+                  }} />
+                ) : !userId ? (
+                  <Link href="/auth" className="block rounded-xl border border-neutral-700 px-4 py-3 text-center text-sm text-indigo-300">Войди, чтобы добавить игру в библиотеку</Link>
+                ) : !isOwnProfile ? (
+                  <button type="button" onClick={() => setEditingMine(true)} className="w-full rounded-xl border border-indigo-500/30 bg-indigo-500/10 px-4 py-3 text-sm font-medium text-indigo-300">Моя запись в библиотеке</button>
+                ) : null}
 
                 {isOwnProfile && userGamesData.get(selectedGame.id) && (
                   <div>
@@ -1153,7 +1132,7 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
                   </div>
                 )}
 
-                {isOwnProfile && (
+                {isOwnProfile && !showMineEditor && (
                   <div className="pt-2">
                     <Link
                       href={`/?open=${selectedGame.id}`}
@@ -1164,6 +1143,8 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
                     </Link>
                   </div>
                 )}
+
+                <GameSeries gameId={selectedGame.id} onOpen={openGameModal} />
 
                 <div className="pt-4 border-t border-neutral-800">
                   <ReviewsSection gameId={selectedGame.id} refreshKey={savedTick} />
